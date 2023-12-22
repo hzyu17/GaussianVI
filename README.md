@@ -6,9 +6,9 @@ $$q^{\star} = \underset{q \in \mathcal{Q}}{\arg\min}\; {\rm KL} [q(X) || p(X|Z)]
 
 If we denote the objective function $J(q) \triangleq {\rm KL} [q(X) || p(X|Z)] $, and define the negative-log-probability of the posterior distribution as $\psi(X) = -\log p(X|Z)$, then the update law of a natural gradient paradigm has closed-from [[1]](#1)
 
-$$\frac{\partial J(q)}{\partial \mu_{\theta}} = \Sigma^{-1}_{\theta}\mathbb{E}[(X-\mu_{\theta})\psi],$$
+$$\frac{\partial J(q)}{\partial \mu_{\theta}} = \Sigma^{-1}_{\theta} \mathbb{E}[(X - \mu_{\theta})\psi],$$
 
-$$\frac{\partial^2 J(q)}{\partial \mu_{\theta} \partial \mu_{\theta}^T} = \Sigma^{-1}_{\theta}\mathbb{E}[(X-\mu_{\theta})(X-\mu_{\theta})^T\psi]\Sigma^{-1}_{\theta} - \Sigma^{-1}_{\theta}\mathbb{E}[\psi],$$
+$$\frac{\partial^2 J(q)}{\partial \mu_{\theta} \partial \mu_{\theta}^T} = \Sigma^{-1}_{\theta}\mathbb{E}[(X - \mu_{\theta})(X - \mu_{\theta})^T\psi]\Sigma^{-1}_{\theta} - \Sigma^{-1}_{\theta}\mathbb{E}[\psi],$$
 
 $$\delta \Sigma^{-1}_{\theta} = \frac{\partial^2 J(q)}{\partial \mu_{\theta} \partial \mu_{\theta}^T} - \Sigma^{-1}_{\theta}.$$
 
