@@ -14,15 +14,12 @@
 #include <utility>
 #include <memory>
 
-#include "helpers/DataRecorder.h"
-#include "helpers/EigenWrapper.h"
-#include "helpers/timer.h"
+#include "EigenWrapper.h"
+#include "DataRecorder.h"
 
 using namespace std;
 using namespace Eigen;
 
-
-namespace vimp{
 
 template <typename FactorizedOptimizer>
 class GVIGH{
@@ -95,9 +92,6 @@ protected:
     int _nnz = 0;
     SparseLDLT _ldlt;
     SpMat _L; VectorXd _D, _Dinv; // for computing the determinant
-
-    // timer helper
-    Timer _timer = Timer();
 
     /// step sizes by default
     double _step_size = 0.9;
@@ -202,42 +196,6 @@ public:
         SpMat res(_dim, _dim);
         _ei.inv_sparse(mat, res, _Rows, _Cols, _nnz);
         return res;
-    }
-
-    /**
-     * @brief Purturb the mean by a random vector.
-     */
-    inline VectorXd purturb_mean(double scale=0.01) const{
-        return VectorXd{_mu + VectorXd::Random(_dim) * scale};
-    }
-
-    inline MatrixXd purturb_precision(double scale=0.01) const{
-        MatrixXd purturbation = MatrixXd::Zero(_dim, _dim);
-        purturbation.triangularView<Upper>() = (scale * MatrixXd::Random(_dim, _dim)).triangularView<Upper>();
-        purturbation.triangularView<Lower>() = purturbation.triangularView<Upper>().transpose();
-        purturbation = MatrixXd::Identity(_dim, _dim) + purturbation;
-
-        // save_matrix("data/2d_pR/purturbed.csv", purturbation*_precision*purturbation);
-        return MatrixXd{purturbation*_precision*purturbation};
-    }   
-
-    inline double purturbed_cost(double scale=0.01) const{
-        return cost_value(purturb_mean(scale), purturb_precision(scale).inverse());
-    }
-
-
-    /**
-     * @brief Repeated purturbations and statistics.
-     */
-    inline void purturbation_stat(double scale=0.01, int n_experiments=100) const{
-        VectorXd purturbed_costs(n_experiments);
-        for (int i=0; i<n_experiments; i++){
-            purturbed_costs(i) = purturbed_cost(scale);
-        }
-        cout << "----- Average purturbed cost -----" << endl << purturbed_costs.mean() << endl;
-        cout << "----- Min purturbed cost -----" << endl << purturbed_costs.minCoeff() << endl;
-        // save_vector("data/2d_pR/purturbation_statistics.csv", purturbed_costs);
-        save_vector(_file_perturbed_cost, purturbed_costs);
     }
 
     /// update the step sizes
@@ -480,7 +438,7 @@ public:
             file.close();}
     }
 
-    }; //class
-} //namespace vimp
+}; //class
 
-#include "gvimp/GVI-GH-impl.h"
+
+#include "GVI-GH-impl.h"
