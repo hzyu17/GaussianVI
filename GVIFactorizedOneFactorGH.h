@@ -8,7 +8,7 @@
  * @copyright Copyright (c) 2022
  * 
  */
-#include "gvimp/GVIFactorizedBase.h"
+#include "GVIFactorizedBase.h"
 
 template <typename CostClass>
 class GVIFactorizedOneCost : public GVIFactorizedBase{

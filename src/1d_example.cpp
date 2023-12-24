@@ -16,11 +16,10 @@
 #define STRING(x) #x
 #define XSTRING(x) STRING(x)
 
-#include "GaussianVI/GVIFactorizedSimpleGH.h"
-#include "GaussianVI/GVI-GH.h"
+#include "GVIFactorizedSimpleGH.h"
+#include "GVI-GH.h"
 
 using namespace Eigen;
-using namespace vimp;
 
 double cost_function(const VectorXd& vec_x){
     double x = vec_x(0);
@@ -56,10 +55,10 @@ int main(){
     GVIGH<OptFact> opt{vec_opt_fact, dim_state, num_states};
 
     std::string source_root{XSTRING(SOURCE_ROOT)};
-    std::string prefix{source_root+"/data/vimp/1d/"};
+    std::string prefix{source_root+"/data/1d/"};
 
     opt.update_file_names(prefix);
-    std::string costmap_file{source_root+"/data/vimp/1d/costmap.csv"};
+    std::string costmap_file{source_root+"/data/1d/costmap.csv"};
     opt.save_costmap(costmap_file);
 
     opt.set_GH_degree(20);

@@ -10,9 +10,8 @@
  * 
  */
 
-#include "gvimp/GVIFactorizedBase.h"
+#include "GVIFactorizedBase.h"
 #include <memory>
-#include "helpers/common_includes.h"
 
 using namespace std;
 using namespace Eigen;

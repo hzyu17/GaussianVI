@@ -11,7 +11,6 @@
 
 #pragma once
 
-#include "helpers/EigenWrapper.h"
 #include <eigen3/Eigen/Dense>
 #include <iostream>
 using namespace Eigen;
@@ -113,7 +112,6 @@ public:
     MatrixXd _P;
     VectorXd _W;
     VectorXd _sigmapts;
-    EigenWrapper _ei;
     Function _f;
 };
 

@@ -10,7 +10,7 @@
  * 
  */
 
-#include "gvimp/GVIFactorizedGHBase.h"
+#include "GVIFactorizedGHBase.h"
 #include <memory>
 
 using namespace std;

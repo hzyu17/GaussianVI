@@ -16,13 +16,11 @@
 #include <random>
 #include <utility>
 #include <assert.h>
-#include <random>
+#include <memory>
 
-#include "helpers/EigenWrapper.h"
 #include "GaussHermite.h"
-#include "helpers/MatrixHelper.h"
-#include "helpers/timer.h"
-
+#include "CommonDefinitions.h"
+#include "MatrixHelper.h"
 
 using namespace std;
 using namespace Eigen;
@@ -158,10 +156,8 @@ public:
         std::cout << "E_phi " << std::endl << E_phi << std::endl;
 
         VectorXd Vdmu = _gh->Integrate(_func_Vmu);
-        _ei.print_matrix(Vdmu, "E_xphi");
 
         MatrixXd E_xxphi = _gh->Integrate(_func_Vmumu);
-        _ei.print_matrix(E_xxphi, "E_xxphi");
     }
 
     void calculate_partial_V_GH(){
@@ -351,9 +347,6 @@ protected:
     /// optimization variables
     MatrixXd _precision, _dprecision;
     MatrixXd _covariance;
-
-    // Sparse inverser and matrix helpers
-    EigenWrapper _ei;
 
 protected:
     /// step sizes

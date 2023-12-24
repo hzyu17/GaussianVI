@@ -13,7 +13,7 @@
 
 #pragma once
 
-#include "gvimp/GVIFactorizedBase.h"
+#include "GVIFactorizedBase.h"
 #include "gp/linear_factor.h"
 
 template <typename LinearFactor>
