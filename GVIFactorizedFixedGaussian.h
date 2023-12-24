@@ -16,21 +16,19 @@
 #include "gvimp/GVIFactorizedLinear.h"
 #include "gp/linear_factor.h"
 
-namespace vimp{
-    template <typename LinearFactor>
-    class GVIFactorizedFixedGaussian : public GVIFactorizedLinear<LinearFactor>{
-        using Base = GVIFactorizedLinear<LinearFactor>;
-        using CostFunction = std::function<double(const VectorXd&, const LinearFactor&)>;
-    public:
-        GVIFactorizedFixedGaussian(const int& dimension,
-                                    int dim_state,
-                                    const CostFunction& function, 
-                                    const LinearFactor& linear_factor,
-                                    int num_states,
-                                    int start_indx,
-                                    double temperature,
-                                    double high_temperature):
-            Base(dimension, dim_state, function, linear_factor, num_states, start_indx, temperature, high_temperature)
-            { }    
-    };
-}
+template <typename LinearFactor>
+class GVIFactorizedFixedGaussian : public GVIFactorizedLinear<LinearFactor>{
+    using Base = GVIFactorizedLinear<LinearFactor>;
+    using CostFunction = std::function<double(const VectorXd&, const LinearFactor&)>;
+public:
+    GVIFactorizedFixedGaussian(const int& dimension,
+                                int dim_state,
+                                const CostFunction& function, 
+                                const LinearFactor& linear_factor,
+                                int num_states,
+                                int start_indx,
+                                double temperature,
+                                double high_temperature):
+        Base(dimension, dim_state, function, linear_factor, num_states, start_indx, temperature, high_temperature)
+        { }    
+};

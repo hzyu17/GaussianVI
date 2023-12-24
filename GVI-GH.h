@@ -22,8 +22,6 @@ using namespace std;
 using namespace Eigen;
 
 
-namespace vimp{
-
 template <typename FactorizedOptimizer>
 class GVIGH{
 public:
@@ -480,7 +478,7 @@ public:
             file.close();}
     }
 
-    }; //class
-} //namespace vimp
+}; //class
+
 
 #include "gvimp/GVI-GH-impl.h"

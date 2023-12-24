@@ -14,13 +14,9 @@
 #include "helpers/EigenWrapper.h"
 #include <eigen3/Eigen/Dense>
 #include <iostream>
-#include <boost/math/special_functions/factorials.hpp>
-#include <boost/shared_ptr.hpp>
-#include <boost/make_shared.hpp>
 using namespace Eigen;
 using namespace std;
 
-namespace vimp{
 template <typename Function>
 class GaussHermite{
 public:
@@ -110,7 +106,7 @@ public:
 
     inline VectorXd sigmapts() { computeSigmaPts(); return _sigmapts;}
 
-protected:
+    protected:
     int _deg;
     int _dim;
     VectorXd _mean;
@@ -121,6 +117,5 @@ protected:
     Function _f;
 };
 
-}
 
-#include "GaussHermite-impl.h"
+    #include "GaussHermite-impl.h"
