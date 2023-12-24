@@ -11,6 +11,16 @@ Nonlinear state estimation [[2]](#2).
 
 [Stochastic Motion Planning](https://github.com/hzyu17/VIMP) [[3]](#3).
 
+## A simple 1-dimensional example
+A simple 1D example nonlinear posterior is under src folder. To run the code:
+```
+mkdir build && cd build
+cmake ..
+make
+./src/1d_example
+```
+This will run the experiment and save all the optimization results under the data/1d folder. 
+
 ## References
 <a id="1">[1]</a> 
 Opper, M. and Archambeau, C., 2009. The variational Gaussian approximation revisited. Neural computation, 21(3), pp.786-792.
