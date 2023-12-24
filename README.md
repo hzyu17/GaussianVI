@@ -1,4 +1,4 @@
-## A header-only implementation of Gaussian variational inference (GVI) algorithm that uses a natural gradient method and leverages the factorized structure of the problem.
+## An implementation of Gaussian variational inference (GVI) algorithm that uses a natural gradient method and leverages the factorized structure of the problem.
 
 The GVI algorithm aims to optimize a Gaussian distribution, $q$ parameterized by $\mathcal{N}(\mu_\theta, \Sigma_\theta)$, to approximate a given posterior distribution, $p(X|Z)$, by minimizing the KL divergence between the 2 distributions:
 
