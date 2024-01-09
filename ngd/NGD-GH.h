@@ -16,10 +16,10 @@
 
 #include "EigenWrapper.h"
 #include "DataRecorder.h"
+#include "GVI-GH.h"
 
 using namespace std;
 using namespace Eigen;
-
 
 template <typename FactorizedOptimizer>
 class NGDGH{
@@ -218,10 +218,6 @@ public:
         _initial_precision_factor = initial_precision_factor;
     }
 
-    inline void set_boundary_penalties(double boundary_penalties){
-        _boundary_penalties = boundary_penalties;
-    }
-
     inline void initilize_precision_matrix(){
         // initilize_precision_matrix(_initial_precision_factor, _boundary_penalties);
         initilize_precision_matrix(_initial_precision_factor);
@@ -230,13 +226,10 @@ public:
     inline void initilize_precision_matrix(double initial_precision_factor){
         // boundaries
         set_initial_precision_factor(initial_precision_factor);
-        // set_boundary_penalties(boundary_penalties);
 
         MatrixXd init_precision(_dim, _dim);
         init_precision = MatrixXd::Identity(_dim, _dim)*initial_precision_factor;
         
-        // init_precision.block(0, 0, _dim_state, _dim_state) = MatrixXd::Identity(_dim_state, _dim_state)*initial_precision_factor;
-        // init_precision.block((_num_states-1)*_dim_state, (_num_states-1)*_dim_state, _dim_state, _dim_state) = MatrixXd::Identity(_dim_state, _dim_state)*initial_precision_factor;
         set_precision(init_precision.sparseView());
     }
 
@@ -348,22 +341,6 @@ public:
     inline void save_vector(const string& filename, const VectorXd& vec) const{
         _matrix_io.saveData<VectorXd>(filename, vec);
     }
-
-    /**
-     * @brief print a given iteration data mean and covariance.
-     * @param i_iter index of data
-     */
-    inline void print_result(const int& i_iter){
-        _res_recorder.print_data(i_iter);}
-
-
-    inline int dim() const{ return _dim; }   
-
-    inline int n_sub_factors() const{ return _nfactors; }
-
-    inline int max_iter() const { return _niters; }
-
-    inline int max_iter_backtrack() const { return _niters_backtrack; }
 
     void switch_to_high_temperature();
 
