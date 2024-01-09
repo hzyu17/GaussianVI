@@ -53,7 +53,7 @@ void NGDGH<Factor>::optimize(std::optional<bool> verbose)
         }
 
         // ============= Cost at current iteration =============
-        double cost_iter = cost_value(_mu, _precision);
+        double cost_iter = cost_value();
 
         if (is_verbose){
             cout << "========= iteration " << i_iter << " ========= " << endl;
@@ -90,7 +90,7 @@ void NGDGH<Factor>::optimize(std::optional<bool> verbose)
             // accept new cost and update mu and precision matrix
             if (new_cost < cost_iter){
                 /// update mean and covariance
-                update_proposal(new_mu, new_precision);
+                this->update_proposal(new_mu, new_precision);
                 break;
             }else{ 
                 // shrinking the step size
@@ -103,7 +103,7 @@ void NGDGH<Factor>::optimize(std::optional<bool> verbose)
                 if (is_verbose){
                     cout << "Too many iterations in the backtracking ... Dead" << endl;
                 }
-                update_proposal(new_mu, new_precision);
+                this->update_proposal(new_mu, new_precision);
                 break;
             }                
         }
