@@ -9,6 +9,7 @@ set(gvi_subdirs
     quadrature 
     ngd
     proxgd
+    gvibase
 )
 
 include_directories("${CMAKE_CURRENT_SOURCE_DIR}")

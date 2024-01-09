@@ -14,7 +14,7 @@
 #include <utility>
 #include <memory>
 
-#include "GVI-GH.h"
+#include "gvibase/GVI-GH.h"
 
 using namespace std;
 using namespace Eigen;

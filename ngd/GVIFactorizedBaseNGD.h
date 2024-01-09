@@ -160,28 +160,6 @@ public:
         MatrixXd E_xxphi = _gh->Integrate(_func_Vmumu);
     }
 
-    void calculate_partial_V_GH(){
-        // update the mu and sigma inside the gauss-hermite integrator
-        updateGH(_mu, _covariance);
-
-        _Vdmu.setZero();
-        _Vddmu.setZero();
-
-        /// Integrate for E_q{_Vdmu} 
-        _Vdmu = _gh->Integrate(_func_Vmu);
-        _Vdmu = _precision * _Vdmu;
-
-        /// Integrate for E_q{phi(x)}
-        double E_phi = _gh->Integrate(_func_phi)(0, 0);
-        
-        /// Integrate for partial V^2 / ddmu_ 
-        MatrixXd E_xxphi{_gh->Integrate(_func_Vmumu)};
-
-        _Vddmu.triangularView<Upper>() = (_precision * E_xxphi * _precision - _precision * E_phi).triangularView<Upper>();
-        _Vddmu.triangularView<StrictlyLower>() = _Vddmu.triangularView<StrictlyUpper>().transpose();
-
-    }
-
     /**
      * @brief Compute the cost function. V(x) = E_q(\phi(x))
      */
@@ -300,9 +278,6 @@ public:
         _gh->set_polynomial_deg(p);
     }
 
-    virtual double temperature() const { return _temperature; }
-
-    virtual double high_temperature() const { return _high_temperature; }
 
     void switch_to_high_temperature(){
         _temperature = _high_temperature;

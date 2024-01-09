@@ -2,8 +2,8 @@
  * @file GVIFactorizedBase.h
  * @author Hongzhe Yu (hyu419@gatech.edu)
  * @brief The base class for marginal optimizer, base class for different algorithms.
- * @version 0.1
- * @date 2023-01-09
+ * @version 1.1
+ * @date 2024-01-09
  * 
  * @copyright Copyright (c) 2023
  * 
@@ -146,28 +146,6 @@ public:
 
     }
 
-    void calculate_partial_V_GH(){
-        // update the mu and sigma inside the gauss-hermite integrator
-        updateGH(_mu, _covariance);
-
-        _Vdmu.setZero();
-        _Vddmu.setZero();
-
-        /// Integrate for E_q{_Vdmu} 
-        _Vdmu = _gh->Integrate(_func_Vmu);
-        _Vdmu = _precision * _Vdmu;
-
-        /// Integrate for E_q{phi(x)}
-        double E_phi = _gh->Integrate(_func_phi)(0, 0);
-        
-        /// Integrate for partial V^2 / ddmu_ 
-        MatrixXd E_xxphi{_gh->Integrate(_func_Vmumu)};
-
-        _Vddmu.triangularView<Upper>() = (_precision * E_xxphi * _precision - _precision * E_phi).triangularView<Upper>();
-        _Vddmu.triangularView<StrictlyLower>() = _Vddmu.triangularView<StrictlyUpper>().transpose();
-
-    }
-
     /**
      * @brief Compute the cost function. V(x) = E_q(\phi(x))
      */
@@ -181,9 +159,9 @@ public:
         return _gh->Integrate(_func_phi)(0, 0);
     }
 
-    // /**
+    //  **
     //  * @brief Compute the cost function. V(x) = E_q(\phi(x)) using the current values.
-    //  */
+    //  *
 
     /**
      * @brief Get the joint intermediate variable (partial V / partial mu).
@@ -264,10 +242,6 @@ public:
     void set_GH_points(int p){
         _gh->set_polynomial_deg(p);
     }
-
-    virtual double temperature() const { return _temperature; }
-
-    virtual double high_temperature() const { return _high_temperature; }
 
     void switch_to_high_temperature(){
         _temperature = _high_temperature;
