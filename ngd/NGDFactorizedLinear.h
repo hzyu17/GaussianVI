@@ -1,5 +1,5 @@
 /**
- * @file GVIFactorizedLinear.h
+ * @file NGDFactorizedLinear.h
  * @author Hongzhe Yu (hyu419@gatech.edu)
  * @brief Factorized optimization steps for linear gaussian factors 
  * -log(p(x|z)) = (1/2)*||\Lambda X - \Psi \mu_t||_{\Sigma_t^{-1}},
@@ -13,15 +13,15 @@
 
 #pragma once
 
-#include "GVIFactorizedBase.h"
+#include "GVIFactorizedBaseNGD.h"
 #include "gp/linear_factor.h"
 
 template <typename LinearFactor>
-class GVIFactorizedLinear : public GVIFactorizedBase{
-    using Base = GVIFactorizedBase;
+class NGDFactorizedLinear : public GVIFactorizedBaseNGD{
+    using Base = GVIFactorizedBaseNGD;
     using CostFunction = std::function<double(const VectorXd&, const LinearFactor&)>;
 public:
-    GVIFactorizedLinear(const int& dimension,
+    NGDFactorizedLinear(const int& dimension,
                         int dim_state,
                         const CostFunction& function, 
                         const LinearFactor& linear_factor,

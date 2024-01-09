@@ -13,7 +13,7 @@
  * 
  */
 
-#include "GVIFactorizedLinear.h"
+#include "NGDFactorizedLinear.h"
 #include "gp/linear_factor.h"
 
 template <typename LinearFactor>

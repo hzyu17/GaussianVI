@@ -16,8 +16,8 @@
 #define STRING(x) #x
 #define XSTRING(x) STRING(x)
 
-#include "GVIFactorizedSimpleGH.h"
-#include "GVI-GH.h"
+#include "ngd/NGDFactorizedSimpleGH.h"
+#include "ngd/NGD-GH.h"
 
 using namespace Eigen;
 
@@ -38,7 +38,7 @@ int main(){
 
     EigenWrapper _ei;
     typedef std::function<double(const VectorXd&)> Function;
-    typedef GVIFactorizedSimpleGH<Function> OptFact;
+    typedef NGDFactorizedSimpleGH<Function> OptFact;
     
     int dim_state = 1;
     int num_states = 1;
@@ -52,7 +52,7 @@ int main(){
     init_prec.coeffRef(0, 0) = 1.0/9.0;
 
     vec_opt_fact.emplace_back(p_opt_fac);
-    GVIGH<OptFact> opt{vec_opt_fact, dim_state, num_states};
+    NGDGH<OptFact> opt{vec_opt_fact, dim_state, num_states};
 
     std::string source_root{XSTRING(SOURCE_ROOT)};
     std::string prefix{source_root+"/data/1d/"};

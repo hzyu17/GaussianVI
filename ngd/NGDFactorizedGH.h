@@ -1,5 +1,5 @@
 /**
- * @file GVIFactorizedGH.h
+ * @file NGDFactorizedGH.h
  * @author Hongzhe Yu (hyu419@gatech.edu)
  * @brief The marginal optimizer class expecting two functions, one is the cost function, f1(x, cost1); 
  * the other is the function for GH expectation, f2(x).
@@ -10,23 +10,23 @@
  * 
  */
 
-#include "GVIFactorizedGHBase.h"
+#include "GVIFactorizedBaseNGD.h"
 #include <memory>
 
 using namespace std;
 using namespace Eigen;
 
 template <typename Function, typename CostClass>
-class GVIFactorizedGH: public GVIFactorizedBase{
+class NGDFactorizedGH: public GVIFactorizedBaseNGD{
 
-    using OptBase = GVIFactorizedBase;
+    using OptBase = GVIFactorizedBaseNGD;
     using GHFunction = std::function<MatrixXd(const VectorXd&)>;
     using GH = GaussHermite<GHFunction>;
 
 public:
     ///@param dimension The dimension of the state
     ///@param function Template function class which calculate the cost
-    GVIFactorizedGH(const int& dimension, const Function& function, const CostClass& cost_class_, const MatrixXd& Pk_):
+    NGDFactorizedGH(const int& dimension, const Function& function, const CostClass& cost_class_, const MatrixXd& Pk_):
             OptBase(dimension, Pk_, dimension, 0, false)
             {
                 /// Override of the base classes.
@@ -40,6 +40,6 @@ public:
                 OptBase::_gh = std::make_shared<GH>(new GH{6, OptBase::_dim, OptBase::_mu, OptBase::_covariance});
             }
 public:
-    typedef std::shared_ptr<GVIFactorizedGH> shared_ptr;
+    typedef std::shared_ptr<NGDFactorizedGH> shared_ptr;
 
 };

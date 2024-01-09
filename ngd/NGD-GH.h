@@ -1,5 +1,5 @@
 /**
- * @file GVI-GH.h
+ * @file NGD-GH.h
  * @author Hongzhe Yu (hyu419@gatech.edu)
  * @brief The joint optimizer class using Gauss-Hermite quadrature. 
  * @version 0.1
@@ -22,12 +22,12 @@ using namespace Eigen;
 
 
 template <typename FactorizedOptimizer>
-class GVIGH{
+class NGDGH{
 public:
     /**
      * @brief Default Constructor
      */
-    GVIGH(){}
+    NGDGH(){}
 
     /**
      * @brief Construct a new VIMPOptimizerGH object
@@ -35,7 +35,7 @@ public:
      * @param _vec_fact_optimizers vector of marginal optimizers
      * @param niters number of iterations
      */
-    GVIGH(const std::vector<std::shared_ptr<FactorizedOptimizer>>& vec_fact_optimizers, 
+    NGDGH(const std::vector<std::shared_ptr<FactorizedOptimizer>>& vec_fact_optimizers, 
           int dim_state, 
           int num_states, 
           int niterations=5,
@@ -138,9 +138,9 @@ public:
     /**
      * @brief The optimizing process.
      */
-    void optimize(bool verbose);
+    void optimize(std::optional<bool> verbose= std::nullopt);
 
-    void optimize(){ optimize(true); }
+    // void optimize(std::optional<bool> use_precisionmatrix = std::nullopt){ optimize(true, use_precisionmatrix); }
 
     /**
      * @brief Compute the total cost function value given a mean and covariace.
@@ -441,4 +441,4 @@ public:
 }; //class
 
 
-#include "GVI-GH-impl.h"
+#include "NGD-GH-impl.h"

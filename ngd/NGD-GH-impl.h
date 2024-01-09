@@ -1,6 +1,7 @@
 using namespace Eigen;
 using namespace std;
 #include <stdexcept>
+#include <optional>
 
 #define STRING(x) #x
 #define XSTRING(x) STRING(x)
@@ -10,7 +11,7 @@ using namespace std;
  * @brief One step of optimization.
  */
 template <typename Factor>
-std::tuple<VectorXd, SpMat> GVIGH<Factor>::compute_gradients(){
+std::tuple<VectorXd, SpMat> NGDGH<Factor>::compute_gradients(){
     _Vdmu.setZero();
     _Vddmu.setZero();
 
@@ -24,14 +25,11 @@ std::tuple<VectorXd, SpMat> GVIGH<Factor>::compute_gradients(){
     SpMat dprecision = _Vddmu - _precision;
     VectorXd dmu = _ei.solve_cgd_sp(_Vddmu, -_Vdmu);
 
-    // MatrixXd Vddmu_full{_Vddmu};
-    // VectorXd dmu = Vddmu_full.colPivHouseholderQr().solve(-_Vdmu);
-
     return std::make_tuple(dmu, dprecision);
 }
 
 template <typename Factor>
-void GVIGH<Factor>::switch_to_high_temperature(){
+void NGDGH<Factor>::switch_to_high_temperature(){
     for (auto& i_factor:_vec_factors){
         i_factor->switch_to_high_temperature();
     }
@@ -42,9 +40,11 @@ void GVIGH<Factor>::switch_to_high_temperature(){
  * @brief optimize with backtracking
  */ 
 template <typename Factor>
-void GVIGH<Factor>::optimize(bool verbose)
+void NGDGH<Factor>::optimize(std::optional<bool> verbose)
 {
-
+    // default verbose
+    bool is_verbose = verbose.value_or(true);
+    
     for (int i_iter = 0; i_iter < _niters; i_iter++)
     {
         // ============= High temperature phase =============
@@ -55,7 +55,7 @@ void GVIGH<Factor>::optimize(bool verbose)
         // ============= Cost at current iteration =============
         double cost_iter = cost_value(_mu, _precision);
 
-        if (verbose){
+        if (is_verbose){
             cout << "========= iteration " << i_iter << " ========= " << endl;
             cout << "--- cost_iter ---" << endl << cost_iter << endl;
         }
@@ -106,7 +106,7 @@ void GVIGH<Factor>::optimize(bool verbose)
 
             if (cnt > _niters_backtrack)
             {
-                if (verbose){
+                if (is_verbose){
                     cout << "Too many iterations in the backtracking ... Dead" << endl;
                 }
                 set_mu(new_mu);
@@ -116,13 +116,13 @@ void GVIGH<Factor>::optimize(bool verbose)
         }
     }
 
-    save_data(verbose);
+    save_data(is_verbose);
 
 }
 
 
 template <typename Factor>
-inline void GVIGH<Factor>::set_precision(const SpMat &new_precision)
+inline void NGDGH<Factor>::set_precision(const SpMat &new_precision)
 {
     _precision = new_precision;
     // sparse inverse
@@ -138,7 +138,7 @@ inline void GVIGH<Factor>::set_precision(const SpMat &new_precision)
  * @brief Compute the costs of all factors for a given mean and cov.
  */
 template <typename Factor>
-VectorXd GVIGH<Factor>::factor_cost_vector(const VectorXd& joint_mean, SpMat& joint_precision)
+VectorXd NGDGH<Factor>::factor_cost_vector(const VectorXd& joint_mean, SpMat& joint_precision)
 {
     VectorXd fac_costs(_nfactors);
     fac_costs.setZero();
@@ -156,7 +156,7 @@ VectorXd GVIGH<Factor>::factor_cost_vector(const VectorXd& joint_mean, SpMat& jo
  * @brief Compute the costs of all factors, using current values.
  */
 template <typename Factor>
-VectorXd GVIGH<Factor>::factor_cost_vector()
+VectorXd NGDGH<Factor>::factor_cost_vector()
 {   
     return factor_cost_vector(_mu, _precision);
 }
@@ -165,7 +165,7 @@ VectorXd GVIGH<Factor>::factor_cost_vector()
  * @brief Compute the total cost function value given a state.
  */
 template <typename Factor>
-double GVIGH<Factor>::cost_value(const VectorXd &mean, SpMat &Precision)
+double NGDGH<Factor>::cost_value(const VectorXd &mean, SpMat &Precision)
 {
 
     SpMat Cov = inverse(Precision);
@@ -194,7 +194,7 @@ double GVIGH<Factor>::cost_value(const VectorXd &mean, SpMat &Precision)
  * @brief Compute the total cost function value given a state, using current values.
  */
 template <typename Factor>
-double GVIGH<Factor>::cost_value()
+double NGDGH<Factor>::cost_value()
 {
     return cost_value(_mu, _precision);
 }
@@ -203,7 +203,7 @@ double GVIGH<Factor>::cost_value()
  * @brief given a state, compute the total cost function value without the entropy term, using current values.
  */
 template <typename Factor>
-double GVIGH<Factor>::cost_value_no_entropy()
+double NGDGH<Factor>::cost_value_no_entropy()
 {
     
     SpMat Cov = inverse(_precision);
