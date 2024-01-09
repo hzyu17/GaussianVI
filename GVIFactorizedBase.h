@@ -61,9 +61,7 @@ public:
                 _Pk.block(0, start_index*state_dim, dimension, dimension) = Eigen::MatrixXd::Identity(dimension, dimension);
             }        
     
-/// public functions
 public:
-
     /// update the GH approximator
     void updateGH(const VectorXd& x, const MatrixXd& P){
         _gh->update_mean(x);
