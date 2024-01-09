@@ -129,27 +129,27 @@ public:
     /**
      * @brief Function which computes one step of update.
      */
-    std::tuple<VectorXd, SpMat> compute_gradients();
+    virtual std::tuple<VectorXd, SpMat> compute_gradients();
 
 
     /**
      * @brief The optimizing process.
      */
-    void optimize(std::optional<bool> verbose= std::nullopt);
+    virtual void optimize(std::optional<bool> verbose= std::nullopt);
 
     std::tuple<double, VectorXd, SpMat> onestep_linesearch(const double &step_size, const VectorXd& dmu, const SpMat& dprecision);
 
-    inline void update_proposal(const VectorXd& new_mu, const SpMat& new_precision);
+    virtual inline void update_proposal(const VectorXd& new_mu, const SpMat& new_precision);
 
     /**
      * @brief Compute the total cost function value given a mean and covariace.
      */
-    double cost_value(const VectorXd& x, SpMat& Precision);
+    virtual double cost_value(const VectorXd& x, SpMat& Precision);
 
     /**
      * @brief Compute the total cost function value given a state, using current values.
      */
-    double cost_value();
+    virtual double cost_value();
 
     /**
      * @brief given a state, compute the total cost function value without the entropy term, using current values.
@@ -412,3 +412,5 @@ public:
     }
 
 }; //class
+
+#include "GVI-GH-impl.h"
