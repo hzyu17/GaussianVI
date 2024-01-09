@@ -1,11 +1,11 @@
 /**
- * @file GVIFactorizedBase.h
+ * @file GVIFactorizedBaseNGD.h
  * @author Hongzhe Yu (hyu419@gatech.edu)
- * @brief The base class for marginal optimizer, base class for different algorithms.
+ * @brief The base class for Natural gradient descent marginal optimizer.
  * @version 0.1
- * @date 2023-01-09
+ * @date 2022-03-07
  * 
- * @copyright Copyright (c) 2023
+ * @copyright Copyright (c) 2022
  * 
  */
 
@@ -27,20 +27,20 @@ using namespace Eigen;
 
 IOFormat CleanFmt(4, 0, ", ", "\n");
 
-class GVIFactorizedBase{
+class GVIFactorizedBaseNGD{
 public:
-    virtual ~GVIFactorizedBase(){}
+    virtual ~GVIFactorizedBaseNGD(){}
     /**
      * @brief Default Constructor
      */
-    GVIFactorizedBase(){}
+    GVIFactorizedBaseNGD(){}
 
     /**
-     * @brief Construct a new GVIFactorizedBase object
+     * @brief Construct a new GVIFactorizedBaseNGD object
      * 
      * @param dimension The dimension of the state
      */
-    GVIFactorizedBase(int dimension, int state_dim, int num_states, int start_index, 
+    GVIFactorizedBaseNGD(int dimension, int state_dim, int num_states, int start_index, 
                         double temperature=10.0, double high_temperature=100.0, bool is_linear=false):
             _is_linear{is_linear},
             _dim{dimension},
@@ -52,7 +52,8 @@ public:
             _covariance{MatrixXd::Identity(_dim, _dim)},
             _precision{MatrixXd::Identity(_dim, _dim)},
             _dprecision(_dim, _dim),
-            _dcovariance(_dim, _dim),
+            _Vdmu(_dim),
+            _Vddmu(_dim, _dim),
             _block{state_dim, num_states, start_index, dimension},
             _Pk(dimension, state_dim*num_states)
             {   
@@ -90,10 +91,7 @@ public:
      */
     inline void update_covariance(const MatrixXd& new_cov){ 
         _covariance = new_cov; 
-    }
-
-    inline void update_precisionmatrix(const MatrixXd & new_precisionmatrix){
-        _precision = new_precisionmatrix;
+        _precision = _covariance.inverse();
     }
 
     inline MatrixXd Pk(){
@@ -110,7 +108,10 @@ public:
     /**
      * @brief Update the marginal precision matrix.
      */
-    virtual void update_precision_from_joint(const SpMat& joint_covariance) {}
+    inline void update_precision_from_joint(const SpMat& joint_covariance) {
+        _covariance = extract_cov_from_joint(joint_covariance);
+        _precision = _covariance.inverse();
+    }
 
     inline VectorXd extract_mu_from_joint(const VectorXd & joint_mean) {
         return _block.extract_vector(joint_mean);
@@ -146,6 +147,17 @@ public:
         _Vddmu.triangularView<Upper>() = (_precision * E_xxphi * _precision - _precision * E_phi).triangularView<Upper>();
         _Vddmu.triangularView<StrictlyLower>() = _Vddmu.triangularView<StrictlyUpper>().transpose();
 
+    }
+
+    void test_integration(){
+        std::cout << "=========== test_integration ===========" << std::endl;
+        updateGH(_mu, _covariance);
+        double E_phi = _gh->Integrate(_func_phi)(0, 0);
+        std::cout << "E_phi " << std::endl << E_phi << std::endl;
+
+        VectorXd Vdmu = _gh->Integrate(_func_Vmu);
+
+        MatrixXd E_xxphi = _gh->Integrate(_func_Vmumu);
     }
 
     void calculate_partial_V_GH(){
@@ -256,12 +268,33 @@ public:
     }
 
     /**
+     * @brief returns the (x-mu)*Phi(x) 
+     */
+    inline MatrixXd xMu_negative_log_probability(const VectorXd& x) const{
+        return _func_Vmu(x);
+    }
+
+    /**
+     * @brief returns the (x-mu)*Phi(x) 
+     */
+    inline MatrixXd xMuxMuT_negative_log_probability(const VectorXd& x) const{
+        return _func_Vmumu(x);
+    }
+
+    /**
      * @brief returns the E_q{phi(x)} = E_q{-log(p(x,z))}
      */
     inline double E_Phi() {
         return _gh->Integrate(_func_phi)(0, 0);
     }
 
+    inline MatrixXd E_xMuPhi(){
+        return _gh->Integrate(_func_Vmu);
+    }
+
+    inline MatrixXd E_xMuxMuTPhi(){
+        return _gh->Integrate(_func_Vmumu);
+    }
 
     void set_GH_points(int p){
         _gh->set_polynomial_deg(p);

@@ -1,8 +1,7 @@
 /**
- * @file GVIFactorizedSimpleGH.h
+ * @file NGDFactorizedSimpleGH.h
  * @author Hongzhe Yu (hyu419@getach.edu)
- * @brief Simple optimizer which takes no gpmp factors, 
- * just to verify the algorithm itself.
+ * @brief Simple optimizer just to verify the algorithm itself.
  * @version 0.1
  * @date 2022-07-25
  * 
@@ -10,23 +9,23 @@
  * 
  */
 
-#include "GVIFactorizedBase.h"
+#include "GVIFactorizedBaseNGD.h"
 #include <memory>
 
 using namespace std;
 using namespace Eigen;
 
 template <typename Function>
-class GVIFactorizedSimpleGH: public GVIFactorizedBase{
+class NGDFactorizedSimpleGH: public GVIFactorizedBaseNGD{
 
-    using Base = GVIFactorizedBase;
+    using Base = GVIFactorizedBaseNGD;
     using GHFunction = std::function<MatrixXd(const VectorXd&)>;
     using GH = GaussHermite<GHFunction>;
 
 public:
     ///@param dimension The dimension of the state
     ///@param function Template function class which calculate the cost
-    GVIFactorizedSimpleGH(int dimension, int state_dim, int num_states, int start_index, const Function& function, 
+    NGDFactorizedSimpleGH(int dimension, int state_dim, int num_states, int start_index, const Function& function, 
                             double temperature=1.0, double high_temperature=10.0):
             Base(dimension, state_dim, num_states, start_index, temperature, high_temperature)
             {
@@ -38,6 +37,6 @@ public:
             }
     
 public:
-    typedef std::shared_ptr<GVIFactorizedSimpleGH> shared_ptr;
+    typedef std::shared_ptr<NGDFactorizedSimpleGH> shared_ptr;
 
 };
