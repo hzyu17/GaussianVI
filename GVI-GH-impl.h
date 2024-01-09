@@ -6,27 +6,6 @@ using namespace std;
 #define STRING(x) #x
 #define XSTRING(x) STRING(x)
 
-    
-// /**
-//  * @brief One step of optimization.
-//  */
-// template <typename Factor>
-// std::tuple<VectorXd, SpMat> GVIGH<Factor>::compute_gradients(){
-//     _Vdmu.setZero();
-//     _Vddmu.setZero();
-
-//     for (auto &opt_k : _vec_factors)
-//     {
-//         opt_k->calculate_partial_V();
-//         _Vdmu = _Vdmu + opt_k->joint_Vdmu_sp();
-//         _Vddmu = _Vddmu + opt_k->joint_Vddmu_sp();
-//     }
-
-//     SpMat dprecision = _Vddmu - _precision;
-//     VectorXd dmu = _ei.solve_cgd_sp(_Vddmu, -_Vdmu);
-
-//     return std::make_tuple(dmu, dprecision);
-// }
 
 template <typename Factor>
 void GVIGH<Factor>::switch_to_high_temperature(){
@@ -114,35 +93,6 @@ void GVIGH<Factor>::optimize(std::optional<bool> verbose)
 }
 
 template <typename Factor>
-std::tuple<double, VectorXd, SpMat> GVIGH<Factor>::onestep_linesearch(const double &step_size, 
-                                                                        const VectorXd& dmu, 
-                                                                        const SpMat& dprecision
-                                                                        )
-{
-
-    SpMat new_precision; 
-    VectorXd new_mu; 
-    new_mu.setZero(); new_precision.setZero();
-
-    // update mu and precision matrix
-    new_mu = _mu + step_size * dmu;
-    new_precision = _precision + step_size * dprecision;
-
-    // new cost
-    return std::make_tuple(cost_value(new_mu, new_precision), new_mu, new_precision);
-
-}
-
-
-template <typename Factor>
-inline void GVIGH<Factor>::update_proposal(const VectorXd& new_mu, const SpMat& new_precision)
-{
-    set_mu(new_mu);
-    set_precision(new_precision);
-}
-
-
-template <typename Factor>
 inline void GVIGH<Factor>::set_precision(const SpMat &new_precision)
 {
     _precision = new_precision;
@@ -174,15 +124,6 @@ VectorXd GVIGH<Factor>::factor_cost_vector(const VectorXd& joint_mean, SpMat& jo
 }
 
 /**
- * @brief Compute the costs of all factors, using current values.
- */
-template <typename Factor>
-VectorXd GVIGH<Factor>::factor_cost_vector()
-{   
-    return factor_cost_vector(_mu, _precision);
-}
-
-/**
  * @brief Compute the total cost function value given a state.
  */
 template <typename Factor>
@@ -200,40 +141,11 @@ double GVIGH<Factor>::cost_value(const VectorXd &mean, SpMat &Precision)
     SparseLDLT ldlt(Precision);
     VectorXd vec_D = ldlt.vectorD();
 
-    // MatrixXd precision_full{Precision};
     double logdet = 0;
     for (int i_diag=0; i_diag<vec_D.size(); i_diag++){
         logdet += log(vec_D(i_diag));
     }
 
-    // cout << "logdet " << endl << logdet << endl;
-    
     return value + logdet / 2;
-}
-
-/**
- * @brief Compute the total cost function value given a state, using current values.
- */
-template <typename Factor>
-double GVIGH<Factor>::cost_value()
-{
-    return cost_value(_mu, _precision);
-}
-
-/**
- * @brief given a state, compute the total cost function value without the entropy term, using current values.
- */
-template <typename Factor>
-double GVIGH<Factor>::cost_value_no_entropy()
-{
-    
-    SpMat Cov = inverse(_precision);
-    
-    double value = 0.0;
-    for (auto &opt_k : _vec_factors)
-    {
-        value += opt_k->fact_cost_value(_mu, Cov);
-    }
-    return value; // / _temperature;
 }
 
