@@ -57,9 +57,7 @@ public:
             _covariance{SpMat(_dim, _dim)},
             _res_recorder{niterations, dim_state, num_states, _nfactors}
     {
-                construct_sparse_precision();
-                _Vdmu.setZero();
-                _Vddmu.setZero();
+        construct_sparse_precision();
     }
 
 protected:
@@ -74,9 +72,6 @@ protected:
     vector<std::shared_ptr<FactorizedOptimizer>> _vec_factors;
 
     VectorXd _mu;
-
-    VectorXd _Vdmu;
-    SpMat _Vddmu;
 
     /// Data and result storage
     VIMPResults _res_recorder;
@@ -97,81 +92,53 @@ protected:
     /// filename for the perturbed costs
     std::string _file_perturbed_cost;
 
-    void ldlt_decompose(){
-        _ldlt.compute(_precision);
-        _L = _ldlt.matrixL();
-        _Dinv = _ldlt.vectorD().real().cwiseInverse();
-        _ei.find_nnz_known_ij(_L, _Rows, _Cols, _Vals);
-        // _D = ldlt.vectorD().real();
-    }
-
-    void construct_sparse_precision(){
-        _precision.setZero();
-        // fill in the precision matrix to the known sparsity pattern
-        if (_num_states == 1){
-            Eigen::MatrixXd block = MatrixXd::Ones(_dim_state, _dim_state);
-            _ei.block_insert_sparse(_precision, 0, 0, _dim_state, _dim_state, block);
-        }else{
-            Eigen::MatrixXd block = MatrixXd::Ones(2*_dim_state, 2*_dim_state);
-            for (int i=0; i<_num_states-1; i++){
-                _ei.block_insert_sparse(_precision, i*_dim_state, i*_dim_state, 2*_dim_state, 2*_dim_state, block);
-            }
-
-        }
-        
-        SpMat lower = _precision.triangularView<Eigen::Lower>();
-        _nnz = _ei.find_nnz(lower, _Rows, _Cols, _Vals); // the Rows and Cols table are fixed since the initialization.
-    }
 
 public:
-/// **************************************************************
-/// Optimizations related
 
-    /**
-     * @brief The optimizing process.
-     */
-    void optimize(std::optional<bool> verbose= std::nullopt);
-
-
-    /**
-     * @brief Function which computes one step of update.
-     */
-    std::tuple<VectorXd, SpMat> compute_gradients();
-
-    std::tuple<double, VectorXd, SpMat> onestep_linesearch(const double &step_size, const VectorXd& dmu, const SpMat& dprecision);
-    
-    /**
-     * @brief Compute the total cost function value given a mean and precision matrix.
-     */
-    double cost_value(const VectorXd& x, SpMat& Precision);
+// ************************* Optimizations related functions *************************************
+// ******** Common functions for all algorithms ********
+    /*
+    * @brief The main optimization loop with line search algorithm.
+    */
+    void optimize(std::optional<bool> verbose=std::nullopt);
 
     /**
      * @brief Compute the total cost function value given a mean and covariace.
      */
-    double cost_value(const VectorXd& x, MatrixXd& Covariance);
-
-    /**
-     * @brief Compute the total cost function value given a state, 
-     * using default choice of covariance/precision matrix, and current values.
-     */
-    double cost_value();
-
-    /**
-     * @brief given a state, compute the total cost function value without the entropy term, using current values.
-     */
-    double cost_value_no_entropy();
+    double cost_value(const VectorXd &mean, SpMat &Precision);
 
     /**
      * @brief Compute the costs of all factors for a given mean and cov.
      */
     VectorXd factor_cost_vector(const VectorXd& x, SpMat& Precision);
 
-    /**
-     * @brief Compute the costs of all factors, using current values.
-     */
-    VectorXd factor_cost_vector();
 
-    inline double stop_error() const { return _stop_err; }
+// ******** Functions that differs in different algorithms ********
+    /**
+     * @brief Function which computes one step of update.
+     */
+    virtual std::tuple<VectorXd, SpMat> compute_gradients(){};
+
+    // /**
+    //  * @brief The optimizing process.
+    //  */
+    // virtual void optimize(std::optional<bool> verbose= std::nullopt);
+
+    virtual std::tuple<double, VectorXd, SpMat> onestep_linesearch(const double &step_size, const VectorXd& dmu, const SpMat& dprecision){};
+
+    virtual inline void update_proposal(const VectorXd& new_mu, const SpMat& new_precision){};
+
+    virtual double cost_value(){};
+
+    /**
+     * @brief given a state, compute the total cost function value without the entropy term, using current values.
+     */
+    virtual double cost_value_no_entropy(){};
+
+    /**
+     * @brief Default computation of the cost vector.
+     */
+    virtual VectorXd factor_cost_vector(){};
 
 
 /// **************************************************************
@@ -220,25 +187,17 @@ public:
         _initial_precision_factor = initial_precision_factor;
     }
 
-    inline void set_boundary_penalties(double boundary_penalties){
-        _boundary_penalties = boundary_penalties;
-    }
-
     inline void initilize_precision_matrix(){
-        // initilize_precision_matrix(_initial_precision_factor, _boundary_penalties);
         initilize_precision_matrix(_initial_precision_factor);
     }
 
     inline void initilize_precision_matrix(double initial_precision_factor){
         // boundaries
         set_initial_precision_factor(initial_precision_factor);
-        // set_boundary_penalties(boundary_penalties);
 
         MatrixXd init_precision(_dim, _dim);
         init_precision = MatrixXd::Identity(_dim, _dim)*initial_precision_factor;
         
-        // init_precision.block(0, 0, _dim_state, _dim_state) = MatrixXd::Identity(_dim_state, _dim_state)*initial_precision_factor;
-        // init_precision.block((_num_states-1)*_dim_state, (_num_states-1)*_dim_state, _dim_state, _dim_state) = MatrixXd::Identity(_dim_state, _dim_state)*initial_precision_factor;
         set_precision(init_precision.sparseView());
     }
 
@@ -247,6 +206,24 @@ public:
     inline void set_initial_values(const VectorXd& init_mean, const SpMat& init_precision){
         set_mu(init_mean);
         set_precision(init_precision);
+    }
+
+    void construct_sparse_precision(){
+        _precision.setZero();
+        // fill in the precision matrix to the known sparsity pattern
+        if (_num_states == 1){
+            Eigen::MatrixXd block = MatrixXd::Ones(_dim_state, _dim_state);
+            _ei.block_insert_sparse(_precision, 0, 0, _dim_state, _dim_state, block);
+        }else{
+            Eigen::MatrixXd block = MatrixXd::Ones(2*_dim_state, 2*_dim_state);
+            for (int i=0; i<_num_states-1; i++){
+                _ei.block_insert_sparse(_precision, i*_dim_state, i*_dim_state, 2*_dim_state, 2*_dim_state, block);
+            }
+
+        }
+        
+        SpMat lower = _precision.triangularView<Eigen::Lower>();
+        _nnz = _ei.find_nnz(lower, _Rows, _Cols, _Vals); // the Rows and Cols table are fixed since the initialization.
     }
 
     inline void set_GH_degree(const int deg){
@@ -265,6 +242,14 @@ public:
 
     inline void set_high_temperature(double high_temp){
         _high_temperature = high_temp;
+    }
+
+    void ldlt_decompose(){
+        _ldlt.compute(_precision);
+        _L = _ldlt.matrixL();
+        _Dinv = _ldlt.vectorD().real().cwiseInverse();
+        _ei.find_nnz_known_ij(_L, _Rows, _Cols, _Vals);
+        // _D = ldlt.vectorD().real();
     }
 
     
@@ -351,22 +336,6 @@ public:
         _matrix_io.saveData<VectorXd>(filename, vec);
     }
 
-    /**
-     * @brief print a given iteration data mean and covariance.
-     * @param i_iter index of data
-     */
-    inline void print_result(const int& i_iter){
-        _res_recorder.print_data(i_iter);}
-
-
-    inline int dim() const{ return _dim; }   
-
-    inline int n_sub_factors() const{ return _nfactors; }
-
-    inline int max_iter() const { return _niters; }
-
-    inline int max_iter_backtrack() const { return _niters_backtrack; }
-
     void switch_to_high_temperature();
 
     /**
@@ -440,3 +409,5 @@ public:
     }
 
 }; //class
+
+#include "GVI-GH-impl.h"
