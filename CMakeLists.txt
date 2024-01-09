@@ -6,12 +6,9 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -w")
 
 set(gvi_subdirs 
-    quadrature
-    pgcsmp
-    helpers 
-    instances
-    robots
-    dynamics
+    quadrature 
+    ngd
+    proxgd
 )
 
 include_directories("${CMAKE_CURRENT_SOURCE_DIR}")

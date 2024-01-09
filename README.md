@@ -12,7 +12,8 @@ Nonlinear state estimation [[2]](#2).
 [Stochastic Motion Planning](https://github.com/hzyu17/VIMP) [[3]](#3).
 
 ## A simple 1-dimensional example
-A simple 1D example nonlinear posterior is under src folder. To run the code:
+A simple 1D example nonlinear posterior is under src folder. 
+**To run the code**
 ```
 mkdir build && cd build
 cmake ..
@@ -20,6 +21,12 @@ make
 ./src/1d_example
 ```
 This will run the experiment and save all the optimization results under the data/1d folder. 
+**To visualize** the groundtruth cost map, the iteration results, and the total cost of each iteration, run the jupyter notebook 
+```
+scripts/plot1dexample.ipynb
+``` 
+
+<img src="scripts/figures/1d_NGD.pdf" width="400" >
 
 ## References
 <a id="1">[1]</a> 
