@@ -188,16 +188,6 @@ public:
     //  */
 
     /**
-     * @brief Get the marginal intermediate variable (partial V^2 / par mu / par mu)
-     */
-    inline MatrixXd Vddmu() const { return _Vddmu; }
-
-    /**
-     * @brief Get the marginal intermediate variable partial V / dmu
-     */
-    inline VectorXd Vdmu() const { return _Vdmu; }
-
-    /**
      * @brief Get the joint intermediate variable (partial V / partial mu).
      */
     inline VectorXd joint_Vdmu_sp() { 

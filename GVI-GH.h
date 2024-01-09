@@ -1,11 +1,11 @@
 /**
- * @file NGD-GH.h
+ * @file GVI-GH.h
  * @author Hongzhe Yu (hyu419@gatech.edu)
- * @brief The joint optimizer class using Gauss-Hermite quadrature. 
+ * @brief The joint optimizer class using Gauss-Hermite quadrature, base class for different algorithms.
  * @version 0.1
- * @date 2022-03-07
+ * @date 2023-01-09
  * 
- * @copyright Copyright (c) 2022
+ * @copyright Copyright (c) 2023
  * 
  */
 
@@ -22,12 +22,12 @@ using namespace Eigen;
 
 
 template <typename FactorizedOptimizer>
-class NGDGH{
+class GVIGH{
 public:
     /**
      * @brief Default Constructor
      */
-    NGDGH(){}
+    GVIGH(){}
 
     /**
      * @brief Construct a new VIMPOptimizerGH object
@@ -35,7 +35,7 @@ public:
      * @param _vec_fact_optimizers vector of marginal optimizers
      * @param niters number of iterations
      */
-    NGDGH(const std::vector<std::shared_ptr<FactorizedOptimizer>>& vec_fact_optimizers, 
+    GVIGH(const std::vector<std::shared_ptr<FactorizedOptimizer>>& vec_fact_optimizers, 
           int dim_state, 
           int num_states, 
           int niterations=5,
@@ -53,10 +53,7 @@ public:
             _nfactors{vec_fact_optimizers.size()},
             _vec_factors{vec_fact_optimizers},
             _mu{VectorXd::Zero(_dim)},
-            _Vdmu{VectorXd::Zero(_dim)},
-            _Vddmu{SpMat(_dim, _dim)},
             _precision{SpMat(_dim, _dim)},
-            _ldlt{_precision},
             _covariance{SpMat(_dim, _dim)},
             _res_recorder{niterations, dim_state, num_states, _nfactors}
     {
@@ -129,28 +126,33 @@ protected:
 public:
 /// **************************************************************
 /// Optimizations related
-    /**
-     * @brief Function which computes one step of update.
-     */
-    std::tuple<VectorXd, SpMat> compute_gradients();
-
 
     /**
      * @brief The optimizing process.
      */
     void optimize(std::optional<bool> verbose= std::nullopt);
 
-    std::tuple<double, VectorXd, SpMat> onestep_linesearch(const double &step_size, const VectorXd& dmu, const SpMat& dprecision);
-
-    inline void update_proposal(const VectorXd& new_mu, const SpMat& new_precision);
 
     /**
-     * @brief Compute the total cost function value given a mean and covariace.
+     * @brief Function which computes one step of update.
+     */
+    std::tuple<VectorXd, SpMat> compute_gradients();
+
+    std::tuple<double, VectorXd, SpMat> onestep_linesearch(const double &step_size, const VectorXd& dmu, const SpMat& dprecision);
+    
+    /**
+     * @brief Compute the total cost function value given a mean and precision matrix.
      */
     double cost_value(const VectorXd& x, SpMat& Precision);
 
     /**
-     * @brief Compute the total cost function value given a state, using current values.
+     * @brief Compute the total cost function value given a mean and covariace.
+     */
+    double cost_value(const VectorXd& x, MatrixXd& Covariance);
+
+    /**
+     * @brief Compute the total cost function value given a state, 
+     * using default choice of covariance/precision matrix, and current values.
      */
     double cost_value();
 
@@ -438,6 +440,3 @@ public:
     }
 
 }; //class
-
-
-#include "NGD-GH-impl.h"

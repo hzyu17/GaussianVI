@@ -66,37 +66,31 @@ void NGDGH<Factor>::optimize(std::optional<bool> verbose)
         _res_recorder.update_data(_mu, _covariance, _precision, cost_iter, fact_costs_iter);
 
         // gradients
-        std::tuple<VectorXd, SpMat> dmudprecision = this->compute_gradients();
+        std::tuple<VectorXd, SpMat> gradients = this->compute_gradients();
 
-        VectorXd dmu = std::get<0>(dmudprecision);
-        SpMat dprecision = std::get<1>(dmudprecision);
+        VectorXd dmu = std::get<0>(gradients);
+        SpMat dprecision = std::get<1>(gradients);
         
         int cnt = 0;
         int B = 1;
         double step_size = 0.0;
 
-        SpMat new_precision; 
-        VectorXd new_mu; 
-
         // backtracking 
         while (true)
-        {
-            new_mu.setZero(); new_precision.setZero();
+        {   
             // new step size
             step_size = pow(_step_size_base, B);
 
-            // update mu and precision matrix
-            new_mu = _mu + step_size * dmu;
-            new_precision = _precision + step_size * dprecision;
+            auto onestep_res = this->onestep_linesearch(step_size, dmu, dprecision);
 
-            // new cost
-            double new_cost = cost_value(new_mu, new_precision);
+            double new_cost = std::get<0>(onestep_res);
+            VectorXd new_mu = std::get<1>(onestep_res);
+            auto new_precision = std::get<2>(onestep_res);
 
             // accept new cost and update mu and precision matrix
             if (new_cost < cost_iter){
                 /// update mean and covariance
-                set_mu(new_mu);
-                set_precision(new_precision);
+                update_proposal(new_mu, new_precision);
                 break;
             }else{ 
                 // shrinking the step size
@@ -109,15 +103,42 @@ void NGDGH<Factor>::optimize(std::optional<bool> verbose)
                 if (is_verbose){
                     cout << "Too many iterations in the backtracking ... Dead" << endl;
                 }
-                set_mu(new_mu);
-                set_precision(new_precision);
-                    break;
+                update_proposal(new_mu, new_precision);
+                break;
             }                
         }
     }
 
     save_data(is_verbose);
 
+}
+
+template <typename Factor>
+std::tuple<double, VectorXd, SpMat> NGDGH<Factor>::onestep_linesearch(const double &step_size, 
+                                                                        const VectorXd& dmu, 
+                                                                        const SpMat& dprecision
+                                                                        )
+{
+
+    SpMat new_precision; 
+    VectorXd new_mu; 
+    new_mu.setZero(); new_precision.setZero();
+
+    // update mu and precision matrix
+    new_mu = _mu + step_size * dmu;
+    new_precision = _precision + step_size * dprecision;
+
+    // new cost
+    return std::make_tuple(cost_value(new_mu, new_precision), new_mu, new_precision);
+
+}
+
+
+template <typename Factor>
+inline void NGDGH<Factor>::update_proposal(const VectorXd& new_mu, const SpMat& new_precision)
+{
+    set_mu(new_mu);
+    set_precision(new_precision);
 }
 
 

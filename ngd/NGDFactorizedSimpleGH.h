@@ -1,8 +1,7 @@
 /**
  * @file NGDFactorizedSimpleGH.h
  * @author Hongzhe Yu (hyu419@getach.edu)
- * @brief Simple optimizer which takes no gpmp factors, 
- * just to verify the algorithm itself.
+ * @brief Simple optimizer just to verify the algorithm itself.
  * @version 0.1
  * @date 2022-07-25
  * 
