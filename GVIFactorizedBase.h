@@ -18,7 +18,7 @@
 #include <assert.h>
 #include <memory>
 
-#include "GaussHermite.h"
+#include "quadrature/GaussHermite.h"
 #include "CommonDefinitions.h"
 #include "MatrixHelper.h"
 
