@@ -1,3 +1,9 @@
+
+#pragma once
+
+#ifndef NGD_GH_IMPL_H
+#define NGD_GH_IMPL_H
+
 using namespace Eigen;
 using namespace std;
 #include <stdexcept>
@@ -95,3 +101,4 @@ double NGDGH<Factor>::cost_value_no_entropy()
     return value; // / _temperature;
 }
 
+#endif // NGD_GH_IMPL_H

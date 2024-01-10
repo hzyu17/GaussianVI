@@ -11,6 +11,9 @@
 
 #pragma once
 
+#ifndef NGD_GH_H
+#define NGD_GH_H
+
 #include <utility>
 #include <memory>
 
@@ -87,3 +90,5 @@ public:
 // function implementations
 
 #include "NGD-GH-impl.h"
+
+#endif //NGD-GH
