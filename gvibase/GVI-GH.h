@@ -150,6 +150,8 @@ public:
 
     inline SpMat covariance() const { return _covariance; }
 
+    inline SpMat precision() const { return _precision; }
+
     inline void inverse_inplace(){
         ldlt_decompose();
 
