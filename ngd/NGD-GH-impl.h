@@ -23,7 +23,9 @@ std::tuple<VectorXd, SpMat> NGDGH<Factor>::compute_gradients(){
     }
 
     SpMat dprecision = _Vddmu - Base::_precision;
-    VectorXd dmu = Base::_ei.solve_cgd_sp(_Vddmu, -_Vdmu);
+
+    Eigen::ConjugateGradient<SpMat, Eigen::Upper> solver;
+    VectorXd dmu =  solver.compute(_Vddmu).solve(-_Vdmu);
 
     return std::make_tuple(dmu, dprecision);
 }

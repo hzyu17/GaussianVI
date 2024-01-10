@@ -97,7 +97,7 @@ public:
         Random random;
 
         for (int i=0; i<nnz; i++){
-            int i_row = random.randint(0, m-1);
+            int i_row = random.randint(0, n-1);
             int j_col = random.randint(0, n-1);
             double val = random.rand_double(0.0, 10.0);
             tripletList.push_back(Trip(i_row, j_col, val));
