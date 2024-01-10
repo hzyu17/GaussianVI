@@ -168,6 +168,8 @@ public:
      */
     inline VectorXd mean() const{ return _mu; }
 
+    inline MatrixXd precision() const {return _precision; }
+
 
     /********************************************************/
     /// Function interfaces
