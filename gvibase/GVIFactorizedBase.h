@@ -24,6 +24,7 @@
 
 using namespace std;
 using namespace Eigen;
+using namespace gvi;
 
 class GVIFactorizedBase{
 public:

@@ -19,6 +19,7 @@ using namespace std;
 using namespace Eigen;
 using namespace std;
 
+namespace gvi{
 
 class VIMPResults{
 private:    
@@ -218,3 +219,7 @@ public:
         }
     }
 };
+
+}
+
+

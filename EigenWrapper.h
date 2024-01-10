@@ -19,6 +19,8 @@
 
 using namespace Eigen;
 
+namespace gvi{
+
 class Random{
 
 public:
@@ -520,4 +522,7 @@ private:
     std::string _sep = "\n----------------------------------------\n";
     
 };
+
+}
+
 

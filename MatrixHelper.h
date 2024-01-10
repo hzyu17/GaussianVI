@@ -15,6 +15,8 @@
 
 using namespace Eigen;
 
+namespace gvi {
+
 class Matrix3D : public MatrixXd{
 public:
     Matrix3D(){}
@@ -147,3 +149,6 @@ private:
     GVIBlock _block = GVIBlock();
 
 }; // class TrajectoryBlock
+
+
+}

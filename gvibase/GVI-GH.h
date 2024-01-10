@@ -19,7 +19,7 @@
 
 using namespace std;
 using namespace Eigen;
-
+using namespace gvi;
 
 template <typename FactorizedOptimizer>
 class GVIGH{
