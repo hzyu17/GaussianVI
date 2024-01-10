@@ -20,15 +20,15 @@
 #include "gp/linear_factor.h"
 
 namespace gvi{
-template <typename LinearFactor>
+template <typename Factor>
 class NGDFactorizedLinear : public NGDFactorizedBase{
     using Base = NGDFactorizedBase;
-    using CostFunction = std::function<double(const VectorXd&, const LinearFactor&)>;
+    using CostFunction = std::function<double(const VectorXd&, const Factor&)>;
 public:
     NGDFactorizedLinear(const int& dimension,
                         int dim_state,
                         const CostFunction& function, 
-                        const LinearFactor& linear_factor,
+                        const Factor& linear_factor,
                         int num_states,
                         int start_indx,
                         double temperature,
@@ -51,7 +51,7 @@ public:
         }
 
 protected:
-    LinearFactor _linear_factor;
+    Factor _linear_factor;
 
     MatrixXd _target_mean, _target_precision, _Lambda, _Psi;
 
