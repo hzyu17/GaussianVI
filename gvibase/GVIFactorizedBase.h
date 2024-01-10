@@ -22,7 +22,7 @@
 #include "CommonDefinitions.h"
 #include "MatrixHelper.h"
 
-using namespace std;
+// using namespace std;
 using namespace Eigen;
 
 namespace gvi{

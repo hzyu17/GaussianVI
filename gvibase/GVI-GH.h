@@ -20,7 +20,7 @@
 #include "EigenWrapper.h"
 #include "DataRecorder.h"
 
-using namespace std;
+// using namespace std;
 using namespace Eigen;
 
 namespace gvi{

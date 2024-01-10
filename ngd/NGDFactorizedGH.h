@@ -18,7 +18,7 @@
 #include "ngd/NGDFactorizedBase.h"
 #include <memory>
 
-using namespace std;
+// using namespace std;
 using namespace Eigen;
 
 namespace gvi{

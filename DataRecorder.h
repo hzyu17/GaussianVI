@@ -18,11 +18,9 @@
 #include "EigenWrapper.h"
 #include <vector>
 
-using namespace std;
 #include <vector>
 
 using namespace Eigen;
-using namespace std;
 
 namespace gvi{
 
