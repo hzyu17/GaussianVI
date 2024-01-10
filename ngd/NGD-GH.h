@@ -85,6 +85,11 @@ public:
     VectorXd factor_cost_vector() override;
     
 
+    inline VectorXd Vdmu() const {return _Vdmu; }
+
+    inline SpMat Vddmu() const { return _Vddmu; }
+    
+
 }; //class
 
 
