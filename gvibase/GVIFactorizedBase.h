@@ -25,8 +25,6 @@
 using namespace std;
 using namespace Eigen;
 
-IOFormat CleanFmt(4, 0, ", ", "\n");
-
 class GVIFactorizedBase{
 public:
     virtual ~GVIFactorizedBase(){}
