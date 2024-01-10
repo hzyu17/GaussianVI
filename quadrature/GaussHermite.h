@@ -97,6 +97,10 @@ public:
 
     inline void update_dimension(const int& dim){ _dim = dim; }
 
+
+    inline VectorXd weights() const { return this->_W; }
+    inline VectorXd sigmapts() const { return this->_sigmapts; }
+
     protected:
     int _deg;
     int _dim;
