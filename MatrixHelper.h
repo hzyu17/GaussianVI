@@ -11,6 +11,9 @@
 
 #pragma once
 
+#ifndef MATRIX_HELPER_H
+#define MATRIX_HELPER_H
+
 #include <Eigen/Dense>
 
 using namespace Eigen;
@@ -152,3 +155,5 @@ private:
 
 
 }
+
+#endif // MATRIX_HELPER_H

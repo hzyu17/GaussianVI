@@ -9,6 +9,11 @@
  * 
  */
 
+#pragma once
+
+#ifndef DATA_RECORDER_H
+#define DATA_RECORDER_H
+
 #include "CommonDefinitions.h"
 #include "EigenWrapper.h"
 #include <vector>
@@ -223,3 +228,4 @@ public:
 }
 
 
+#endif // DATA_RECORDER_H

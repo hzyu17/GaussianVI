@@ -4,6 +4,9 @@
 
 #pragma once
 
+#ifndef COMMON_DEFINITIONS_H
+#define COMMON_DEFINITIONS_H
+
 #include <vector>
 #include <iostream>
 #include <Eigen/SparseCholesky>
@@ -26,3 +29,4 @@ Eigen::IOFormat CSVFormat(Eigen::FullPrecision, Eigen::DontAlignCols, ", ", "\n"
 }
 
 
+#endif // COMMON_DEFINITIONS_H

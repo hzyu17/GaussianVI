@@ -11,6 +11,9 @@
 
 #pragma once
 
+#ifndef EIGEN_WRAPPER_H
+#define EIGEN_WRAPPER_H
+
 // #include "common_includes.h"
 
 #include "MatrixHelper.h"
@@ -387,4 +390,4 @@ private:
 
 }
 
-
+#endif // EIGEN_WRAPPER_H
