@@ -12,6 +12,8 @@
 
 #pragma once
 
+#include "linear_factor.h"
+
 namespace gvi{
 
 class FixedPriorGP : public LinearFactor{
@@ -50,5 +52,5 @@ class FixedPriorGP : public LinearFactor{
 
 }
 
-#include "linear_factor.h"
+
 
