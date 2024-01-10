@@ -127,7 +127,10 @@ public:
     /**
      * @brief Compute the cost function. V(x) = E_q(\phi(x))
      */
-    virtual double fact_cost_value(const VectorXd& fill_joint_mean, const SpMat& joint_cov) {}
+    virtual double fact_cost_value(const VectorXd& fill_joint_mean, const SpMat& joint_cov) {
+        
+        
+    }
 
     // /**
     //  * @brief Compute the cost function. V(x) = E_q(\phi(x)) using the current values.
