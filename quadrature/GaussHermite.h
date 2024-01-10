@@ -14,7 +14,6 @@
 #include <eigen3/Eigen/Dense>
 #include <iostream>
 using namespace Eigen;
-// using namespace std;
 
 namespace gvi{
 template <typename Function>

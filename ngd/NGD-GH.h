@@ -19,7 +19,6 @@
 
 #include "gvibase/GVI-GH.h"
 
-// using namespace std;
 using namespace Eigen;
 namespace gvi{
 

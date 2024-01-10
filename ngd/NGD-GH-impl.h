@@ -5,7 +5,6 @@
 #define NGD_GH_IMPL_H
 
 using namespace Eigen;
-// using namespace std;
 #include <stdexcept>
 #include <optional>
 
