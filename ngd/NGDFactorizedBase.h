@@ -9,6 +9,8 @@
  * 
  */
 
+# pragma once
+
 #include "gvibase/GVIFactorizedBase.h"
 
 class NGDFactorizedBase : public GVIFactorizedBase{
