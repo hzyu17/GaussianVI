@@ -11,13 +11,16 @@
 
 #pragma once
 
+#ifndef NGD_GH_H
+#define NGD_GH_H
+
 #include <utility>
 #include <memory>
 
 #include "gvibase/GVI-GH.h"
 
-using namespace std;
 using namespace Eigen;
+namespace gvi{
 
 template <typename FactorizedOptimizer>
 class NGDGH: public GVIGH<FactorizedOptimizer>{
@@ -82,8 +85,18 @@ public:
     VectorXd factor_cost_vector() override;
     
 
+    inline VectorXd Vdmu() const {return _Vdmu; }
+
+    inline SpMat Vddmu() const { return _Vddmu; }
+    
+
 }; //class
+
+
+} //namespace gvi
 
 // function implementations
 
 #include "NGD-GH-impl.h"
+
+#endif //NGD-GH

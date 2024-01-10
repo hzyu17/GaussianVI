@@ -13,8 +13,15 @@
  * 
  */
 
+#pragma once
+
+#ifndef NGDFactorizedFixedGaussian_H
+#define NGDFactorizedFixedGaussian_H
+
 #include "ngd/NGDFactorizedLinear.h"
 #include "gp/linear_factor.h"
+
+namespace gvi{
 
 template <typename LinearFactor>
 class NGDFactorizedFixedGaussian : public NGDFactorizedLinear<LinearFactor>{
@@ -32,3 +39,8 @@ public:
         Base(dimension, dim_state, function, linear_factor, num_states, start_indx, temperature, high_temperature)
         { }    
 };
+
+}
+
+
+#endif // NGDFactorizedFixedGaussian_H

@@ -11,7 +11,12 @@
 
 # pragma once
 
+#ifndef NGDFactorizedBase_H
+#define NGDFactorizedBase_H
+
 #include "gvibase/GVIFactorizedBase.h"
+
+namespace gvi{
 
 class NGDFactorizedBase : public GVIFactorizedBase{
 
@@ -81,14 +86,6 @@ public:
         return _func_Vmumu(x);
     }
 
-    inline MatrixXd E_xMuPhi(){
-        return _gh->Integrate(_func_Vmu);
-    }
-
-    inline MatrixXd E_xMuxMuTPhi(){
-        return _gh->Integrate(_func_Vmumu);
-    }
-
     double fact_cost_value(const VectorXd& fill_joint_mean, const SpMat& joint_cov) override {
         VectorXd mean_k = extract_mu_from_joint(fill_joint_mean);
         MatrixXd Cov_k = extract_cov_from_joint(joint_cov);
@@ -102,7 +99,9 @@ protected:
     VectorXd _Vdmu;
     MatrixXd _Vddmu;
 
-    GHFunction _func_Vmu;
-    GHFunction _func_Vmumu;
 };
 
+}
+
+
+#endif // NGDFactorizedBase_H

@@ -14,6 +14,7 @@
 #include <Eigen/Dense>
 using namespace Eigen;
 
+namespace gvi{
 class LinearFactor{
 public:
     virtual ~LinearFactor(){} 
@@ -28,3 +29,5 @@ public:
     inline virtual MatrixXd get_Psi() const = 0;
     inline virtual double get_Constant() const = 0; // get the constant
 };
+
+}

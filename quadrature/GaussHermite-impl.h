@@ -11,6 +11,8 @@
 
 using namespace Eigen;
 
+namespace gvi{
+
 double factorial(double n)
 {
   return (n == 1.0 || n == 0.0) ? 1 : factorial(n - 1) * n;
@@ -131,3 +133,6 @@ MatrixXd GaussHermite<Function>::Integrate(const Function& function){
 
     return res;
 }
+
+
+} // namespace gvi

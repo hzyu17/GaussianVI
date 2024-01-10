@@ -10,7 +10,11 @@
  * 
  */
 
+#pragma once
+
 #include "linear_factor.h"
+
+namespace gvi{
 
 class FixedPriorGP : public LinearFactor{
     public:
@@ -44,3 +48,9 @@ class FixedPriorGP : public LinearFactor{
         VectorXd _mu;
 
 };
+
+
+}
+
+
+

@@ -11,6 +11,7 @@
 
 #include "gvibase/GVIFactorizedBase.h"
 
+namespace gvi{
 class ProxGVIFactorizedBase : public GVIFactorizedBase{
 
 public:
@@ -58,3 +59,5 @@ protected:
     GHFunction _func_Vmu;
     GHFunction _func_Vmumu;
 };
+
+} //namespace

@@ -19,12 +19,12 @@
 #include <memory>
 
 #include "quadrature/GaussHermite.h"
-#include "CommonDefinitions.h"
-#include "MatrixHelper.h"
+#include "helpers/CommonDefinitions.h"
+#include "helpers/MatrixHelper.h"
 
-using namespace std;
 using namespace Eigen;
-using namespace gvi;
+
+namespace gvi{
 
 class GVIFactorizedBase{
 public:
@@ -168,6 +168,9 @@ public:
      */
     inline VectorXd mean() const{ return _mu; }
 
+    inline MatrixXd precision() const {return _precision; }
+
+    inline MatrixXd covariance() const {return _covariance; }
 
     /********************************************************/
     /// Function interfaces
@@ -184,6 +187,14 @@ public:
      */
     inline double E_Phi() {
         return _gh->Integrate(_func_phi)(0, 0);
+    }
+
+    inline MatrixXd E_xMuPhi(){
+        return _gh->Integrate(_func_Vmu);
+    }
+
+    inline MatrixXd E_xMuxMuTPhi(){
+        return _gh->Integrate(_func_Vmumu);
     }
 
     void set_GH_points(int p){
@@ -212,6 +223,8 @@ public:
     /// derived classes.
     using GHFunction = std::function<MatrixXd(const VectorXd&)>;
     GHFunction _func_phi;
+    GHFunction _func_Vmu;
+    GHFunction _func_Vmumu;
 
     /// G-H quadrature class
     using GH = GaussHermite<GHFunction> ;
@@ -235,3 +248,6 @@ protected:
     MatrixXd _Pk;
     
 };
+
+
+}

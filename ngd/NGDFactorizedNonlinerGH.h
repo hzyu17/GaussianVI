@@ -8,8 +8,15 @@
  * @copyright Copyright (c) 2022
  * 
  */
+
+#pragma once 
+
+#ifndef NGDFactorizedNonlinerGH_H
+#define NGDFactorizedNonlinerGH_H
+
 #include "ngd/NGDFactorizedBase.h"
 
+namespace gvi{
 template <typename CostClass>
 class NGDFactorizedNonlinerGH : public NGDFactorizedBase{
     using Base = NGDFactorizedBase;
@@ -42,5 +49,8 @@ class NGDFactorizedNonlinerGH : public NGDFactorizedBase{
         updateGH(mean_k, Cov_k);
 
         return this->_gh->Integrate(this->_func_phi)(0, 0);
-
+    }
 };
+
+} //namespace
+#endif //NGDFactorizedNonlinerGH_H

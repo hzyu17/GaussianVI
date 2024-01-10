@@ -11,7 +11,12 @@
 
 #pragma once
 
+#ifndef MATRIX_HELPER_H
+#define MATRIX_HELPER_H
+
+#include "helpers/CommonDefinitions.h"
 #include <Eigen/Dense>
+
 
 using namespace Eigen;
 
@@ -151,4 +156,6 @@ private:
 }; // class TrajectoryBlock
 
 
-}
+} // namespace gvi
+
+#endif // MATRIX_HELPER_H

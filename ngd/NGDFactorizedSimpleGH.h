@@ -12,8 +12,9 @@
 #include "ngd/NGDFactorizedBase.h"
 #include <memory>
 
-using namespace std;
 using namespace Eigen;
+
+namespace gvi{
 
 template <typename Function>
 class NGDFactorizedSimpleGH: public NGDFactorizedBase{
@@ -40,3 +41,6 @@ public:
     typedef std::shared_ptr<NGDFactorizedSimpleGH> shared_ptr;
 
 };
+
+
+} // namespace

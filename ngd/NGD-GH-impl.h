@@ -1,12 +1,18 @@
+
+#pragma once
+
+#ifndef NGD_GH_IMPL_H
+#define NGD_GH_IMPL_H
+
 using namespace Eigen;
-using namespace std;
 #include <stdexcept>
 #include <optional>
 
 #define STRING(x) #x
 #define XSTRING(x) STRING(x)
 
-    
+namespace gvi{
+
 /**
  * @brief One step of optimization.
  */
@@ -23,7 +29,9 @@ std::tuple<VectorXd, SpMat> NGDGH<Factor>::compute_gradients(){
     }
 
     SpMat dprecision = _Vddmu - Base::_precision;
-    VectorXd dmu = Base::_ei.solve_cgd_sp(_Vddmu, -_Vdmu);
+
+    Eigen::ConjugateGradient<SpMat, Eigen::Upper> solver;
+    VectorXd dmu =  solver.compute(_Vddmu).solve(-_Vdmu);
 
     return std::make_tuple(dmu, dprecision);
 }
@@ -93,3 +101,7 @@ double NGDGH<Factor>::cost_value_no_entropy()
     return value; // / _temperature;
 }
 
+}
+
+
+#endif // NGD_GH_IMPL_H
