@@ -49,7 +49,7 @@ class NGDFactorizedNonlinerGH : public NGDFactorizedBase{
         updateGH(mean_k, Cov_k);
 
         return this->_gh->Integrate(this->_func_phi)(0, 0);
-
+    }
 };
 
 } //namespace
