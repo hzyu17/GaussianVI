@@ -11,8 +11,9 @@
 
 #pragma once
 
-using namespace Eigen;
+#include <Eigen/Dense>
 
+using namespace Eigen;
 
 class Matrix3D : public MatrixXd{
 public:
