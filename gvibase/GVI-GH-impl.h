@@ -5,7 +5,7 @@
 #define GVI_GH_IMPL_H
 
 using namespace Eigen;
-// using namespace std;
+
 #include <stdexcept>
 #include <optional>
 
@@ -42,8 +42,8 @@ void GVIGH<Factor>::optimize(std::optional<bool> verbose)
         double cost_iter = cost_value();
 
         if (is_verbose){
-            cout << "========= iteration " << i_iter << " ========= " << endl;
-            cout << "--- cost_iter ---" << endl << cost_iter << endl;
+            std::cout << "========= iteration " << i_iter << " ========= " << std::endl;
+            std::cout << "--- cost_iter ---" << std::endl << cost_iter << std::endl;
         }
 
         // ============= Collect factor costs =============
@@ -87,7 +87,7 @@ void GVIGH<Factor>::optimize(std::optional<bool> verbose)
             if (cnt > _niters_backtrack)
             {
                 if (is_verbose){
-                    cout << "Too many iterations in the backtracking ... Dead" << endl;
+                    std::cout << "Too many iterations in the backtracking ... Dead" << std::endl;
                 }
                 update_proposal(new_mu, new_precision);
                 break;

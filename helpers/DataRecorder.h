@@ -14,8 +14,8 @@
 #ifndef DATA_RECORDER_H
 #define DATA_RECORDER_H
 
-#include "CommonDefinitions.h"
-#include "EigenWrapper.h"
+#include "helpers/CommonDefinitions.h"
+#include "helpers/EigenWrapper.h"
 #include <vector>
 
 #include <vector>

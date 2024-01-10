@@ -65,7 +65,7 @@ int main(){
     opt.set_GH_degree(20);
     opt.set_initial_values(init_mu, init_prec);
     opt.set_step_size_base(0.75);
-    cout << "opt.mu " << endl << opt.mean() << endl;
+    std::cout << "opt.mu " << std::endl << opt.mean() << std::endl;
     opt.optimize();
     
     return 0;

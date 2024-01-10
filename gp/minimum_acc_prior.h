@@ -19,7 +19,7 @@
  */
 
 #include "linear_factor.h"
-#include "EigenWrapper.h"
+#include "helpers/EigenWrapper.h"
 
 namespace gvi{
 

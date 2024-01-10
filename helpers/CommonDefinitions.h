@@ -26,7 +26,7 @@ typedef Eigen::SimplicialLDLT<SpMat, Eigen::Lower, Eigen::NaturalOrdering<int>> 
 //https://eigen.tuxfamily.org/dox/structEigen_1_1IOFormat.html
 Eigen::IOFormat CSVFormat(Eigen::FullPrecision, Eigen::DontAlignCols, ", ", "\n");
 
-}
+} // namespace gvi
 
 
 #endif // COMMON_DEFINITIONS_H

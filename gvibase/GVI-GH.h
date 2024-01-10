@@ -17,10 +17,9 @@
 #include <utility>
 #include <memory>
 
-#include "EigenWrapper.h"
-#include "DataRecorder.h"
+#include "helpers/EigenWrapper.h"
+#include "helpers/DataRecorder.h"
 
-// using namespace std;
 using namespace Eigen;
 
 namespace gvi{
@@ -73,7 +72,7 @@ protected:
     double _stop_err;
 
     /// @param _vec_factors Vector of marginal optimizers
-    vector<std::shared_ptr<FactorizedOptimizer>> _vec_factors;
+    std::vector<std::shared_ptr<FactorizedOptimizer>> _vec_factors;
 
     VectorXd _mu;
 
@@ -257,14 +256,14 @@ public:
      * @param file_mean filename for the means
      * @param file_cov filename for the covariances
      */
-    inline void update_file_names(const string& file_mean, 
-                                  const string& file_cov,
-                                  const string& file_joint_cov,
-                                  const string& file_precision, 
-                                  const string& file_joint_precision, 
-                                  const string& file_cost,
-                                  const string& file_fac_costs,
-                                  const string& file_perturbed_costs,
+    inline void update_file_names(const std::string& file_mean, 
+                                  const std::string& file_cov,
+                                  const std::string& file_joint_cov,
+                                  const std::string& file_precision, 
+                                  const std::string& file_joint_precision, 
+                                  const std::string& file_cost,
+                                  const std::string& file_fac_costs,
+                                  const std::string& file_perturbed_costs,
                                   const std::string& file_zk_sdf,
                                   const std::string& file_Sk_sdf){
         _res_recorder.update_file_names(file_mean, file_cov, file_joint_cov, file_precision, 
@@ -273,8 +272,8 @@ public:
         _file_perturbed_cost = file_perturbed_costs;
     }
 
-    inline void update_file_names(const string & prefix = "", const string & afterfix=""){
-        std::vector<string> vec_filenames;
+    inline void update_file_names(const std::string & prefix = "", const std::string & afterfix=""){
+        std::vector<std::string> vec_filenames;
         vec_filenames.emplace_back("mean");
         vec_filenames.emplace_back("cov");
         vec_filenames.emplace_back("joint_cov");
@@ -286,22 +285,22 @@ public:
         vec_filenames.emplace_back("zk_sdf");
         vec_filenames.emplace_back("Sk_sdf");
 
-        string underscore{"_"};
-        string file_type{".csv"};
+        std::string underscore{"_"};
+        std::string file_type{".csv"};
 
         if (prefix != ""){
-            for (string & i_file : vec_filenames){
+            for (std::string & i_file : vec_filenames){
                 i_file = prefix + i_file;
             }
         }
 
         if (afterfix != ""){
-            for (string & i_file : vec_filenames){
+            for (std::string & i_file : vec_filenames){
                 i_file = i_file + underscore + afterfix;
             }
         }
 
-        for (string & i_file : vec_filenames){
+        for (std::string & i_file : vec_filenames){
                 i_file = i_file + file_type;
         }
 
@@ -325,11 +324,11 @@ public:
     /**
      * @brief save a matrix to a file. 
      */
-    inline void save_matrix(const string& filename, const MatrixXd& m) const{
+    inline void save_matrix(const std::string& filename, const MatrixXd& m) const{
         _matrix_io.saveData<MatrixXd>(filename, m);
     }
 
-    inline void save_vector(const string& filename, const VectorXd& vec) const{
+    inline void save_vector(const std::string& filename, const VectorXd& vec) const{
         _matrix_io.saveData<VectorXd>(filename, vec);
     }
 
@@ -339,8 +338,8 @@ public:
      * @brief calculate and return the E_q{phi(x)} s for each factorized entity.
      * @return vector<double> 
      */
-    vector<double> E_Phis(){
-        vector<double> res;
+    std::vector<double> E_Phis(){
+        std::vector<double> res;
         for (auto & p_factor: _vec_factors){
             res.emplace_back(p_factor->E_Phi());
         }
@@ -351,8 +350,8 @@ public:
      * @brief calculate and return the E_q{(x-mu).*phi(x)} s for each factorized entity.
      * @return vector<double> 
      */
-    vector<MatrixXd> E_xMuPhis(){
-        vector<MatrixXd> res;
+    std::vector<MatrixXd> E_xMuPhis(){
+        std::vector<MatrixXd> res;
         for (auto & p_factor: _vec_factors){
             res.emplace_back(p_factor->E_xMuPhi());
         }
@@ -363,8 +362,8 @@ public:
      * @brief calculate and return the E_q{(x-mu).*phi(x)} s for each factorized entity.
      * @return vector<double> 
      */
-    vector<MatrixXd> E_xMuxMuTPhis(){
-        vector<MatrixXd> res;
+    std::vector<MatrixXd> E_xMuxMuTPhis(){
+        std::vector<MatrixXd> res;
         for (auto & p_factor: _vec_factors){
             res.emplace_back(p_factor->E_xMuxMuTPhi());
         }
@@ -397,9 +396,9 @@ public:
     /**
      * @brief save the cost map
      */
-    void save_costmap(string filename="costmap.csv"){
+    void save_costmap(std::string filename="costmap.csv"){
         MatrixXd cost_m = cost_map(18, 25, 0.05, 1, 40);
-        ofstream file(filename);
+        std::ofstream file(filename);
         if (file.is_open()){
             file << cost_m.format(CSVFormat);
             file.close();}

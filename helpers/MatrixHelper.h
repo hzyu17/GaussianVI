@@ -14,7 +14,7 @@
 #ifndef MATRIX_HELPER_H
 #define MATRIX_HELPER_H
 
-#include "CommonDefinitions.h"
+#include "helpers/CommonDefinitions.h"
 #include <Eigen/Dense>
 
 

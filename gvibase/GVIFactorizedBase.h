@@ -19,10 +19,9 @@
 #include <memory>
 
 #include "quadrature/GaussHermite.h"
-#include "CommonDefinitions.h"
-#include "MatrixHelper.h"
+#include "helpers/CommonDefinitions.h"
+#include "helpers/MatrixHelper.h"
 
-// using namespace std;
 using namespace Eigen;
 
 namespace gvi{
