@@ -13,7 +13,7 @@
 
 #pragma once
 
-#include "ngd/NGDFactorizedBase.h"
+#include "NGDFactorizedBase.h"
 #include "gp/linear_factor.h"
 
 template <typename LinearFactor>

@@ -19,7 +19,7 @@
 
 using namespace std;
 using namespace Eigen;
-
+using namespace gvi;
 
 template <typename FactorizedOptimizer>
 class GVIGH{
@@ -144,6 +144,8 @@ public:
 /// **************************************************************
 /// Internal data IO
     inline VectorXd mean() const{ return _mu; }
+
+    inline SpMat covariance() const { return _covariance; }
 
     inline void inverse_inplace(){
         ldlt_decompose();

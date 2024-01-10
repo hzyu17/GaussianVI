@@ -11,8 +11,11 @@
 
 #pragma once
 
+#include <Eigen/Dense>
+
 using namespace Eigen;
 
+namespace gvi {
 
 class Matrix3D : public MatrixXd{
 public:
@@ -28,13 +31,6 @@ public:
         return *this;
     }
     
-};
-
-class Vector3D : public VectorXd{
-public:
-    Vector3D(){}
-    Vector3D(int row, int nt):VectorXd(row, nt){}   
-
 };
 
 class MatrixIO{
@@ -153,3 +149,6 @@ private:
     GVIBlock _block = GVIBlock();
 
 }; // class TrajectoryBlock
+
+
+}
