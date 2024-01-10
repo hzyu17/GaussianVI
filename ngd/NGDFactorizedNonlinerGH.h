@@ -8,7 +8,7 @@
  * @copyright Copyright (c) 2022
  * 
  */
-#include "NGDFactorizedBase.h"
+#include "ngd/NGDFactorizedBase.h"
 
 template <typename CostClass>
 class NGDFactorizedNonlinerGH : public NGDFactorizedBase{

@@ -9,7 +9,7 @@
  * 
  */
 
-#include "NGDFactorizedBase.h"
+#include "ngd/NGDFactorizedBase.h"
 #include <memory>
 
 using namespace std;
