@@ -29,7 +29,6 @@ public:
         
     }
     
-
     inline VectorXd local2joint_dmu() override{ 
         VectorXd res(this->_joint_size);
         res.setZero();
