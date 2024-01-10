@@ -11,6 +11,9 @@
 
 #pragma once
 
+#ifndef GVI_GH_H
+#define GVI_GH_H
+
 #include <utility>
 #include <memory>
 
@@ -404,3 +407,5 @@ public:
 }; //class
 
 #include "GVI-GH-impl.h"
+
+#endif // GVI_GH_H

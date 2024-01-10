@@ -1,3 +1,9 @@
+
+#pragma once
+
+#ifndef GVI_GH_IMPL_H
+#define GVI_GH_IMPL_H
+
 using namespace Eigen;
 using namespace std;
 #include <stdexcept>
@@ -149,3 +155,4 @@ double GVIGH<Factor>::cost_value(const VectorXd &mean, SpMat &Precision)
     return value + logdet / 2;
 }
 
+#endif // GVI_GH_IMPL_H
