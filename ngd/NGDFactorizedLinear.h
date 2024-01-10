@@ -13,6 +13,9 @@
 
 #pragma once
 
+#ifndef NGDFactorizedLinear_H
+#define NGDFactorizedLinear_H
+
 #include "NGDFactorizedBase.h"
 #include "gp/linear_factor.h"
 
@@ -98,3 +101,5 @@ public:
     }
 
 };
+
+#endif //NGDFactorizedLinear_H

@@ -10,6 +10,11 @@
  * 
  */
 
+#pragma once
+
+#ifndef NGDFactorizedGH_H
+#define NGDFactorizedGH_H
+
 #include "ngd/NGDFactorizedBase.h"
 #include <memory>
 
@@ -43,3 +48,5 @@ public:
     typedef std::shared_ptr<NGDFactorizedGH> shared_ptr;
 
 };
+
+#endif // NGDFactorizedGH_H

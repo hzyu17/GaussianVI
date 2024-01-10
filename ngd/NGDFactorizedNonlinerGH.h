@@ -8,6 +8,12 @@
  * @copyright Copyright (c) 2022
  * 
  */
+
+#pragma once 
+
+#ifndef NGDFactorizedNonlinerGH_H
+#define NGDFactorizedNonlinerGH_H
+
 #include "ngd/NGDFactorizedBase.h"
 
 template <typename CostClass>
@@ -44,3 +50,5 @@ class NGDFactorizedNonlinerGH : public NGDFactorizedBase{
         return this->_gh->Integrate(this->_func_phi)(0, 0);
 
 };
+
+#endif //NGDFactorizedNonlinerGH_H

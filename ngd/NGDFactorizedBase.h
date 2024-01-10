@@ -11,6 +11,9 @@
 
 # pragma once
 
+#ifndef NGDFactorizedBase_H
+#define NGDFactorizedBase_H
+
 #include "gvibase/GVIFactorizedBase.h"
 
 class NGDFactorizedBase : public GVIFactorizedBase{
@@ -106,3 +109,4 @@ protected:
     GHFunction _func_Vmumu;
 };
 
+#endif // NGDFactorizedBase_H
