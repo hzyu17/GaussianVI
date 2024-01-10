@@ -1,4 +1,13 @@
-
+/**
+ * @file cost_functions.h
+ * @author Hongzhe Yu (hyu419@gatech.edu)
+ * @brief Two cost functions related to gp.
+ * @version 0.1
+ * @date 2024-01-10
+ * 
+ * @copyright Copyright (c) 2024
+ * 
+ */
 
 #include "gp/fixed_prior.h"
 #include "gp/minimum_acc_prior.h"
