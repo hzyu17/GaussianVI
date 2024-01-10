@@ -10,16 +10,16 @@
  * 
  */
 
-#include "GVIFactorizedBaseNGD.h"
+#include "NGDFactorizedBase.h"
 #include <memory>
 
 using namespace std;
 using namespace Eigen;
 
 template <typename Function, typename CostClass>
-class NGDFactorizedGH: public GVIFactorizedBaseNGD{
+class NGDFactorizedGH: public NGDFactorizedBase{
 
-    using OptBase = GVIFactorizedBaseNGD;
+    using OptBase = NGDFactorizedBase;
     using GHFunction = std::function<MatrixXd(const VectorXd&)>;
     using GH = GaussHermite<GHFunction>;
 

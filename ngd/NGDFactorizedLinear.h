@@ -13,12 +13,12 @@
 
 #pragma once
 
-#include "GVIFactorizedBaseNGD.h"
+#include "NGDFactorizedBase.h"
 #include "gp/linear_factor.h"
 
 template <typename LinearFactor>
-class NGDFactorizedLinear : public GVIFactorizedBaseNGD{
-    using Base = GVIFactorizedBaseNGD;
+class NGDFactorizedLinear : public NGDFactorizedBase{
+    using Base = NGDFactorizedBase;
     using CostFunction = std::function<double(const VectorXd&, const LinearFactor&)>;
 public:
     NGDFactorizedLinear(const int& dimension,
@@ -89,8 +89,8 @@ public:
         _Vddmu = (_precision * tmp * _precision - _precision * (AT_precision_A*_covariance).trace()) * constant() / this->temperature();
     }
 
-    double fact_cost_value(const VectorXd& joint_mean, const SpMat& joint_cov) override {
-        VectorXd mean_k = Base::extract_mu_from_joint(joint_mean);
+    double fact_cost_value(const VectorXd& fill_joint_mean, const SpMat& joint_cov) override {
+        VectorXd mean_k = Base::extract_mu_from_joint(fill_joint_mean);
         MatrixXd Cov_k = Base::extract_cov_from_joint(joint_cov);
 
         return ((_Lambda.transpose()*_target_precision*_Lambda * Cov_k).trace() + 

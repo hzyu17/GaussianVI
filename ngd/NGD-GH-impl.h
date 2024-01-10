@@ -12,18 +12,18 @@ using namespace std;
  */
 template <typename Factor>
 std::tuple<VectorXd, SpMat> NGDGH<Factor>::compute_gradients(){
-    this->_Vdmu.setZero();
-    this->_Vddmu.setZero();
+    _Vdmu.setZero();
+    _Vddmu.setZero();
 
     for (auto &opt_k : Base::_vec_factors)
     {
         opt_k->calculate_partial_V();
-        this->_Vdmu = this->_Vdmu + opt_k->joint_Vdmu_sp();
-        this->_Vddmu = this->_Vddmu + opt_k->joint_Vddmu_sp();
+        _Vdmu = _Vdmu + opt_k->local2joint_dmu();
+        _Vddmu = _Vddmu + opt_k->local2joint_dprecision();
     }
 
-    SpMat dprecision = this->_Vddmu - Base::_precision;
-    VectorXd dmu = Base::_ei.solve_cgd_sp(this->_Vddmu, -this->_Vdmu);
+    SpMat dprecision = _Vddmu - Base::_precision;
+    VectorXd dmu = Base::_ei.solve_cgd_sp(_Vddmu, -_Vdmu);
 
     return std::make_tuple(dmu, dprecision);
 }

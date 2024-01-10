@@ -145,15 +145,6 @@ public:
 /// Internal data IO
     inline VectorXd mean() const{ return _mu; }
 
-    inline SpMat precision() const{ return _precision; }
-
-
-    /// returns the covariance matrix
-    inline SpMat covariance(){ 
-        inverse_inplace();
-        return _covariance; 
-    }
-
     inline void inverse_inplace(){
         ldlt_decompose();
 
