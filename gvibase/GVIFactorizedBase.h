@@ -127,7 +127,7 @@ public:
     /**
      * @brief Compute the cost function. V(x) = E_q(\phi(x))
      */
-    double fact_cost_value(const VectorXd& fill_joint_mean, const SpMat& joint_cov) {
+    virtual double fact_cost_value(const VectorXd& fill_joint_mean, const SpMat& joint_cov) {
         
         VectorXd mean_k = extract_mu_from_joint(fill_joint_mean);
         MatrixXd Cov_k = extract_cov_from_joint(joint_cov);
