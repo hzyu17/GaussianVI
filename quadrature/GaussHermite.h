@@ -97,14 +97,6 @@ public:
 
     inline void update_dimension(const int& dim){ _dim = dim; }
 
-    inline VectorXd mean() const{ return _mean; }
-
-    inline MatrixXd cov() const{ return _P; }
-
-    inline VectorXd weights() { computeWeights(); return _W;}
-
-    inline VectorXd sigmapts() { computeSigmaPts(); return _sigmapts;}
-
     protected:
     int _deg;
     int _dim;

@@ -1,15 +1,15 @@
 /**
  * @file GVIFactorizedBase.h
  * @author Hongzhe Yu (hyu419@gatech.edu)
- * @brief The base class for marginal optimizer, base class for different algorithms.
- * @version 0.1
- * @date 2023-01-09
+ * @brief The base class for one factor.
+ * @version 1.1
+ * @date 2024-01-09
  * 
  * @copyright Copyright (c) 2023
  * 
  */
 
-#pragma once
+// #pragma once
 
 
 #include <iostream>
@@ -90,10 +90,7 @@ public:
      */
     inline void update_covariance(const MatrixXd& new_cov){ 
         _covariance = new_cov; 
-    }
-
-    inline void update_precisionmatrix(const MatrixXd & new_precisionmatrix){
-        _precision = new_precisionmatrix;
+        _precision = _covariance.inverse();
     }
 
     inline MatrixXd Pk(){
@@ -103,79 +100,38 @@ public:
     /**
      * @brief Update the marginal mean.
      */
-    inline void update_mu_from_joint(const VectorXd & joint_mean) {
-        _mu = _block.extract_vector(joint_mean);
+    inline void update_mu_from_joint(const VectorXd & fill_joint_mean) {
+        _mu = _block.extract_vector(fill_joint_mean);
     }
 
     /**
      * @brief Update the marginal precision matrix.
      */
-    virtual void update_precision_from_joint(const SpMat& joint_covariance) {}
-
-    inline VectorXd extract_mu_from_joint(const VectorXd & joint_mean) {
-        return _block.extract_vector(joint_mean);
+    inline void update_precision_from_joint(const SpMat& fill_joint_cov) {
+        _covariance = extract_cov_from_joint(fill_joint_cov);
+        _precision = _covariance.inverse();
     }
 
-    inline SpMat extract_cov_from_joint(const SpMat& joint_covariance) {
-        return _block.extract(joint_covariance);
+    inline VectorXd extract_mu_from_joint(const VectorXd & fill_joint_mean) {
+        return _block.extract_vector(fill_joint_mean);
+    }
+
+    inline SpMat extract_cov_from_joint(const SpMat& fill_joint_cov) {
+        return _block.extract(fill_joint_cov);
     }
 
 
     /**
-     * @brief Calculating phi * (partial V) / (partial mu), and 
-     * phi * (partial V^2) / (partial mu * partial mu^T)
-     */
-    virtual void calculate_partial_V(){
-        // update the mu and sigma inside the gauss-hermite integrator
-        updateGH(_mu, _covariance);
-
-        _Vdmu.setZero();
-        _Vddmu.setZero();
-
-        /// Integrate for E_q{_Vdmu} 
-        _Vdmu = _gh->Integrate(_func_Vmu);
-        _Vdmu = _precision * _Vdmu;
-
-        /// Integrate for E_q{phi(x)}
-        double E_phi = _gh->Integrate(_func_phi)(0, 0);
-        
-        /// Integrate for partial V^2 / ddmu_ 
-        MatrixXd E_xxphi{_gh->Integrate(_func_Vmumu)};
-
-        // MatrixXd Vddmu{MatrixXd::Zero(_dim, _dim)};
-        _Vddmu.triangularView<Upper>() = (_precision * E_xxphi * _precision - _precision * E_phi).triangularView<Upper>();
-        _Vddmu.triangularView<StrictlyLower>() = _Vddmu.triangularView<StrictlyUpper>().transpose();
-
-    }
-
-    void calculate_partial_V_GH(){
-        // update the mu and sigma inside the gauss-hermite integrator
-        updateGH(_mu, _covariance);
-
-        _Vdmu.setZero();
-        _Vddmu.setZero();
-
-        /// Integrate for E_q{_Vdmu} 
-        _Vdmu = _gh->Integrate(_func_Vmu);
-        _Vdmu = _precision * _Vdmu;
-
-        /// Integrate for E_q{phi(x)}
-        double E_phi = _gh->Integrate(_func_phi)(0, 0);
-        
-        /// Integrate for partial V^2 / ddmu_ 
-        MatrixXd E_xxphi{_gh->Integrate(_func_Vmumu)};
-
-        _Vddmu.triangularView<Upper>() = (_precision * E_xxphi * _precision - _precision * E_phi).triangularView<Upper>();
-        _Vddmu.triangularView<StrictlyLower>() = _Vddmu.triangularView<StrictlyUpper>().transpose();
-
-    }
+     * @brief Compute the increment on mean and precision (or covariance) matrix on the factorized level.
+    */
+    virtual void calculate_partial_V(){}
 
     /**
      * @brief Compute the cost function. V(x) = E_q(\phi(x))
      */
-    virtual double fact_cost_value(const VectorXd& joint_mean, const SpMat& joint_cov) {
+    double fact_cost_value(const VectorXd& fill_joint_mean, const SpMat& joint_cov) {
         
-        VectorXd mean_k = extract_mu_from_joint(joint_mean);
+        VectorXd mean_k = extract_mu_from_joint(fill_joint_mean);
         MatrixXd Cov_k = extract_cov_from_joint(joint_cov);
 
         updateGH(mean_k, Cov_k);
@@ -190,31 +146,23 @@ public:
     /**
      * @brief Get the joint intermediate variable (partial V / partial mu).
      */
-    inline VectorXd joint_Vdmu_sp() { 
-        VectorXd res(_joint_size);
-        res.setZero();
-        _block.fill_vector(res, _Vdmu);
-        return res;
-    }
+    virtual inline VectorXd local2joint_dmu() {}
 
     /**
      * @brief Get the joint Pk.T * V^2 / dmu /dmu * Pk using block insertion
      */
-    inline SpMat joint_Vddmu_sp() { 
-        SpMat res(_joint_size, _joint_size);
-        res.setZero();
-        _block.fill(_Vddmu, res);
-        return res;
+    virtual inline SpMat local2joint_dprecision() {}
+
+    virtual inline SpMat local2joint_dcovariance() {}
+
+    inline SpMat fill_joint_cov(){
+        SpMat joint_cov(_joint_size, _joint_size);
+        joint_cov.setZero();
+        _block.fill(_covariance, joint_cov);
+        return joint_cov;
     }
 
-    inline SpMat joint_covariance(){
-        SpMat joint_covariance(_joint_size, _joint_size);
-        joint_covariance.setZero();
-        _block.fill(_covariance, joint_covariance);
-        return joint_covariance;
-    }
-
-    inline VectorXd joint_mean(){
+    inline VectorXd fill_joint_mean(){
         VectorXd joint_mean(_joint_size);
         joint_mean.setZero();
         _block.fill_vector(_mu, joint_mean);
@@ -222,28 +170,10 @@ public:
     }
 
     /**
-     * @brief Get the mapping matrix Pk
-     */
-    inline TrajectoryBlock block() const {return _block;}
-
-    /**
      * @brief Get the mean 
      */
     inline VectorXd mean() const{ return _mu; }
 
-
-    /**
-     * @brief Get the precision matrix
-     */
-    inline MatrixXd precision() const{ 
-        assert((_precision - _covariance.inverse()).norm()==0); 
-        return _precision; }
-
-
-    /**
-     * @brief Get the covariance matrix
-     */
-    inline MatrixXd covariance() const{ return _covariance;}
 
     /********************************************************/
     /// Function interfaces
@@ -253,7 +183,7 @@ public:
      */
     inline MatrixXd negative_log_probability(const VectorXd& x) const{
         return _func_phi(x);
-    }
+    }    
 
     /**
      * @brief returns the E_q{phi(x)} = E_q{-log(p(x,z))}
@@ -262,14 +192,9 @@ public:
         return _gh->Integrate(_func_phi)(0, 0);
     }
 
-
     void set_GH_points(int p){
         _gh->set_polynomial_deg(p);
     }
-
-    virtual double temperature() const { return _temperature; }
-
-    virtual double high_temperature() const { return _high_temperature; }
 
     void switch_to_high_temperature(){
         _temperature = _high_temperature;
@@ -289,23 +214,17 @@ public:
     /// derived classes.
     using GHFunction = std::function<MatrixXd(const VectorXd&)>;
     GHFunction _func_phi;
-    GHFunction _func_Vmu;
-    GHFunction _func_Vmumu;
 
     /// G-H quadrature class
     using GH = GaussHermite<GHFunction> ;
     std::shared_ptr<GH> _gh;
 
 protected:
-    /// intermediate variables in optimization steps
-    VectorXd _Vdmu;
-    MatrixXd _Vddmu;
 
     /// optimization variables
     MatrixXd _precision, _dprecision;
-    MatrixXd _covariance;
+    MatrixXd _covariance, _dcovariance;
 
-protected:
     /// step sizes
     double _step_size_mu = 0.9;
     double _step_size_Sigma = 0.9;

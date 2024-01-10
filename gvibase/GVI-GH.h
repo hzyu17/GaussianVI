@@ -2,8 +2,8 @@
  * @file GVI-GH.h
  * @author Hongzhe Yu (hyu419@gatech.edu)
  * @brief The joint optimizer class using Gauss-Hermite quadrature, base class for different algorithms.
- * @version 0.1
- * @date 2023-01-09
+ * @version 1.1
+ * @date 2024-01-09
  * 
  * @copyright Copyright (c) 2023
  * 
@@ -144,15 +144,6 @@ public:
 /// **************************************************************
 /// Internal data IO
     inline VectorXd mean() const{ return _mu; }
-
-    inline SpMat precision() const{ return _precision; }
-
-
-    /// returns the covariance matrix
-    inline SpMat covariance(){ 
-        inverse_inplace();
-        return _covariance; 
-    }
 
     inline void inverse_inplace(){
         ldlt_decompose();

@@ -8,11 +8,11 @@
  * @copyright Copyright (c) 2022
  * 
  */
-#include "GVIFactorizedBaseNGD.h"
+#include "NGDFactorizedBase.h"
 
 template <typename CostClass>
-class NGDFactorizedNonlinerGH : public GVIFactorizedBaseNGD{
-    using Base = GVIFactorizedBaseNGD;
+class NGDFactorizedNonlinerGH : public NGDFactorizedBase{
+    using Base = NGDFactorizedBase;
     using GHFunction = std::function<MatrixXd(const VectorXd&)>;
     using CostFunction = std::function<double(const VectorXd&, const CostClass&)>;
     public:

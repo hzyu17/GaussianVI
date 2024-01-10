@@ -109,7 +109,7 @@ inline void GVIGH<Factor>::set_precision(const SpMat &new_precision)
  * @brief Compute the costs of all factors for a given mean and cov.
  */
 template <typename Factor>
-VectorXd GVIGH<Factor>::factor_cost_vector(const VectorXd& joint_mean, SpMat& joint_precision)
+VectorXd GVIGH<Factor>::factor_cost_vector(const VectorXd& fill_joint_mean, SpMat& joint_precision)
 {
     VectorXd fac_costs(_nfactors);
     fac_costs.setZero();
@@ -117,7 +117,7 @@ VectorXd GVIGH<Factor>::factor_cost_vector(const VectorXd& joint_mean, SpMat& jo
     SpMat joint_cov = inverse(joint_precision);
     for (auto &opt_k : _vec_factors)
     {
-        fac_costs(cnt) = opt_k->fact_cost_value(joint_mean, joint_cov); // / _temperature;
+        fac_costs(cnt) = opt_k->fact_cost_value(fill_joint_mean, joint_cov); // / _temperature;
         cnt += 1;
     }
     return fac_costs;
