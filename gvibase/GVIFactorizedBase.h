@@ -170,6 +170,7 @@ public:
 
     inline MatrixXd precision() const {return _precision; }
 
+    inline MatrixXd covariance() const {return _covariance; }
 
     /********************************************************/
     /// Function interfaces
