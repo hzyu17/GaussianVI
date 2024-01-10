@@ -20,6 +20,7 @@
 #include "ngd/NGD-GH.h"
 
 using namespace Eigen;
+using namespace gvi;
 
 double cost_function(const VectorXd& vec_x){
     double x = vec_x(0);

@@ -21,6 +21,8 @@
 using namespace std;
 using namespace Eigen;
 
+namespace gvi{
+
 template <typename Function, typename CostClass>
 class NGDFactorizedGH: public NGDFactorizedBase{
 
@@ -48,5 +50,8 @@ public:
     typedef std::shared_ptr<NGDFactorizedGH> shared_ptr;
 
 };
+
+
+}
 
 #endif // NGDFactorizedGH_H

@@ -16,6 +16,7 @@
 using namespace Eigen;
 using namespace std;
 
+namespace gvi{
 template <typename Function>
 class GaussHermite{
 public:
@@ -108,4 +109,6 @@ public:
 };
 
 
-    #include "GaussHermite-impl.h"
+} // namespace gvi
+
+#include "GaussHermite-impl.h"

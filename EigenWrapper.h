@@ -388,6 +388,6 @@ private:
     
 };
 
-}
+} // namespace gvi
 
 #endif // EIGEN_WRAPPER_H

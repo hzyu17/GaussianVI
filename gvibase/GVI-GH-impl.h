@@ -12,6 +12,7 @@ using namespace std;
 #define STRING(x) #x
 #define XSTRING(x) STRING(x)
 
+namespace gvi{
 
 template <typename Factor>
 void GVIGH<Factor>::switch_to_high_temperature(){
@@ -154,5 +155,8 @@ double GVIGH<Factor>::cost_value(const VectorXd &mean, SpMat &Precision)
 
     return value + logdet / 2;
 }
+
+}
+
 
 #endif // GVI_GH_IMPL_H

@@ -16,6 +16,7 @@
 
 #include "ngd/NGDFactorizedBase.h"
 
+namespace gvi{
 template <typename CostClass>
 class NGDFactorizedNonlinerGH : public NGDFactorizedBase{
     using Base = NGDFactorizedBase;
@@ -51,4 +52,5 @@ class NGDFactorizedNonlinerGH : public NGDFactorizedBase{
 
 };
 
+} //namespace
 #endif //NGDFactorizedNonlinerGH_H

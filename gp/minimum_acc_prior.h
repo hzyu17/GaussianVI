@@ -10,6 +10,7 @@
  * 
  */
 
+#pragma once
 
 /**
  * @brief The model A(t) = [0 I; 0 0], u(t)=0, F(t)=[0; I], 
@@ -19,6 +20,8 @@
 
 #include "linear_factor.h"
 #include "EigenWrapper.h"
+
+namespace gvi{
 
 class MinimumAccGP : public LinearFactor{
     public: 
@@ -125,3 +128,5 @@ class MinimumAccGP : public LinearFactor{
         inline double get_Constant() const { return 0.5; }
         
 };
+
+}

@@ -24,7 +24,8 @@
 
 using namespace std;
 using namespace Eigen;
-using namespace gvi;
+
+namespace gvi{
 
 class GVIFactorizedBase{
 public:
@@ -235,3 +236,6 @@ protected:
     MatrixXd _Pk;
     
 };
+
+
+}

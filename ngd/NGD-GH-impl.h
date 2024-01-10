@@ -12,7 +12,8 @@ using namespace std;
 #define STRING(x) #x
 #define XSTRING(x) STRING(x)
 
-    
+namespace gvi{
+
 /**
  * @brief One step of optimization.
  */
@@ -100,5 +101,8 @@ double NGDGH<Factor>::cost_value_no_entropy()
     }
     return value; // / _temperature;
 }
+
+}
+
 
 #endif // NGD_GH_IMPL_H

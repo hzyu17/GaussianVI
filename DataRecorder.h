@@ -225,7 +225,7 @@ public:
     }
 };
 
-}
+} // namespace gvi
 
 
 #endif // DATA_RECORDER_H

@@ -21,6 +21,7 @@
 
 using namespace std;
 using namespace Eigen;
+namespace gvi{
 
 template <typename FactorizedOptimizer>
 class NGDGH: public GVIGH<FactorizedOptimizer>{
@@ -86,6 +87,9 @@ public:
     
 
 }; //class
+
+
+} //namespace gvi
 
 // function implementations
 

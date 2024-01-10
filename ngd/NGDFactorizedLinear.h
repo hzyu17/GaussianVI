@@ -19,6 +19,7 @@
 #include "NGDFactorizedBase.h"
 #include "gp/linear_factor.h"
 
+namespace gvi{
 template <typename LinearFactor>
 class NGDFactorizedLinear : public NGDFactorizedBase{
     using Base = NGDFactorizedBase;
@@ -102,4 +103,5 @@ public:
 
 };
 
+} //namespace
 #endif //NGDFactorizedLinear_H

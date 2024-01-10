@@ -154,6 +154,6 @@ private:
 }; // class TrajectoryBlock
 
 
-}
+} // namespace gvi
 
 #endif // MATRIX_HELPER_H
