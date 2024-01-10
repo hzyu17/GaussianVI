@@ -189,6 +189,14 @@ public:
         return _gh->Integrate(_func_phi)(0, 0);
     }
 
+    inline MatrixXd E_xMuPhi(){
+        return _gh->Integrate(_func_Vmu);
+    }
+
+    inline MatrixXd E_xMuxMuTPhi(){
+        return _gh->Integrate(_func_Vmumu);
+    }
+
     void set_GH_points(int p){
         _gh->set_polynomial_deg(p);
     }
@@ -215,6 +223,8 @@ public:
     /// derived classes.
     using GHFunction = std::function<MatrixXd(const VectorXd&)>;
     GHFunction _func_phi;
+    GHFunction _func_Vmu;
+    GHFunction _func_Vmumu;
 
     /// G-H quadrature class
     using GH = GaussHermite<GHFunction> ;
