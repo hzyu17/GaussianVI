@@ -200,6 +200,10 @@ public:
         _temperature = _high_temperature;
     }
 
+    double temperature(){
+        return _temperature;
+    }
+
     /// Public members for the inherited classes access
 public:
 
