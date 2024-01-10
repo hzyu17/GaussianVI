@@ -31,13 +31,6 @@ public:
     
 };
 
-class Vector3D : public VectorXd{
-public:
-    Vector3D(){}
-    Vector3D(int row, int nt):VectorXd(row, nt){}   
-
-};
-
 class MatrixIO{
     public:
         
