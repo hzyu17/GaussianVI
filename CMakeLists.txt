@@ -3,6 +3,7 @@ cmake_minimum_required(VERSION 3.0)
 enable_testing()
 project(GaussianVI CXX C)
 set(CMAKE_CXX_STANDARD 17)
+# set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -w")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -w")
 
 set(gvi_subdirs 
@@ -18,7 +19,16 @@ add_compile_definitions("SOURCE_ROOT=${CMAKE_CURRENT_SOURCE_DIR}")
 
 # Eigen
 find_package(Eigen3 3.4.0 REQUIRED)
+# Find Matlab
+set(Matlab_INCLUDE_DIRS "/usr/local/MATLAB/R2020b/extern/include")
+set(Matlab_MEX_LIBRARY "/usr/local/MATLAB/R2020b/bin/glnxa64/libmex.so")  # Adjust the path accordingly
+set(libSpGH_LIBRARY "${CMAKE_CURRENT_SOURCE_DIR}/quadrature/SparseGH/libSpGH/for_testing/libSpGH.so")
+set(MCR_LIBRARY_PATH "/usr/local/MATLAB/R2020b/runtime/glnxa64") 
+find_library(Matlab_MX_LIBRARY NAMES libmx.so PATHS "/usr/local/MATLAB/R2020b/bin/glnxa64")
+
+
 include_directories(${EIGEN3_INCLUDE_DIRS})
+include_directories("${CMAKE_CURRENT_SOURCE_DIR}/quadrature/SparseGH/libSpGH/for_testing")
 
 # Add all the source files in src/gvi as a separate executable
 file(GLOB_RECURSE gvi_SOURCES src/*.cpp)
@@ -29,5 +39,38 @@ foreach(gvi_source ${gvi_SOURCES})
     set_target_properties(${gvi_name} PROPERTIES
                             RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/src"
                             )   
-    target_link_libraries(${gvi_name} ${EIGEN3_LIBRARIES})
+    target_link_libraries(${gvi_name} ${EIGEN3_LIBRARIES} ${Matlab_MEX_LIBRARY} ${Matlab_MX_LIBRARY} ${libSpGH_LIBRARY} ${MCR_LIBRARY_PATH}/libmwmclmcrrt.so.9.9)
+    target_include_directories(${gvi_name} PRIVATE ${Matlab_INCLUDE_DIRS})
+endforeach()
+
+# target_link_libraries(spgh_example PRIVATE ${Matlab_MEX_LIBRARY} ${Matlab_MX_LIBRARY} ${libSpGH_LIBRARY} ${MCR_LIBRARY_PATH}/libmwmclmcrrt.so.9.9)
+# target_include_directories(spgh_example PRIVATE ${Matlab_INCLUDE_DIRS})
+
+# target_link_libraries(generate_sigmapts PRIVATE ${Matlab_MEX_LIBRARY} ${Matlab_MX_LIBRARY} ${libSpGH_LIBRARY} ${MCR_LIBRARY_PATH}/libmwmclmcrrt.so.9.9)
+# target_include_directories(generate_sigmapts PRIVATE ${Matlab_INCLUDE_DIRS})
+
+
+include(FetchContent)
+FetchContent_Declare(
+  googletest
+  URL https://github.com/google/googletest/archive/03597a01ee50ed33e9dfd640b249b4be3799d395.zip
+)
+# For Windows: Prevent overriding the parent project's compiler/linker settings
+set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
+FetchContent_MakeAvailable(googletest)
+enable_testing()
+
+include(GoogleTest)
+
+file(GLOB_RECURSE test_SOURCES tests/*.cpp)
+foreach(test_source ${test_SOURCES})
+    get_filename_component(test_name ${test_source} NAME_WE)
+    add_executable(${test_name} ${test_source})
+    set_target_properties(${test_name} PROPERTIES
+                            RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/tests"
+                            )  
+    target_link_libraries( ${test_name} GTest::gtest_main ${Matlab_MEX_LIBRARY} ${Matlab_MX_LIBRARY} ${libSpGH_LIBRARY} ${MCR_LIBRARY_PATH}/libmwmclmcrrt.so.9.9)
+    gtest_discover_tests(${test_name})
+    target_include_directories(${test_name} PRIVATE ${Matlab_INCLUDE_DIRS})
+
 endforeach()

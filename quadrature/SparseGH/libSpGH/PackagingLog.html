@@ -1,0 +1,96 @@
+<html><meta charset="UTF-8"><pre>
+<font color=blue>mcc -W 'cpplib:libSpGH,all' -T link:lib -d /home/hzyu/git/GaussianVI/quadrature/SparseGH/libSpGH/for_testing -v /home/hzyu/git/GaussianVI/quadrature/SparseGH/nwspgr.m </font>
+Compiler version: 8.1 (R2020b)
+
+Analyzing file dependencies. 
+
+Parsing file "/home/hzyu/git/GaussianVI/quadrature/SparseGH/nwspgr.m"
+	(referenced from command line).
+Generating file "/home/hzyu/git/GaussianVI/quadrature/SparseGH/libSpGH/for_testing/readme.txt".
+Generating file "/home/hzyu/git/GaussianVI/quadrature/SparseGH/libSpGH/for_testing/libSpGH.h".
+Generating file "/home/hzyu/git/GaussianVI/quadrature/SparseGH/libSpGH/for_testing/libSpGH.cpp".
+Generating file "/home/hzyu/git/GaussianVI/quadrature/SparseGH/libSpGH/for_testing/libSpGH.exports".
+Generating file "/home/hzyu/git/GaussianVI/quadrature/SparseGH/libSpGH/for_testing/v2/generic_interface/readme.txt".
+Executing command: "/usr/local/MATLAB/R2020b/bin/mbuild"  -client mbuild -O -v -output "libSpGH" -I"/home/hzyu/git/GaussianVI/quadrature/SparseGH/libSpGH/for_testing" "/home/hzyu/git/GaussianVI/quadrature/SparseGH/libSpGH/for_testing/libSpGH.cpp" CXXFLAGS="-fPIC -ansi -pthread -std=c++11" LDEXT=".so" LDTYPE="-shared " -outdir "/home/hzyu/git/GaussianVI/quadrature/SparseGH/libSpGH/for_testing"
+Verbose mode is on.
+No MEX options file identified; looking for an implicit selection.
+... Looking for compiler 'g++' ...
+... Executing command 'which g++' ...Yes ('/usr/bin/g++').
+... Executing command 'g++ -print-file-name=libstdc++.so' ...Yes ('/usr/lib/gcc/x86_64-linux-gnu/9/libstdc++.so').
+... Executing command 'g++ -dumpversion' ...Yes ('9').
+... Executing command 'which g++' ...Yes ('/usr/bin/g++').
+... Looking for folder '/usr' ...Yes.
+... Executing command 'g++ -dumpmachine' ...Yes ('x86_64-linux-gnu').
+Found installed compiler 'g++'.
+Set INCLUDE = /usr/lib/gcc/x86_64-linux-gnu/9/include;/usr/include/c++/9;/usr/include/c++/9/x86_64-linux-gnu;/usr/include/c++/9/backward;
+Options file details
+-------------------------------------------------------------------
+	Compiler location: /usr/bin/g++
+	Options file: /usr/local/MATLAB/R2020b/bin/glnxa64/mexopts/g++_glnxa64.xml
+	CMDLINE1 : /usr/bin/g++ -c -DMATLAB_DEFAULT_RELEASE=R2017b  -DUSE_MEX_CMD   -D_GNU_SOURCE  -DUNIX -DX11 -DGLNXA64 -DGCC -UMX_COMPAT_SC -I"/home/hzyu/git/GaussianVI/quadrature/SparseGH/libSpGH/for_testing"  -I"/usr/local/MATLAB/R2020b/extern/include" -I"/usr/local/MATLAB/R2020b/simulink/include" -I"/usr/local/MATLAB/R2020b/extern/include/cpp" -fPIC -ansi -pthread -std=c++11 -O2 -fwrapv -DNDEBUG "/home/hzyu/git/GaussianVI/quadrature/SparseGH/libSpGH/for_testing/libSpGH.cpp" -o /tmp/mex_207500030459578_142060/libSpGH.o
+	CMDLINE2 : /usr/bin/g++ -pthread -lpthread -Wl,--as-needed -Wl,-rpath-link,/usr/local/MATLAB/R2020b/bin/glnxa64 -shared -O  /tmp/mex_207500030459578_142060/libSpGH.o   "/usr/local/MATLAB/R2020b/sys/os/glnxa64/orig/libstdc++.so.6" $MW_GLIBC_SHIM -L"/usr/local/MATLAB/R2020b/runtime/glnxa64" -L"/usr/local/MATLAB/R2020b/extern/bin/glnxa64" -lm -lmwmclmcrrt -lMatlabDataArray -lMatlabCppSharedLib -o /home/hzyu/git/GaussianVI/quadrature/SparseGH/libSpGH/for_testing/libSpGH.so
+	CXX : /usr/bin/g++
+	DEFINES : -DMATLAB_DEFAULT_RELEASE=R2017b  -DUSE_MEX_CMD   -D_GNU_SOURCE  -DUNIX -DX11 -DGLNXA64 -DGCC -UMX_COMPAT_SC
+	MATLABMEX : 
+	CFLAGS : -fexceptions -fPIC -fno-omit-frame-pointer -pthread
+	CXXFLAGS : -fPIC -ansi -pthread -std=c++11
+	INCLUDE : -I"/home/hzyu/git/GaussianVI/quadrature/SparseGH/libSpGH/for_testing"  -I"/usr/local/MATLAB/R2020b/extern/include" -I"/usr/local/MATLAB/R2020b/simulink/include" -I"/usr/local/MATLAB/R2020b/extern/include/cpp"
+	CXXOPTIMFLAGS : -O2 -fwrapv -DNDEBUG
+	CXXDEBUGFLAGS : -g
+	LDXX : /usr/bin/g++
+	LDFLAGS : -pthread -lpthread -Wl,--as-needed -Wl,-rpath-link,/usr/local/MATLAB/R2020b/bin/glnxa64
+	LDTYPE : -shared
+	LINKEXPORT : 
+	LINKEXPORTVER : 
+	LINKLIBS : "/usr/local/MATLAB/R2020b/sys/os/glnxa64/orig/libstdc++.so.6" $MW_GLIBC_SHIM -L"/usr/local/MATLAB/R2020b/runtime/glnxa64" -L"/usr/local/MATLAB/R2020b/extern/bin/glnxa64" -lm -lmwmclmcrrt -lMatlabDataArray -lMatlabCppSharedLib
+	LDOPTIMFLAGS : -O
+	LDDEBUGFLAGS : -g
+	MWCPPLIB : "/usr/local/MATLAB/R2020b/sys/os/glnxa64/orig/libstdc++.so.6"
+	OBJEXT : .o
+	LDEXT : .so
+	SETENV : CC="gcc"
+                CXX="/usr/bin/g++"
+                CFLAGS="-fexceptions -fPIC -fno-omit-frame-pointer -pthread -DMATLAB_DEFAULT_RELEASE=R2017b  -DUSE_MEX_CMD   -D_GNU_SOURCE  -DUNIX -DX11 -DGLNXA64 -DGCC -UMX_COMPAT_SC"
+                CXXFLAGS="-fPIC -ansi -pthread -std=c++11 -DMATLAB_DEFAULT_RELEASE=R2017b  -DUSE_MEX_CMD   -D_GNU_SOURCE  -DUNIX -DX11 -DGLNXA64 -DGCC -UMX_COMPAT_SC"
+                COPTIMFLAGS="-O2 -fwrapv -DNDEBUG"
+                CXXOPTIMFLAGS="-O2 -fwrapv -DNDEBUG"
+                CDEBUGFLAGS="-g"
+                CXXDEBUGFLAGS="-g"
+                MW_GLIBC_SHIM="$MW_GLIBC_SHIM"
+                LD="gcc"
+                LDXX="/usr/bin/g++"
+                LDFLAGS="-pthread -lpthread -Wl,--as-needed -Wl,-rpath-link,/usr/local/MATLAB/R2020b/bin/glnxa64 -shared "/usr/local/MATLAB/R2020b/sys/os/glnxa64/orig/libstdc++.so.6" $MW_GLIBC_SHIM -L"/usr/local/MATLAB/R2020b/runtime/glnxa64" -L"/usr/local/MATLAB/R2020b/extern/bin/glnxa64" -lm -lmwmclmcrrt -lMatlabDataArray -lMatlabCppSharedLib "
+                LDDEBUGFLAGS="-g"
+	GCC : /usr/bin/g++
+	CPPLIB_DIR : /usr/lib/gcc/x86_64-linux-gnu/9/libstdc++.so
+	VER : 9
+	GCCDIR : /usr
+	GCC_TARGET : x86_64-linux-gnu
+	MATLABROOT : /usr/local/MATLAB/R2020b
+	ARCH : glnxa64
+	SRC : "/home/hzyu/git/GaussianVI/quadrature/SparseGH/libSpGH/for_testing/libSpGH.cpp"
+	OBJ : /tmp/mex_207500030459578_142060/libSpGH.o
+	OBJS : /tmp/mex_207500030459578_142060/libSpGH.o 
+	SRCROOT : /home/hzyu/git/GaussianVI/quadrature/SparseGH/libSpGH/for_testing/libSpGH
+	DEF : /tmp/mex_207500030459578_142060/libSpGH.def
+	EXP : "/home/hzyu/git/GaussianVI/quadrature/SparseGH/libSpGH/for_testing/libSpGH.exp"
+	LIB : "/home/hzyu/git/GaussianVI/quadrature/SparseGH/libSpGH/for_testing/libSpGH.lib"
+	EXE : /home/hzyu/git/GaussianVI/quadrature/SparseGH/libSpGH/for_testing/libSpGH.so
+	ILK : "/home/hzyu/git/GaussianVI/quadrature/SparseGH/libSpGH/for_testing/libSpGH.ilk"
+	MANIFEST : "/home/hzyu/git/GaussianVI/quadrature/SparseGH/libSpGH/for_testing/libSpGH.so.manifest"
+	TEMPNAME : /home/hzyu/git/GaussianVI/quadrature/SparseGH/libSpGH/for_testing/libSpGH
+	EXEDIR : /home/hzyu/git/GaussianVI/quadrature/SparseGH/libSpGH/for_testing/
+	EXENAME : libSpGH
+	OPTIM : -O2 -fwrapv -DNDEBUG
+	LINKOPTIM : -O
+-------------------------------------------------------------------
+Building with 'g++'.
+/usr/bin/g++ -c -DMATLAB_DEFAULT_RELEASE=R2017b  -DUSE_MEX_CMD   -D_GNU_SOURCE  -DUNIX -DX11 -DGLNXA64 -DGCC -UMX_COMPAT_SC -I"/home/hzyu/git/GaussianVI/quadrature/SparseGH/libSpGH/for_testing"  -I"/usr/local/MATLAB/R2020b/extern/include" -I"/usr/local/MATLAB/R2020b/simulink/include" -I"/usr/local/MATLAB/R2020b/extern/include/cpp" -fPIC -ansi -pthread -std=c++11 -O2 -fwrapv -DNDEBUG "/home/hzyu/git/GaussianVI/quadrature/SparseGH/libSpGH/for_testing/libSpGH.cpp" -o /tmp/mex_207500030459578_142060/libSpGH.o
+/usr/bin/g++ -pthread -lpthread -Wl,--as-needed -Wl,-rpath-link,/usr/local/MATLAB/R2020b/bin/glnxa64 -shared -O  /tmp/mex_207500030459578_142060/libSpGH.o   "/usr/local/MATLAB/R2020b/sys/os/glnxa64/orig/libstdc++.so.6" $MW_GLIBC_SHIM -L"/usr/local/MATLAB/R2020b/runtime/glnxa64" -L"/usr/local/MATLAB/R2020b/extern/bin/glnxa64" -lm -lmwmclmcrrt -lMatlabDataArray -lMatlabCppSharedLib -o /home/hzyu/git/GaussianVI/quadrature/SparseGH/libSpGH/for_testing/libSpGH.so
+<font color=blue>Packaging...</font>
+Creating the bundle...
+Creating the install agent URL file...
+Web based installer created at /home/hzyu/git/GaussianVI/quadrature/SparseGH/libSpGH/for_redistribution/MyAppInstaller_web.install.
+Packaging complete.
+Elapsed packaging time was: 3 seconds.
+</pre></html>

@@ -18,13 +18,13 @@ public:
 
     ProxGVIFactorizedBase(int dimension, int state_dim, int num_states, int start_index, 
                         double temperature=10.0, double high_temperature=100.0, bool is_linear=false):
-            GVIFactorizedBase(dimension, state_dim, num_states, start_index),
-            _Vdmu(_dim),
-            _Vddmu(_dim, _dim)
+            GVIFactorizedBase(dimension, state_dim, num_states, start_index)
             {}
 
     /**
      * @brief Calculating (dmu, d_covariance) in the factor level.
+     * \hat b_k = K^{-1}(\mu_\theta - \mu) + \mE[h(x)*\Sigma_\theta(x-\mu_\theta)]
+     * \hat S_k = K^{-1} + \mE[\Sigma_\theta(x-\mu_\theta)@(\nabla(h(x)).T)]
      */
     void calculate_partial_V() override{
         
@@ -44,20 +44,6 @@ public:
         return res;
     }
 
-    inline MatrixXd E_xMuPhi(){
-        return _gh->Integrate(_func_Vmu);
-    }
-
-    inline MatrixXd E_xMuxMuTPhi(){
-        return _gh->Integrate(_func_Vmumu);
-    }
-
-protected:
-    VectorXd _Vdmu;
-    MatrixXd _Vddmu;
-
-    GHFunction _func_Vmu;
-    GHFunction _func_Vmumu;
 };
 
 } //namespace
