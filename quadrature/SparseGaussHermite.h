@@ -44,7 +44,8 @@ public:
             _dim(dim),
             _mean(mean),
             _P(P),
-            _f(func){  
+            _f(func)
+            {  
                 computeSigmaPtsWeights();
             }
 
@@ -52,10 +53,12 @@ public:
      * @brief Compute the Sigma Pts
      */
     void computeSigmaPtsWeights(){
+        
         if (!mclInitializeApplication(nullptr, 0)) {
             std::cerr << "Could not initialize the application." << std::endl;
             return ;
         }
+
         double d_dim = _dim;
         double d_deg = _deg;
 
@@ -64,8 +67,15 @@ public:
             
         } else {
             PointsWeightsTuple pts_weights = sigmapts_weights(d_dim, d_deg);
-            _sigmapts = std::get<0>(pts_weights);
+
+            MatrixXd pts{std::get<0>(pts_weights)};
             _Weights = std::get<1>(pts_weights);
+
+            // compute matrix sqrt of P
+            Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> es(_P);
+            MatrixXd sqrtP{es.operatorSqrt()};
+
+            _sigmapts = (pts*sqrtP).rowwise() + _mean.transpose(); 
 
             // Call the application and library termination routine
             libSpGHTerminate();
@@ -80,20 +90,17 @@ public:
      * @brief Compute the approximated integration using Gauss-Hermite.
      */
     MatrixXd Integrate(const Function& function){
-        // compute matrix sqrt of P
-        Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> es(_P);
-        MatrixXd sqrtP{es.operatorSqrt()};
+              
+        MatrixXd res{function(_mean)};
+        res.setZero();
 
-        VectorXd pts_shifted{(_sigmapts*sqrtP).rowwise() + _mean.transpose()};       
+        for (int i=0; i<_sigmapts.rows(); i++){
+            VectorXd pt_i{_sigmapts.row(i).transpose()};
+            
+            res += function(pt_i)*_Weights(i);
 
-        MatrixXd res(1, 1);
-        double integration = 0.0;
-        for (int i=0; i<pts_shifted.rows(); i++){
-            VectorXd pt_i = pts_shifted.row(i).transpose();
-            integration += function(pt_i)(0,0)*_Weights(i);
         }
-        res(0,0) = integration;
-
+        
         return res;
         
     };
@@ -119,7 +126,7 @@ public:
 
 
     inline VectorXd weights() const { return this->_W; }
-    inline VectorXd sigmapts() const { return this->_sigmapts; }
+    inline MatrixXd sigmapts() const { return this->_sigmapts; }
 
 protected:
     int _deg;
@@ -127,7 +134,7 @@ protected:
     VectorXd _mean;
     MatrixXd _P;
     VectorXd _Weights;
-    VectorXd _sigmapts;
+    MatrixXd _sigmapts;
     Function _f;
 };
 

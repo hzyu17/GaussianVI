@@ -10,8 +10,6 @@
 #include "mclmcrrt.h"
 #include "mclcppclass.h"
 
-using namespace Eigen;
-
 namespace gvi{
 
 
@@ -39,10 +37,8 @@ PointsWeightsTuple sigmapts_weights(double D, double k) {
         int numRows = dims.Get(2, 1, 1);
         int numCols = dims.Get(2, 1, 2);
 
-        int n_weights = weights.NumberOfElements();
-
         Eigen::MatrixXd sigmapts_eigen(numRows, numCols);
-        Eigen::VectorXd weights_eigen(n_weights);
+        Eigen::VectorXd weights_eigen(numRows);
 
         for (mwIndex col = 0; col < numCols; ++col) {
             for (mwIndex row = 0; row < numRows; ++row) {
