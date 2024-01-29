@@ -23,7 +23,14 @@ public:
     /**
      * @brief Default constructor.
      */
-    SparseGaussHermite(){}
+    SparseGaussHermite():
+    _deg(1),
+    _dim(1),
+    _mean(Eigen::VectorXd::Zero(1)),
+    _P(Eigen::MatrixXd::Ones(1, 1))
+    {  
+        computeSigmaPtsWeights();
+    }
 
     /**
      * @brief Constructor
@@ -54,10 +61,10 @@ public:
      */
     void computeSigmaPtsWeights(){
         
-        if (!mclInitializeApplication(nullptr, 0)) {
-            std::cerr << "Could not initialize the application." << std::endl;
-            return ;
-        }
+        // if (!mclInitializeApplication(nullptr, 0)) {
+        //     std::cerr << "Could not initialize the application." << std::endl;
+        //     return ;
+        // }
 
         double d_dim = _dim;
         double d_deg = _deg;
@@ -81,7 +88,7 @@ public:
             libSpGHTerminate();
         }
 
-        mclTerminateApplication();
+        // mclTerminateApplication();
 
         return ;
     }
@@ -123,6 +130,15 @@ public:
     inline void set_polynomial_deg(const int& deg){ _deg = deg; }
 
     inline void update_dimension(const int& dim){ _dim = dim; }
+
+    inline void update_parameters(const int& deg, const int& dim, const VectorXd& mean, const MatrixXd& P, const Function& func){ 
+        _deg = deg;
+        _dim = dim;
+        _mean = mean;
+        _P = P;
+        _f = func;
+        computeSigmaPtsWeights();
+    }
 
 
     inline VectorXd weights() const { return this->_W; }

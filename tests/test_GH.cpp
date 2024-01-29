@@ -100,6 +100,11 @@ TEST(TestGH, gh){
 #include "quadrature/SparseGaussHermite.h"
 
 TEST(TestGH, sp_gh){
+    if (!mclInitializeApplication(nullptr, 0)) {
+        std::cerr << "Could not initialize the application." << std::endl;
+        return ;
+    }
+
     int deg = 6, dim = 1;
     VectorXd mean(1);
     mean.setZero();
@@ -124,18 +129,17 @@ TEST(TestGH, sp_gh){
     double E_xmu_phi_GT = -1.2144;
     ASSERT_LE(abs(E_xmu_phi(0,0) - E_xmu_phi_GT), 1e-4);
 
-}
+    // Test for multiple dimension functions
+    deg = 10; 
+    dim = 2;
+    VectorXd mean_2d(2);
+    mean_2d.setZero();
+    mean_2d << 1.0, 1.0;
+    MatrixXd cov_2d(2, 2);
+    cov_2d.setZero();
+    cov_2d << 2.210433244916004, 1.635720601237843, 1.635720601237843, 2.210433244916004;
 
-TEST(TestGH, sp_gh_2dim){
-    int deg = 10, dim = 2;
-    VectorXd mean(2);
-    mean.setZero();
-    mean << 1.0, 1.0;
-    MatrixXd cov(2, 2);
-    cov.setZero();
-    cov << 2.210433244916004, 1.635720601237843, 1.635720601237843, 2.210433244916004;
-
-    SparseGaussHermite<Function> sp_gh22(deg, dim, mean, cov, ph22);
+    SparseGaussHermite<Function> sp_gh22(deg, dim, mean_2d, cov_2d, ph22);
 
     MatrixXd E_phi22 = sp_gh22.Integrate(ph22);
 
@@ -145,5 +149,12 @@ TEST(TestGH, sp_gh_2dim){
     E_phi22_gt << 9.631450087970276, 5.271519032251217;
     
     ASSERT_LE((E_phi22 - E_phi22_gt).norm(), 1e-3);
+
+    mclTerminateApplication();
+
+}
+
+TEST(TestGH, sp_gh_2dim){
+    
 
 }
