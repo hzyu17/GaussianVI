@@ -100,6 +100,7 @@ TEST(TestGH, gh){
 #include "quadrature/SparseGaussHermite.h"
 
 TEST(TestGH, sp_gh){
+    // Initialize the application for compiled matlab function.
     if (!mclInitializeApplication(nullptr, 0)) {
         std::cerr << "Could not initialize the application." << std::endl;
         return ;
@@ -114,7 +115,7 @@ TEST(TestGH, sp_gh){
     cov(0, 0) = 9.0;
 
     // Sparse Gauss-Hermite Integrator
-    SparseGaussHermite<Function> sp_gh(deg, dim, mean, cov, phi);
+    SparseGaussHermite<Function> sp_gh(deg, dim, mean, cov);
 
     // Integrate
     MatrixXd E_Phi_sp = sp_gh.Integrate(phi);
@@ -139,22 +140,16 @@ TEST(TestGH, sp_gh){
     cov_2d.setZero();
     cov_2d << 2.210433244916004, 1.635720601237843, 1.635720601237843, 2.210433244916004;
 
-    SparseGaussHermite<Function> sp_gh22(deg, dim, mean_2d, cov_2d, ph22);
+    SparseGaussHermite<Function> sp_gh22(deg, dim, mean_2d, cov_2d);
 
     MatrixXd E_phi22 = sp_gh22.Integrate(ph22);
-
-    std::cout << "E_phi22" << std::endl << E_phi22 << std::endl;
 
     MatrixXd E_phi22_gt(2, 1);
     E_phi22_gt << 9.631450087970276, 5.271519032251217;
     
     ASSERT_LE((E_phi22 - E_phi22_gt).norm(), 1e-3);
 
+    // Terminate the application for compiled matlab function.
     mclTerminateApplication();
-
-}
-
-TEST(TestGH, sp_gh_2dim){
-    
 
 }

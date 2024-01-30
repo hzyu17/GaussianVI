@@ -23,14 +23,7 @@ public:
     /**
      * @brief Default constructor.
      */
-    SparseGaussHermite():
-    _deg(1),
-    _dim(1),
-    _mean(Eigen::VectorXd::Zero(1)),
-    _P(Eigen::MatrixXd::Ones(1, 1))
-    {  
-        computeSigmaPtsWeights();
-    }
+    SparseGaussHermite(){}
 
     /**
      * @brief Constructor
@@ -45,13 +38,11 @@ public:
         const int& deg, 
         const int& dim, 
         const VectorXd& mean, 
-        const MatrixXd& P,
-        const Function& func): 
+        const MatrixXd& P): 
             _deg(deg),
             _dim(dim),
             _mean(mean),
-            _P(P),
-            _f(func)
+            _P(P)
             {  
                 computeSigmaPtsWeights();
             }
@@ -75,14 +66,14 @@ public:
         } else {
             PointsWeightsTuple pts_weights = sigmapts_weights(d_dim, d_deg);
 
-            MatrixXd pts{std::get<0>(pts_weights)};
+            _zeromeanpts = std::get<0>(pts_weights);
             _Weights = std::get<1>(pts_weights);
 
             // compute matrix sqrt of P
             Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> es(_P);
-            MatrixXd sqrtP{es.operatorSqrt()};
+            _sqrtP = es.operatorSqrt();
 
-            _sigmapts = (pts*sqrtP).rowwise() + _mean.transpose(); 
+            _sigmapts = (_zeromeanpts*_sqrtP).rowwise() + _mean.transpose(); 
 
             // Call the application and library termination routine
             libSpGHTerminate();
@@ -112,31 +103,45 @@ public:
         
     };
 
-    void update_integrand(const Function& function){
-        _f = function;
-    };
+    // void update_integrand(const Function& function){
+    //     _f = function;
+    // };
 
-    MatrixXd Integrate(){
-        return Integrate(_f);
-    };
+    // MatrixXd Integrate(){
+    //     return Integrate(_f);
+    // };
 
     /**
      * Update member variables
      * */
-    inline void update_mean(const VectorXd& mean){ _mean = mean; }
+    inline void update_mean(const VectorXd& mean){ 
+        _mean = mean; 
+        _sigmapts = (_zeromeanpts*_sqrtP).rowwise() + _mean.transpose(); 
+    }
 
-    inline void update_P(const MatrixXd& P){ _P = P; }
+    inline void update_P(const MatrixXd& P){ 
+        _P = P; 
+        // compute matrix sqrt of P
+        Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> es(_P);
+        _sqrtP = es.operatorSqrt();
+        _sigmapts = (_zeromeanpts*_sqrtP).rowwise() + _mean.transpose(); 
+    }
 
-    inline void set_polynomial_deg(const int& deg){ _deg = deg; }
+    inline void set_polynomial_deg(const int& deg){ 
+        _deg = deg; 
+        computeSigmaPtsWeights();
+    }
 
-    inline void update_dimension(const int& dim){ _dim = dim; }
+    inline void update_dimension(const int& dim){ 
+        _dim = dim; 
+        computeSigmaPtsWeights();
+    }
 
-    inline void update_parameters(const int& deg, const int& dim, const VectorXd& mean, const MatrixXd& P, const Function& func){ 
+    inline void update_parameters(const int& deg, const int& dim, const VectorXd& mean, const MatrixXd& P){ 
         _deg = deg;
         _dim = dim;
         _mean = mean;
         _P = P;
-        _f = func;
         computeSigmaPtsWeights();
     }
 
@@ -148,10 +153,10 @@ protected:
     int _deg;
     int _dim;
     VectorXd _mean;
-    MatrixXd _P;
+    MatrixXd _P, _sqrtP;
     VectorXd _Weights;
-    MatrixXd _sigmapts;
-    Function _f;
+    MatrixXd _sigmapts, _zeromeanpts;
+    // Function _f;
 };
 
 

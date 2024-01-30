@@ -21,7 +21,7 @@ class NGDFactorizedSimpleGH: public NGDFactorizedBase{
 
     using Base = NGDFactorizedBase;
     using GHFunction = std::function<MatrixXd(const VectorXd&)>;
-    using GH = GaussHermite<GHFunction>;
+    using GH = SparseGaussHermite<GHFunction>;
 
 public:
     ///@param dimension The dimension of the state
@@ -34,7 +34,7 @@ public:
                 Base::_func_phi = [this, function](const VectorXd& x){return MatrixXd::Constant(1, 1, function(x));};
                 Base::_func_Vmu = [this, function](const VectorXd& x){return (x-Base::_mu) * function(x);};
                 Base::_func_Vmumu = [this, function](const VectorXd& x){return MatrixXd{(x-Base::_mu) * (x-Base::_mu).transpose().eval() * function(x)};};
-                Base::_gh = std::make_shared<GH>(GH{10, Base::_dim, Base::_mu, Base::_covariance, Base::_func_phi});
+                Base::_gh = std::make_shared<GH>(GH{10, Base::_dim, Base::_mu, Base::_covariance});
             }
     
 public:
