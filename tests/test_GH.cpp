@@ -15,6 +15,9 @@
 using namespace Eigen;
 using namespace gvi;
 
+// define function input-output
+using Function = std::function<MatrixXd(const VectorXd&)>;    
+
 MatrixXd phi(const VectorXd& vec_x){
     double x = vec_x(0);
     double mu_p = 20, f = 400, b = 0.1, sig_r_sq = 0.09;
@@ -29,6 +32,18 @@ MatrixXd phi(const VectorXd& vec_x){
     return res;
 
 }
+
+// phi_22 = [3*x(1)*x(1); 2*x(1)*x(2)]
+MatrixXd ph22(const VectorXd& x){
+
+    MatrixXd res(2, 1);
+    res(0, 0) = 3.0*x(0)*x(0); 
+    res(1, 0) = 2.0*x(0)*x(1); 
+
+    return res;
+
+}
+
 
 MatrixXd xmu_phi(const VectorXd& vec_x){
     double x = vec_x(0);
@@ -53,7 +68,6 @@ TEST(TestGH, gh){
     cov.setZero();
     cov(0, 0) = 9.0;
 
-    using Function = std::function<MatrixXd(const VectorXd&)>;    
     GaussHermite<Function> gh(deg, dim, mean, cov, phi);
 
     MatrixXd phi_mu = phi(mean);
@@ -84,7 +98,14 @@ TEST(TestGH, gh){
 
 // Test Sparse GH class
 #include "quadrature/SparseGaussHermite.h"
+
 TEST(TestGH, sp_gh){
+    // Initialize the application for compiled matlab function.
+    if (!mclInitializeApplication(nullptr, 0)) {
+        std::cerr << "Could not initialize the application." << std::endl;
+        return ;
+    }
+
     int deg = 6, dim = 1;
     VectorXd mean(1);
     mean.setZero();
@@ -92,11 +113,43 @@ TEST(TestGH, sp_gh){
     MatrixXd cov(1, 1);
     cov.setZero();
     cov(0, 0) = 9.0;
-    using Function = std::function<MatrixXd(const VectorXd&)>;    
-    SparseGaussHermite<Function> sp_gh(deg, dim, mean, cov, phi);
 
+    // Sparse Gauss-Hermite Integrator
+    SparseGaussHermite<Function> sp_gh(deg, dim, mean, cov);
+
+    // Integrate
     MatrixXd E_Phi_sp = sp_gh.Integrate(phi);
+
+    // Ground truth
     double E_Phi_GT = 1.1129;
     ASSERT_LE(abs(E_Phi_sp(0,0) - E_Phi_GT), 1e-4);
+
+    // integration of (x-mu)*phi
+    std::shared_ptr<Function> p_xmu_phi = std::make_shared<Function>(xmu_phi);
+    MatrixXd E_xmu_phi = sp_gh.Integrate(xmu_phi);
+    double E_xmu_phi_GT = -1.2144;
+    ASSERT_LE(abs(E_xmu_phi(0,0) - E_xmu_phi_GT), 1e-4);
+
+    // Test for multiple dimension functions
+    deg = 10; 
+    dim = 2;
+    VectorXd mean_2d(2);
+    mean_2d.setZero();
+    mean_2d << 1.0, 1.0;
+    MatrixXd cov_2d(2, 2);
+    cov_2d.setZero();
+    cov_2d << 2.210433244916004, 1.635720601237843, 1.635720601237843, 2.210433244916004;
+
+    SparseGaussHermite<Function> sp_gh22(deg, dim, mean_2d, cov_2d);
+
+    MatrixXd E_phi22 = sp_gh22.Integrate(ph22);
+
+    MatrixXd E_phi22_gt(2, 1);
+    E_phi22_gt << 9.631450087970276, 5.271519032251217;
+    
+    ASSERT_LE((E_phi22 - E_phi22_gt).norm(), 1e-3);
+
+    // Terminate the application for compiled matlab function.
+    mclTerminateApplication();
 
 }
