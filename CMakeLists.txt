@@ -24,7 +24,7 @@ if(DEFINED libSpGH_LIBRARY AND NOT "${libSpGH_LIBRARY}" STREQUAL "")
     message("Variable libSpGH_LIBRARY is defined and not empty.")
     # Your code for the case when the variable is defined and not empty
 else()
-    message("Variable YOUR_VARIABLE is either NOT defined or empty.")
+    message("Variable libSpGH_LIBRARY is either NOT defined or empty.")
     # Find Matlab
     message("Finding Matlab Library")
     set(MATLAB_ROOT_DIR "/usr/local/MATLAB/R2020b")
@@ -32,10 +32,11 @@ else()
     set(Matlab_MEX_LIBRARY "${MATLAB_ROOT_DIR}/bin/glnxa64/libmex.so")  # Adjust the path accordingly
     set(MCR_LIBRARY_PATH "${MATLAB_ROOT_DIR}/runtime/glnxa64") 
     find_library(Matlab_MX_LIBRARY NAMES libmx.so PATHS "{MATLAB_ROOT_DIR}/bin/glnxa64")
+    set(libSpGH_LIBRARY "${CMAKE_CURRENT_SOURCE_DIR}/quadrature/SparseGH/libSpGH/for_testing/libSpGH.so")
+
 
     # Your code for the case when the variable is either NOT defined or empty
 endif()
-
 
 include_directories(${EIGEN3_INCLUDE_DIRS})
 include_directories("${CMAKE_CURRENT_BINARY_DIR}/quadrature/SparseGH/libSpGH/for_testing")
