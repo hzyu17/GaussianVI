@@ -5,7 +5,7 @@
 */
 
 #include <iostream>
-#include "libSpGH.h"
+#include "quadrature/libSpGH/for_testing/libSpGH.h"
 #include<Eigen/Dense>
 #include "mclmcrrt.h"
 #include "mclcppclass.h"

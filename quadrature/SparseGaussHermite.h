@@ -20,10 +20,12 @@ namespace gvi{
 template <typename Function>
 class SparseGaussHermite{
 public:
-    /**
-     * @brief Default constructor.
-     */
-    SparseGaussHermite(){}
+    
+    ~SparseGaussHermite(){
+        // Call the application and library termination routine
+        libSpGHTerminate();
+        // mclTerminateApplication();
+    }
 
     /**
      * @brief Constructor
@@ -32,7 +34,6 @@ public:
      * @param dim dimension of the integrand input
      * @param mean mean 
      * @param P covariance matrix
-     * @param func the integrand function
      */
     SparseGaussHermite(
         const int& deg, 
@@ -44,7 +45,12 @@ public:
             _mean(mean),
             _P(P)
             {  
-                computeSigmaPtsWeights();
+                if (!libSpGHInitialize()) {
+                    std::cerr << "Could not initialize the library properly" << std::endl;
+                    
+                } else {
+                    computeSigmaPtsWeights();
+                }
             }
 
     /**
@@ -60,24 +66,19 @@ public:
         double d_dim = _dim;
         double d_deg = _deg;
 
-        if (!libSpGHInitialize()) {
-            std::cerr << "Could not initialize the library properly" << std::endl;
+        PointsWeightsTuple pts_weights = sigmapts_weights(d_dim, d_deg);
+
+        _zeromeanpts = std::get<0>(pts_weights);
+        _Weights = std::get<1>(pts_weights);
+
+        // compute matrix sqrt of P
+        Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> es(_P);
+        _sqrtP = es.operatorSqrt();
+
+        _sigmapts = (_zeromeanpts*_sqrtP).rowwise() + _mean.transpose(); 
+
             
-        } else {
-            PointsWeightsTuple pts_weights = sigmapts_weights(d_dim, d_deg);
-
-            _zeromeanpts = std::get<0>(pts_weights);
-            _Weights = std::get<1>(pts_weights);
-
-            // compute matrix sqrt of P
-            Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> es(_P);
-            _sqrtP = es.operatorSqrt();
-
-            _sigmapts = (_zeromeanpts*_sqrtP).rowwise() + _mean.transpose(); 
-
-            // Call the application and library termination routine
-            libSpGHTerminate();
-        }
+        // }
 
         // mclTerminateApplication();
 
@@ -102,14 +103,6 @@ public:
         return res;
         
     };
-
-    // void update_integrand(const Function& function){
-    //     _f = function;
-    // };
-
-    // MatrixXd Integrate(){
-    //     return Integrate(_f);
-    // };
 
     /**
      * Update member variables
@@ -156,7 +149,6 @@ protected:
     MatrixXd _P, _sqrtP;
     VectorXd _Weights;
     MatrixXd _sigmapts, _zeromeanpts;
-    // Function _f;
 };
 
 

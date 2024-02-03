@@ -59,6 +59,39 @@ MatrixXd xmu_phi(const VectorXd& vec_x){
     return res;
 }
 
+/**
+ * @brief Test the weights got from Gauss Hermite integrator
+ */
+TEST(TestGH, GH_weights){
+
+    VectorXd mean{VectorXd::Constant(1, 20)};
+    MatrixXd cov{MatrixXd::Constant(1,1,9)};
+
+    int deg = 10;
+    int dim = 1;
+    typedef gvi::GaussHermite<Function> GH;
+    
+    GH gh_inst{deg, dim, mean, cov};
+    
+    VectorXd weights{gh_inst.weights()};
+    VectorXd sigmapoints{gh_inst.sigmapts()};
+
+    VectorXd weights_expected(10);
+    weights_expected << 4.310652630718227e-06, 4.310652630718376e-06, 7.580709343122321e-04, 
+                        7.580709343121815e-04, 0.344642334932012, 0.344642334932016, 0.135483702980275, 
+                        0.135483702980267, 0.019111580500769, 0.019111580500770;
+
+    VectorXd sigmapoints_expected(10);
+    sigmapoints_expected << 4.859462828332310, -4.859462828332314, 3.581823483551924, 
+                            -3.581823483551934, 0.484935707515505, -0.484935707515517,
+                            1.465989094391161, -1.465989094391140, 2.484325841638960, 
+                            -2.484325841638965;
+    
+    ASSERT_LE((sigmapoints - sigmapoints_expected).norm(), 1e-10);
+    ASSERT_LE((weights - weights_expected).norm(), 1e-10);
+
+}
+
 TEST(TestGH, gh){
     int deg = 6, dim = 1;
     VectorXd mean(1);
@@ -68,7 +101,7 @@ TEST(TestGH, gh){
     cov.setZero();
     cov(0, 0) = 9.0;
 
-    GaussHermite<Function> gh(deg, dim, mean, cov, phi);
+    GaussHermite<Function> gh(deg, dim, mean, cov);
 
     MatrixXd phi_mu = phi(mean);
     MatrixXd phi_mu_GT(1,1);
@@ -100,11 +133,11 @@ TEST(TestGH, gh){
 #include "quadrature/SparseGaussHermite.h"
 
 TEST(TestGH, sp_gh){
-    // Initialize the application for compiled matlab function.
-    if (!mclInitializeApplication(nullptr, 0)) {
-        std::cerr << "Could not initialize the application." << std::endl;
-        return ;
-    }
+    // // Initialize the application for compiled matlab function.
+    // if (!mclInitializeApplication(nullptr, 0)) {
+    //     std::cerr << "Could not initialize the application." << std::endl;
+    //     return ;
+    // }
 
     int deg = 6, dim = 1;
     VectorXd mean(1);
@@ -150,6 +183,8 @@ TEST(TestGH, sp_gh){
     ASSERT_LE((E_phi22 - E_phi22_gt).norm(), 1e-3);
 
     // Terminate the application for compiled matlab function.
-    mclTerminateApplication();
+    // mclTerminateApplication();
 
 }
+
+

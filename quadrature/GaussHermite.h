@@ -31,21 +31,22 @@ public:
      * @param dim dimension of the integrand input
      * @param mean mean 
      * @param P covariance matrix
-     * @param func the integrand function
+    //  * @param func the integrand function
      */
     GaussHermite(
         const int& deg, 
         const int& dim, 
         const VectorXd& mean, 
-        const MatrixXd& P,
-        const Function& func): 
+        const MatrixXd& P
+        ): 
             _deg{deg},
             _dim{dim},
             _mean{mean},
             _P{P},
-            _f{func},
             _W{VectorXd::Zero(_deg)},
-            _sigmapts{VectorXd::Zero(_deg)}{}
+            _sigmapts{VectorXd::Zero(_deg)}{
+                this->computeWeights();
+            }
 
     /**
      * @brief A helper function to compute all possible permutations given a dimension and a degree.
@@ -82,10 +83,6 @@ public:
      */
     MatrixXd Integrate(const Function& function);
 
-    void update_integrand(const Function& function);
-
-    MatrixXd Integrate();
-
     /**
      * Update member variables
      * */
@@ -108,9 +105,7 @@ public:
     MatrixXd _P;
     VectorXd _W;
     VectorXd _sigmapts;
-    Function _f;
 };
-
 
 } // namespace gvi
 
