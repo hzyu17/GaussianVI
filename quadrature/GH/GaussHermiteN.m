@@ -13,7 +13,7 @@ x = sym('x', [n 1]);
 sig = sqrtm(P);
 gaussian_x = det(2*pi*P)^(-1/2) * expm(-transpose(x-m)*inv(P)*(x-m)/2);
 
-integral_trues = [];
+% integral_trues = [];
 Integral_GHs = [];
 for i_size = 1:size(gx, 1)
     func_hd = matlabFunction(gx(i_size)*gaussian_x);
@@ -25,7 +25,7 @@ for i_size = 1:size(gx, 1)
     
     Integral_GH = 0;
     if n == 2
-        integral_trues = [integral_trues; integral2(func_hd, -inf, inf, -inf, inf)];
+%         integral_trues = [integral_trues; integral2(func_hd, -inf, inf, -inf, inf)];
         for i=1:p
             for j = 1:p
                 pts = sig*[ksi(i); ksi(j)] + m;
@@ -36,7 +36,7 @@ for i_size = 1:size(gx, 1)
             end
         end
     elseif n ==3
-        integral_trues =  [integral_trues; integral3(func_hd, -inf, inf, -inf, inf, -inf, inf)];
+%         integral_trues =  [integral_trues; integral3(func_hd, -inf, inf, -inf, inf, -inf, inf)];
         for i=1:p
             for j = 1:p
                 for k = 1:p
@@ -51,5 +51,5 @@ for i_size = 1:size(gx, 1)
     end
     Integral_GHs = [Integral_GHs; Integral_GH];
 end
-integral_trues;
+% integral_trues;
 end

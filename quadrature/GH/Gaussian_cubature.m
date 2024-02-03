@@ -33,7 +33,7 @@ gx = [3*x1^2; 2*x2*x1];
 
 Integral = GaussHermiteN(n, gx, p, mean_t, cov_t)
 
-%% draft
-getWeight(10)
+%% The weights and sigmapoints for a 10 degree quadrature
+[roots, weights] = getWeight(10)
 
 
