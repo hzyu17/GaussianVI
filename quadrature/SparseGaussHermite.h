@@ -103,14 +103,6 @@ public:
         
     };
 
-    // void update_integrand(const Function& function){
-    //     _f = function;
-    // };
-
-    // MatrixXd Integrate(){
-    //     return Integrate(_f);
-    // };
-
     /**
      * Update member variables
      * */
@@ -156,7 +148,6 @@ protected:
     MatrixXd _P, _sqrtP;
     VectorXd _Weights;
     MatrixXd _sigmapts, _zeromeanpts;
-    // Function _f;
 };
 
 

@@ -68,7 +68,7 @@ TEST(TestGH, gh){
     cov.setZero();
     cov(0, 0) = 9.0;
 
-    GaussHermite<Function> gh(deg, dim, mean, cov, phi);
+    GaussHermite<Function> gh(deg, dim, mean, cov);
 
     MatrixXd phi_mu = phi(mean);
     MatrixXd phi_mu_GT(1,1);

@@ -83,15 +83,15 @@ void GaussHermite<Function>::computeWeights(){
     this->_W = W;
 }
 
-template <typename Function>
-void GaussHermite<Function>::update_integrand(const Function& function){
-    _f = function;
-}
+// template <typename Function>
+// void GaussHermite<Function>::update_integrand(const Function& function){
+//     _f = function;
+// }
 
-template <typename Function>
-MatrixXd GaussHermite<Function>::Integrate(){
-    return Integrate(_f);
-}
+// template <typename Function>
+// MatrixXd GaussHermite<Function>::Integrate(){
+//     return Integrate(_f);
+// }
 
 template <typename Function>
 MatrixXd GaussHermite<Function>::Integrate(const Function& function){
