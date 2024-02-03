@@ -9,14 +9,34 @@
 #include <fstream>
 #include <tuple>
 #include <Eigen/Dense>
+#include <unordered_map>
 #include <boost/archive/binary_oarchive.hpp>
 #include <boost/archive/binary_iarchive.hpp>
 
 using namespace Eigen;
+
+using DoubleTuple = std::tuple<double, double>;
+using MatrixVectorTuple = std::tuple<Eigen::MatrixXd, Eigen::VectorXd>;
+
+// Define Hash functions for the tuple<double, double> class
+namespace std {
+    template <>
+    struct hash<DoubleTuple> {
+        size_t operator()(const DoubleTuple& key) const {
+            // Combine the hash values of the tuple elements using a hash function
+            size_t hash1 = std::hash<double>{}(std::get<0>(key));
+            size_t hash2 = std::hash<double>{}(std::get<1>(key));
+
+            // A simple way to combine hash values
+            return hash1 ^ (hash2 << 1);
+        }
+    };
+}
+
 namespace boost {
    namespace serialization {
+
         // Serialization function for Eigen::MatrixXd
-        
         template <typename Archive>
         inline void save(Archive & ar, 
                         const Eigen::MatrixXd & g, 
@@ -30,6 +50,7 @@ namespace boost {
             ar & boost::serialization::make_array(g.data(), rows * cols);
         }
 
+        // De-serialize
         template<typename Archive>
         inline void load(
             Archive & ar, 
@@ -42,7 +63,8 @@ namespace boost {
             g.resize(rows, cols);
             ar & boost::serialization::make_array(g.data(), rows * cols);
         }
-        
+
+        // The serialization is split into save and load here.
         template<class Archive>
         inline void serialize(
             Archive & ar, 
@@ -64,18 +86,20 @@ namespace boost {
             ar & boost::serialization::make_array(g.data(), rows);
         }
 
+        // De-serialize
         template<typename Archive>
         inline void load(
             Archive & ar, 
             Eigen::VectorXd & g, 
             const unsigned int version)
         {
-            int rows, cols;
+            int rows;
             ar & rows;
             g.resize(rows);
             ar & boost::serialization::make_array(g.data(), rows);
         }
 
+        // The serialization is split into save and load here.
         template<class Archive>
         inline void serialize(
             Archive & ar, 
@@ -85,47 +109,64 @@ namespace boost {
             split_free(ar, g, version);
         }
 
-        // Serialization function for the main tuple
-        template <typename Archive>
-        void serialize(Archive& ar, std::tuple<std::tuple<double, double>, std::tuple<MatrixXd, VectorXd>>& tuple, const unsigned int version) {
-            ar & std::get<0>(std::get<0>(tuple)); // Serialize inner tuple
-            ar & std::get<1>(std::get<0>(tuple)); // Serialize inner tuple
-            ar & std::get<0>(std::get<1>(tuple)); // Serialize inner tuple
-            ar & std::get<1>(std::get<1>(tuple)); // Serialize inner tuple
+
+        typedef std::unordered_map<DoubleTuple, MatrixVectorTuple> Map;
+        
+        template<class Archive>
+        void save(Archive& ar, 
+                  const Map& map, 
+                  const unsigned int version) 
+        {
+            int size = map.size();
+            ar & size;
+            for (auto & pair: map) { 
+                DoubleTuple key = pair.first;
+                MatrixVectorTuple value = pair.second;
+
+                std::cout << "Value 1: " << std::get<0>(value) << std::endl;
+                std::cout << "Value 2: " << std::get<1>(value) << std::endl;
+
+                ar & std::get<0>(key); // Serialize first double in the key tuple
+                ar & std::get<1>(key); // Serialize second double in the key tuple
+                ar & std::get<0>(value); // Serialize first MatrixXd in the value tuple
+                ar & std::get<1>(value); // Serialize second VectorXd in the value tuple
+
+                // out << p.first << p.second; 
+            }
         }
+
+        template<class Archive>
+        void load(Archive& ar, Map& map, const unsigned int version) {
+            int size = 0;
+            ar & size;
+            for (int i=0; i< size; i++) { 
+
+                double d1, d2;
+                MatrixXd mat;
+                VectorXd vect;
+
+                ar & d1; // Serialize first double in the key tuple
+                ar & d2; // Serialize second double in the key tuple
+                ar & mat; // Serialize first double in the key tuple
+                ar & vect; // Serialize second double in the key tuple
+
+                DoubleTuple key{d1, d2};
+                MatrixVectorTuple value{mat, vect};
+
+                map[key] = value;
+
+            }
+        }
+
+        // The serialization is split into save and load here.
+        template<class Archive>
+        inline void serialize(
+            Archive & ar, 
+            Map& map, 
+            const unsigned int version)
+        {
+            split_free(ar, map, version);
+        }
+
     }
 }
-
-// int main() {
-//     // Random Matrix and Vector
-//     MatrixXd m_rnd{MatrixXd::Random(3, 3)};
-//     VectorXd v_rnd{VectorXd::Random(3)};
-//     // Create the tuple
-//     std::tuple<std::tuple<double, double>, std::tuple<MatrixXd, VectorXd>> myTuple{
-//         {1.0, 2.0},
-//         {m_rnd, v_rnd}
-//     };
-
-//     // Save the tuple to a binary file
-//     {
-//         std::ofstream ofs("tuple_data.bin", std::ios::binary);
-//         boost::archive::binary_oarchive oa(ofs);
-//         oa << myTuple;
-//     }
-
-//     // Load the tuple from the binary file
-//     std::tuple<std::tuple<double, double>, std::tuple<MatrixXd, VectorXd>> loadedTuple;
-//     {
-//         std::ifstream ifs("tuple_data.bin", std::ios::binary);
-//         boost::archive::binary_iarchive ia(ifs);
-//         ia >> loadedTuple;
-//     }
-
-//     // Display the loaded tuple components
-//     std::cout << "Loaded tuple:\n";
-//     std::cout << "Double values: " << std::get<0>(std::get<0>(loadedTuple)) << ", " << std::get<1>(std::get<0>(loadedTuple)) << "\n";
-//     std::cout << "Eigen::MatrixXd:\n" << std::get<0>(std::get<1>(loadedTuple)) << "\n";
-//     std::cout << "Eigen::VectorXd:\n" << std::get<1>(std::get<1>(loadedTuple)) << "\n";
-
-//     return 0;
-// }

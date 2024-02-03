@@ -15,34 +15,37 @@ TEST(TestGH, data_io){
     DigreeDim deg_dim{1.0, 2.0};
     
     // Create the tuple
-    std::tuple<std::tuple<double, double>, std::tuple<MatrixXd, VectorXd>> myTuple{
-        deg_dim,
-        pts_weights
+    std::unordered_map<DigreeDim, PointsWeights> testMap
+    {
+        {deg_dim, pts_weights}
     };
 
     // Save the tuple to a binary file
     {
-        std::ofstream ofs("tuple_data.bin", std::ios::binary);
+        std::ofstream ofs("map_data.bin", std::ios::binary);
         boost::archive::binary_oarchive oa(ofs);
-        oa << myTuple;
+        oa << testMap;
     }
 
     // Load the tuple from the binary file
-    std::tuple<std::tuple<double, double>, std::tuple<MatrixXd, VectorXd>> loadedTuple;
+    std::unordered_map<DigreeDim, PointsWeights> loadedHashMap;
+
     {
-        std::ifstream ifs("tuple_data.bin", std::ios::binary);
+        std::ifstream ifs("map_data.bin", std::ios::binary);
         boost::archive::binary_iarchive ia(ifs);
-        ia >> loadedTuple;
+        ia >> loadedHashMap;
     }
 
-    // Display the loaded tuple components
-    std::cout << "Loaded tuple:\n";
-    std::cout << "Double values: " << std::get<0>(std::get<0>(loadedTuple)) << ", " << std::get<1>(std::get<0>(loadedTuple)) << "\n";
-    std::cout << "Eigen::MatrixXd:\n" << std::get<0>(std::get<1>(loadedTuple)) << "\n";
-    std::cout << "Eigen::VectorXd:\n" << std::get<1>(std::get<1>(loadedTuple)) << "\n";
+    for (const auto& pair : loadedHashMap) {
+        std::cout << "Key 1: " << std::get<0>(pair.first) << std::endl;
+        std::cout << "Key 2: " << std::get<1>(pair.first) << std::endl;
 
-    ASSERT_EQ(std::get<0>(std::get<0>(loadedTuple))-1.0, 0);
-    ASSERT_EQ(std::get<1>(std::get<0>(loadedTuple))-2.0, 0);
-    ASSERT_EQ((std::get<0>(std::get<1>(loadedTuple)) - m_rnd).norm(), 0);
-    ASSERT_EQ((std::get<1>(std::get<1>(loadedTuple)) - v_rnd).norm(), 0);
+        std::cout << "Value 1: " << std::get<0>(pair.second) << std::endl;
+        std::cout << "Value 2: " << std::get<1>(pair.second) << std::endl;
+    }
+
+    DigreeDim key = std::make_tuple(1.0, 2.0);
+
+    ASSERT_EQ((std::get<0>(loadedHashMap[key]) - m_rnd).norm(), 0);
+    ASSERT_EQ((std::get<1>(loadedHashMap[key]) - v_rnd).norm(), 0);
 }
