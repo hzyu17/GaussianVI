@@ -32,7 +32,6 @@ public:
      * @param dim dimension of the integrand input
      * @param mean mean 
      * @param P covariance matrix
-     * @param func the integrand function
      */
     SparseGaussHermite(
         const int& deg, 
