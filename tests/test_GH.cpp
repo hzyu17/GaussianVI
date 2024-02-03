@@ -133,11 +133,11 @@ TEST(TestGH, gh){
 #include "quadrature/SparseGaussHermite.h"
 
 TEST(TestGH, sp_gh){
-    // Initialize the application for compiled matlab function.
-    if (!mclInitializeApplication(nullptr, 0)) {
-        std::cerr << "Could not initialize the application." << std::endl;
-        return ;
-    }
+    // // Initialize the application for compiled matlab function.
+    // if (!mclInitializeApplication(nullptr, 0)) {
+    //     std::cerr << "Could not initialize the application." << std::endl;
+    //     return ;
+    // }
 
     int deg = 6, dim = 1;
     VectorXd mean(1);
@@ -183,7 +183,7 @@ TEST(TestGH, sp_gh){
     ASSERT_LE((E_phi22 - E_phi22_gt).norm(), 1e-3);
 
     // Terminate the application for compiled matlab function.
-    mclTerminateApplication();
+    // mclTerminateApplication();
 
 }
 

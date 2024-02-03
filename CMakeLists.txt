@@ -20,6 +20,12 @@ add_compile_definitions("SOURCE_ROOT=${CMAKE_CURRENT_SOURCE_DIR}")
 # Eigen
 find_package(Eigen3 3.4.0 REQUIRED)
 
+# Boost
+find_package(Boost 1.70 REQUIRED)
+find_package(Boost COMPONENTS serialization REQUIRED)
+include_directories(${Boost_INCLUDE_DIR})
+link_directories(${Boost_LIBRARY_DIRS})
+
 if(DEFINED libSpGH_LIBRARY AND NOT "${libSpGH_LIBRARY}" STREQUAL "")
     message("Variable libSpGH_LIBRARY is defined and not empty.")
     # Your code for the case when the variable is defined and not empty
@@ -55,13 +61,6 @@ foreach(gvi_source ${gvi_SOURCES})
     target_include_directories(${gvi_name} PRIVATE ${Matlab_INCLUDE_DIRS})
 endforeach()
 
-# target_link_libraries(spgh_example PRIVATE ${Matlab_MEX_LIBRARY} ${Matlab_MX_LIBRARY} ${libSpGH_LIBRARY} ${MCR_LIBRARY_PATH}/libmwmclmcrrt.so.9.9)
-# target_include_directories(spgh_example PRIVATE ${Matlab_INCLUDE_DIRS})
-
-# target_link_libraries(generate_sigmapts PRIVATE ${Matlab_MEX_LIBRARY} ${Matlab_MX_LIBRARY} ${libSpGH_LIBRARY} ${MCR_LIBRARY_PATH}/libmwmclmcrrt.so.9.9)
-# target_include_directories(generate_sigmapts PRIVATE ${Matlab_INCLUDE_DIRS})
-
-
 include(FetchContent)
 FetchContent_Declare(
   googletest
@@ -82,7 +81,7 @@ foreach(test_source ${test_SOURCES})
                             RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/tests"
                             )  
     target_link_libraries( ${test_name} GTest::gtest_main ${Matlab_MEX_LIBRARY} ${Matlab_MX_LIBRARY} 
-                           ${libSpGH_LIBRARY} ${MCR_LIBRARY_PATH}/libmwmclmcrrt.so.9.9)
+                           ${libSpGH_LIBRARY} ${MCR_LIBRARY_PATH}/libmwmclmcrrt.so.9.9 Boost::serialization)
     gtest_discover_tests(${test_name})
     target_include_directories(${test_name} PRIVATE ${Matlab_INCLUDE_DIRS})
 
