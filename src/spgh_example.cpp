@@ -4,7 +4,7 @@
  * Brief: Example usage of a shared library build from matlab tools.
 */
 #include <iostream>
-#include "quadrature/SparseGH/libSpGH/for_testing/libSpGH.h"
+#include "quadrature/libSpGH/for_testing/libSpGH.h"
 #include<Eigen/Dense>
 #include "mclmcrrt.h"
 #include "mclcppclass.h"
