@@ -41,6 +41,10 @@ public:
             _mean(mean),
             _P(P)
             {  
+                std::ifstream ifs(source_root+"/quadrature/SparseGHQuadratureWeights.bin", std::ios::binary);
+                boost::archive::binary_iarchive ia(ifs);
+                ia >> _nodes_weights_map;
+
                 computeSigmaPtsWeights();
             }
 
@@ -49,10 +53,6 @@ public:
      */
     void computeSigmaPtsWeights(){
         
-        std::ifstream ifs(source_root+"/quadrature/SparseGHQuadratureWeights.bin", std::ios::binary);
-        boost::archive::binary_iarchive ia(ifs);
-        ia >> _nodes_weights_map;
-
         DimDegTuple dim_deg;
         dim_deg = std::make_tuple(_dim, _deg);;
 
