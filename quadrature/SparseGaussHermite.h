@@ -12,20 +12,16 @@
 
 #pragma once
 
-#include "quadrature/generateSpGHWeights.h"
+#include "quadrature/SparseGHQuadratureWeights.h"
 
-using namespace Eigen;
+#define STRING(x) #x
+#define XSTRING(x) STRING(x)
+std::string source_root{XSTRING(SOURCE_ROOT)};
 
 namespace gvi{
 template <typename Function>
 class SparseGaussHermite{
 public:
-    
-    ~SparseGaussHermite(){
-        // Call the application and library termination routine
-        libSpGHTerminate();
-        // mclTerminateApplication();
-    }
 
     /**
      * @brief Constructor
@@ -38,19 +34,14 @@ public:
     SparseGaussHermite(
         const int& deg, 
         const int& dim, 
-        const VectorXd& mean, 
-        const MatrixXd& P): 
+        const Eigen::VectorXd& mean, 
+        const Eigen::MatrixXd& P): 
             _deg(deg),
             _dim(dim),
             _mean(mean),
             _P(P)
             {  
-                if (!libSpGHInitialize()) {
-                    std::cerr << "Could not initialize the library properly" << std::endl;
-                    
-                } else {
-                    computeSigmaPtsWeights();
-                }
+                computeSigmaPtsWeights();
             }
 
     /**
@@ -58,15 +49,15 @@ public:
      */
     void computeSigmaPtsWeights(){
         
-        // if (!mclInitializeApplication(nullptr, 0)) {
-        //     std::cerr << "Could not initialize the application." << std::endl;
-        //     return ;
-        // }
+        std::ifstream ifs(source_root+"/quadrature/SparseGHQuadratureWeights.bin", std::ios::binary);
+        boost::archive::binary_iarchive ia(ifs);
+        ia >> _nodes_weights_map;
 
-        double d_dim = _dim;
-        double d_deg = _deg;
+        DimDegTuple dim_deg;
+        dim_deg = std::make_tuple(_dim, _deg);;
 
-        PointsWeightsTuple pts_weights = sigmapts_weights(d_dim, d_deg);
+        PointsWeightsTuple pts_weights;
+        pts_weights = _nodes_weights_map[dim_deg];
 
         _zeromeanpts = std::get<0>(pts_weights);
         _Weights = std::get<1>(pts_weights);
@@ -77,27 +68,27 @@ public:
 
         _sigmapts = (_zeromeanpts*_sqrtP).rowwise() + _mean.transpose(); 
 
-            
-        // }
-
-        // mclTerminateApplication();
-
         return ;
     }
 
     /**
      * @brief Compute the approximated integration using Gauss-Hermite.
      */
-    MatrixXd Integrate(const Function& function){
+    Eigen::MatrixXd Integrate(const Function& function){
               
-        MatrixXd res{function(_mean)};
+        Eigen::MatrixXd res{function(_mean)};
         res.setZero();
 
-        for (int i=0; i<_sigmapts.rows(); i++){
-            VectorXd pt_i{_sigmapts.row(i).transpose()};
-            
-            res += function(pt_i)*_Weights(i);
+        std::cout << "_sigmapts " << std::endl << _sigmapts << std::endl;
+        std::cout << "_Weights " << std::endl << _Weights << std::endl;
+        
+        Eigen::VectorXd pt(_dim);
 
+        for (int i=0; i<_sigmapts.rows(); i++){
+            
+            pt = _sigmapts.row(i);
+            res += function(pt)*_Weights(i);
+            
         }
         
         return res;
@@ -107,12 +98,12 @@ public:
     /**
      * Update member variables
      * */
-    inline void update_mean(const VectorXd& mean){ 
+    inline void update_mean(const Eigen::VectorXd& mean){ 
         _mean = mean; 
         _sigmapts = (_zeromeanpts*_sqrtP).rowwise() + _mean.transpose(); 
     }
 
-    inline void update_P(const MatrixXd& P){ 
+    inline void update_P(const Eigen::MatrixXd& P){ 
         _P = P; 
         // compute matrix sqrt of P
         Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> es(_P);
@@ -130,7 +121,7 @@ public:
         computeSigmaPtsWeights();
     }
 
-    inline void update_parameters(const int& deg, const int& dim, const VectorXd& mean, const MatrixXd& P){ 
+    inline void update_parameters(const int& deg, const int& dim, const Eigen::VectorXd& mean, const Eigen::MatrixXd& P){ 
         _deg = deg;
         _dim = dim;
         _mean = mean;
@@ -139,16 +130,19 @@ public:
     }
 
 
-    inline VectorXd weights() const { return this->_W; }
-    inline MatrixXd sigmapts() const { return this->_sigmapts; }
+    inline Eigen::VectorXd weights() const { return this->_W; }
+    inline Eigen::MatrixXd sigmapts() const { return this->_sigmapts; }
 
 protected:
     int _deg;
     int _dim;
-    VectorXd _mean;
-    MatrixXd _P, _sqrtP;
-    VectorXd _Weights;
-    MatrixXd _sigmapts, _zeromeanpts;
+    Eigen::VectorXd _mean;
+    Eigen::MatrixXd _P, _sqrtP;
+    Eigen::VectorXd _Weights;
+    Eigen::MatrixXd _sigmapts, _zeromeanpts;
+
+    QuadratureWeightsMap _nodes_weights_map;
+    
 };
 
 

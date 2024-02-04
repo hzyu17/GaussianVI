@@ -12,7 +12,7 @@ int run_main(int argc, const char** argv) {
         return 2;
     } else {
         std::tuple<Eigen::MatrixXd, Eigen::VectorXd> pt_w;
-        pt_w = gvi::sigmapts_weights(2, 3);
+        pt_w = gvi::get_sigmapts_weights(2, 3);
 
         std::cout << "sigmapts_eigen " << std::endl << std::get<0>(pt_w) << std::endl;
         std::cout << "weights_eigen " << std::endl << std::get<1>(pt_w) << std::endl;

@@ -1,9 +1,12 @@
 /**
- * SerializeEigen.h
+ * @file SerializeEigenMaps.h
  * @author: Hongzhe Yu
+ * @date 02/03/2024
  * @brief: Serilization into binary files of a tuple which includes Eigen:MatrixXd type data.
  * https://stackoverflow.com/questions/18382457/eigen-and-boostserialize
 */
+
+#pragma once
 
 #include <iostream>
 #include <fstream>
@@ -15,14 +18,11 @@
 
 using namespace Eigen;
 
-using DoubleTuple = std::tuple<double, double>;
-using MatrixVectorTuple = std::tuple<Eigen::MatrixXd, Eigen::VectorXd>;
-
 // Define Hash functions for the tuple<double, double> class
 namespace std {
     template <>
-    struct hash<DoubleTuple> {
-        size_t operator()(const DoubleTuple& key) const {
+    struct hash<std::tuple<double, double>> {
+        size_t operator()(const std::tuple<double, double>& key) const {
             // Combine the hash values of the tuple elements using a hash function
             size_t hash1 = std::hash<double>{}(std::get<0>(key));
             size_t hash2 = std::hash<double>{}(std::get<1>(key));
@@ -110,7 +110,7 @@ namespace boost {
         }
 
 
-        typedef std::unordered_map<DoubleTuple, MatrixVectorTuple> Map;
+        typedef std::unordered_map<std::tuple<double, double>, std::tuple<Eigen::MatrixXd, Eigen::VectorXd>> Map;
         
         template<class Archive>
         void save(Archive& ar, 
@@ -120,18 +120,14 @@ namespace boost {
             int size = map.size();
             ar & size;
             for (auto & pair: map) { 
-                DoubleTuple key = pair.first;
-                MatrixVectorTuple value = pair.second;
-
-                std::cout << "Value 1: " << std::get<0>(value) << std::endl;
-                std::cout << "Value 2: " << std::get<1>(value) << std::endl;
+                std::tuple<double, double> key = pair.first;
+                std::tuple<Eigen::MatrixXd, Eigen::VectorXd> value = pair.second;
 
                 ar & std::get<0>(key); // Serialize first double in the key tuple
                 ar & std::get<1>(key); // Serialize second double in the key tuple
                 ar & std::get<0>(value); // Serialize first MatrixXd in the value tuple
                 ar & std::get<1>(value); // Serialize second VectorXd in the value tuple
 
-                // out << p.first << p.second; 
             }
         }
 
@@ -150,8 +146,8 @@ namespace boost {
                 ar & mat; // Serialize first double in the key tuple
                 ar & vect; // Serialize second double in the key tuple
 
-                DoubleTuple key{d1, d2};
-                MatrixVectorTuple value{mat, vect};
+                std::tuple<double, double> key{d1, d2};
+                std::tuple<Eigen::MatrixXd, Eigen::VectorXd> value{mat, vect};
 
                 map[key] = value;
 

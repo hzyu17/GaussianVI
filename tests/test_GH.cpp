@@ -113,7 +113,6 @@ TEST(TestGH, gh){
     xmu_phi_mu_GT(0,0) = 0.0;
     ASSERT_LE((xmu_phi_mu - xmu_phi_mu_GT).norm(), 1e-5);
 
-    // Integrations
     // integration of phi
     std::shared_ptr<Function> p_phi = std::make_shared<Function>(phi);
     MatrixXd E_Phi = gh.Integrate(phi);
@@ -133,11 +132,6 @@ TEST(TestGH, gh){
 #include "quadrature/SparseGaussHermite.h"
 
 TEST(TestGH, sp_gh){
-    // // Initialize the application for compiled matlab function.
-    // if (!mclInitializeApplication(nullptr, 0)) {
-    //     std::cerr << "Could not initialize the application." << std::endl;
-    //     return ;
-    // }
 
     int deg = 6, dim = 1;
     VectorXd mean(1);
@@ -155,6 +149,7 @@ TEST(TestGH, sp_gh){
 
     // Ground truth
     double E_Phi_GT = 1.1129;
+
     ASSERT_LE(abs(E_Phi_sp(0,0) - E_Phi_GT), 1e-4);
 
     // integration of (x-mu)*phi
@@ -163,9 +158,13 @@ TEST(TestGH, sp_gh){
     double E_xmu_phi_GT = -1.2144;
     ASSERT_LE(abs(E_xmu_phi(0,0) - E_xmu_phi_GT), 1e-4);
 
+}
+
+
+TEST(TestGH, sp_gh_multidim){
     // Test for multiple dimension functions
-    deg = 10; 
-    dim = 2;
+    int deg = 10; 
+    int dim = 2;
     VectorXd mean_2d(2);
     mean_2d.setZero();
     mean_2d << 1.0, 1.0;
@@ -177,14 +176,10 @@ TEST(TestGH, sp_gh){
 
     MatrixXd E_phi22 = sp_gh22.Integrate(ph22);
 
+    std::cout << "E_phi22" << std::endl << E_phi22 << std::endl;
+
     MatrixXd E_phi22_gt(2, 1);
     E_phi22_gt << 9.631450087970276, 5.271519032251217;
     
     ASSERT_LE((E_phi22 - E_phi22_gt).norm(), 1e-3);
-
-    // Terminate the application for compiled matlab function.
-    // mclTerminateApplication();
-
 }
-
-
