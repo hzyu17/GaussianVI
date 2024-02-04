@@ -163,7 +163,7 @@ TEST(TestGH, sp_gh){
 
 TEST(TestGH, sp_gh_multidim){
     // Test for multiple dimension functions
-    int deg = 10; 
+    int deg = 8; 
     int dim = 2;
     VectorXd mean_2d(2);
     mean_2d.setZero();
@@ -175,8 +175,6 @@ TEST(TestGH, sp_gh_multidim){
     SparseGaussHermite<Function> sp_gh22(deg, dim, mean_2d, cov_2d);
 
     MatrixXd E_phi22 = sp_gh22.Integrate(ph22);
-
-    std::cout << "E_phi22" << std::endl << E_phi22 << std::endl;
 
     MatrixXd E_phi22_gt(2, 1);
     E_phi22_gt << 9.631450087970276, 5.271519032251217;

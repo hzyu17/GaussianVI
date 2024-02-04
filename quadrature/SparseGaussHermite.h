@@ -78,9 +78,6 @@ public:
               
         Eigen::MatrixXd res{function(_mean)};
         res.setZero();
-
-        std::cout << "_sigmapts " << std::endl << _sigmapts << std::endl;
-        std::cout << "_Weights " << std::endl << _Weights << std::endl;
         
         Eigen::VectorXd pt(_dim);
 
@@ -88,7 +85,7 @@ public:
             
             pt = _sigmapts.row(i);
             res += function(pt)*_Weights(i);
-            
+
         }
         
         return res;

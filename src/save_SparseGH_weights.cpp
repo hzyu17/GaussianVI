@@ -14,7 +14,7 @@ int main(){
         
     } else {
 
-        gvi::save_pointweightmaps(10.0, 6.0);
+        gvi::save_pointweightmaps(10.0, 8.0);
     }
 
     libSpGHTerminate();
@@ -30,7 +30,7 @@ int main(){
         ia >> loadedWeightMap;
     }
 
-    gvi::DimDegTuple key = std::make_tuple(10.0, 6.0);
+    gvi::DimDegTuple key = std::make_tuple(10.0, 8.0);
 
     Eigen::MatrixXd pts = std::get<0>(loadedWeightMap[key]);
     Eigen::VectorXd weights = std::get<1>(loadedWeightMap[key]);
