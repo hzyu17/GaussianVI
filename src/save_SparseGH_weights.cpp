@@ -13,8 +13,9 @@ int main(){
         std::cerr << "Could not initialize the library properly" << std::endl;
         
     } else {
-
-        gvi::save_pointweightmaps(10.0, 8.0);
+        // save_pointweightmaps(double max_dim, double max_deg)
+        double max_dim = 8.0, max_deg = 10.0;
+        gvi::save_pointweightmaps(max_dim, max_deg);
     }
 
     libSpGHTerminate();
@@ -30,7 +31,7 @@ int main(){
         ia >> loadedWeightMap;
     }
 
-    gvi::DimDegTuple key = std::make_tuple(10.0, 8.0);
+    gvi::DimDegTuple key = std::make_tuple(8.0, 10.0);
 
     Eigen::MatrixXd pts = std::get<0>(loadedWeightMap[key]);
     Eigen::VectorXd weights = std::get<1>(loadedWeightMap[key]);

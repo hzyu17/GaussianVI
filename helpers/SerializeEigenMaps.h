@@ -34,6 +34,8 @@ namespace std {
 }
 
 #ifdef GTSAM // gtsam already defined the serialization for MatrixXd and VectorXd;
+#include <gtsam/base/Matrix.h>
+#include <gtsam/base/Vector.h>
 
 #else
 namespace boost {

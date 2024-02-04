@@ -62,7 +62,7 @@ int main(){
     std::string costmap_file{source_root+"/data/1d/costmap.csv"};
     opt.save_costmap(costmap_file);
 
-    opt.set_GH_degree(20);
+    opt.set_GH_degree(8);
     opt.set_initial_values(init_mu, init_prec);
     opt.set_step_size_base(0.75);
     std::cout << "opt.mu " << std::endl << opt.mean() << std::endl;

@@ -57,16 +57,22 @@ public:
         dim_deg = std::make_tuple(_dim, _deg);;
 
         PointsWeightsTuple pts_weights;
-        pts_weights = _nodes_weights_map[dim_deg];
+        if (_nodes_weights_map.count(dim_deg) > 0) {
+            pts_weights = _nodes_weights_map[dim_deg];
 
-        _zeromeanpts = std::get<0>(pts_weights);
-        _Weights = std::get<1>(pts_weights);
+            _zeromeanpts = std::get<0>(pts_weights);
+            _Weights = std::get<1>(pts_weights);
 
-        // compute matrix sqrt of P
-        Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> es(_P);
-        _sqrtP = es.operatorSqrt();
+            // compute matrix sqrt of P
+            Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> es(_P);
+            _sqrtP = es.operatorSqrt();
 
-        _sigmapts = (_zeromeanpts*_sqrtP).rowwise() + _mean.transpose(); 
+            _sigmapts = (_zeromeanpts*_sqrtP).rowwise() + _mean.transpose(); 
+        } else {
+            std::cout << "(dimension, degree) " << "(" << _dim << ", " << _deg << ") " <<
+             "key does not exist in the GH weight map." << std::endl;
+        }
+        
 
         return ;
     }
