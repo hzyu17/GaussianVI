@@ -14,9 +14,14 @@
 
 #include "quadrature/SparseGHQuadratureWeights.h"
 
+#ifdef VIMP
+std::string map_file{source_root+"vimp/GaussianVI/quadrature/SparseGHQuadratureWeights.bin"};
+#else
 #define STRING(x) #x
 #define XSTRING(x) STRING(x)
 std::string source_root{XSTRING(SOURCE_ROOT)};
+std::string map_file{source_root+"/quadrature/SparseGHQuadratureWeights.bin"};
+#endif
 
 namespace gvi{
 template <typename Function>
@@ -41,7 +46,7 @@ public:
             _mean(mean),
             _P(P)
             {  
-                std::ifstream ifs(source_root+"/quadrature/SparseGHQuadratureWeights.bin", std::ios::binary);
+                std::ifstream ifs(map_file, std::ios::binary);
                 boost::archive::binary_iarchive ia(ifs);
                 ia >> _nodes_weights_map;
 
