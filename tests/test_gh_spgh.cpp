@@ -125,12 +125,13 @@ TEST(SparseGaussHermite, two_dim){
 
 TEST(GaussHermite, two_dim_input_two_dim_output){
     int dim = 2;
+    int deg = 8;
     VectorXd m = VectorXd::Ones(dim);
     MatrixXd prec(dim, dim);
     prec << 1.0,-0.74,-0.74,1.0;
     MatrixXd cov{prec.inverse()};
 
-    GaussHermite<Function> gausshermite(10, dim, m, cov);
+    GaussHermite<Function> gausshermite(deg, dim, m, cov);
 
     // gausshermite.update_integrand(gx_2d);
     MatrixXd integral2{gausshermite.Integrate(gx_2d)};
@@ -143,12 +144,13 @@ TEST(GaussHermite, two_dim_input_two_dim_output){
 
 TEST(SparseGaussHermite, two_dim_input_two_dim_output){
     int dim = 2;
+    int deg = 8;
     VectorXd m = VectorXd::Ones(dim);
     MatrixXd prec(dim, dim);
     prec << 1.0,-0.74,-0.74,1.0;
     MatrixXd cov{prec.inverse()};
 
-    SparseGaussHermite<Function> gausshermite_sp(10, dim, m, cov);
+    SparseGaussHermite<Function> gausshermite_sp(deg, dim, m, cov);
 
     // gausshermite.update_integrand(gx_2d);
     MatrixXd integral2_sp{gausshermite_sp.Integrate(gx_2d)};
@@ -161,16 +163,21 @@ TEST(SparseGaussHermite, two_dim_input_two_dim_output){
 
 TEST(GaussHermite, three_dim){
     int dim = 3;
+    int deg = 8;
     VectorXd m = VectorXd::Ones(dim);
     MatrixXd P = MatrixXd::Identity(dim, dim);
 
-    GaussHermite<Function> gausshermite(10, dim, m, P);
+    GaussHermite<Function> gausshermite(deg, dim, m, P);
 
     // Start time
     auto start_time = std::chrono::high_resolution_clock::now();
 
     MatrixXd integral1{gausshermite.Integrate(gx_1d)};
 
+    for (int i=0; i<10; i++){
+        integral1 = gausshermite.Integrate(gx_1d);
+    }
+    
     // End time
     auto end_time = std::chrono::high_resolution_clock::now();
     // Calculate duration
@@ -186,15 +193,19 @@ TEST(GaussHermite, three_dim){
 
 TEST(SparseGaussHermite, three_dim){
     int dim = 3;
+    int deg = 8;
     VectorXd m = VectorXd::Ones(dim);
     MatrixXd P = MatrixXd::Identity(dim, dim);
 
-    SparseGaussHermite<Function> gausshermite_sp(10, dim, m, P);
+    SparseGaussHermite<Function> gausshermite_sp(deg, dim, m, P);
 
     // Start time
     auto start_time = std::chrono::high_resolution_clock::now();
     
     MatrixXd integral1_sp{gausshermite_sp.Integrate(gx_1d)};
+    for (int i=0; i<10; i++){
+        integral1_sp = gausshermite_sp.Integrate(gx_1d);
+    }
     // End time
     auto end_time = std::chrono::high_resolution_clock::now();
     // Calculate duration

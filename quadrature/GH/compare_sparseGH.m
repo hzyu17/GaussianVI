@@ -157,3 +157,6 @@ toc
 
 disp('------------ Relative Difference in the integration Int22 ------------')
 norm(Int22 - SGappr22, 'fro') / norm(Int22)
+
+%% 
+[x_sp, w_sp] = nwspgr('GQN', 15, 8)

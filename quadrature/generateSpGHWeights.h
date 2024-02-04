@@ -4,17 +4,22 @@
  * 01/27/2024
 */
 
+#pragma once
+
 #include <iostream>
 #include "quadrature/libSpGH/for_testing/libSpGH.h"
 #include<Eigen/Dense>
 #include "mclmcrrt.h"
 #include "mclcppclass.h"
+#include "quadrature/SparseGHQuadratureWeights.h"
+
+#define STRING(x) #x
+#define XSTRING(x) STRING(x)
+std::string source_root{XSTRING(SOURCE_ROOT)};
 
 namespace gvi{
 
-
-using PointsWeightsTuple = std::tuple<Eigen::MatrixXd, Eigen::VectorXd>;
-PointsWeightsTuple sigmapts_weights(double D, double k) {
+PointsWeightsTuple get_sigmapts_weights(double D, double k) {
     
     // Inputs
     mwArray mw_dim(D);
