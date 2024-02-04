@@ -18,7 +18,7 @@
 #define XSTRING(x) STRING(x)
 std::string source_root{XSTRING(SOURCE_ROOT)};
 
-#ifdef VIMP
+#ifdef VIMP_ENV
 std::string map_file{source_root+"vimp/GaussianVI/quadrature/SparseGHQuadratureWeights.bin"};
 #else
 std::string map_file{source_root+"/quadrature/SparseGHQuadratureWeights.bin"};
@@ -47,9 +47,20 @@ public:
             _mean(mean),
             _P(P)
             {  
-                std::ifstream ifs(map_file, std::ios::binary);
-                boost::archive::binary_iarchive ia(ifs);
-                ia >> _nodes_weights_map;
+                try {
+                    std::ifstream ifs(map_file, std::ios::binary);
+                    if (!ifs.is_open()) {
+                        throw std::runtime_error("Failed to open file for GH weights reading");
+                    }
+
+                    boost::archive::binary_iarchive ia(ifs);
+                    ia >> _nodes_weights_map;
+
+                } catch (const boost::archive::archive_exception& e) {
+                    std::cerr << "Boost archive exception: " << e.what() << std::endl;
+                } catch (const std::exception& e) {
+                    std::cerr << "Standard exception: " << e.what() << std::endl;
+                }
 
                 computeSigmaPtsWeights();
             }

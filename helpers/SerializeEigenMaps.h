@@ -33,7 +33,7 @@ namespace std {
     };
 }
 
-#ifdef GTSAM // gtsam already defined the serialization for MatrixXd and VectorXd;
+#ifdef GTSAM_ENV // gtsam already defined the serialization for MatrixXd and VectorXd;
 #include <gtsam/base/Matrix.h>
 #include <gtsam/base/Vector.h>
 
