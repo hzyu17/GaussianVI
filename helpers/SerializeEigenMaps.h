@@ -33,6 +33,9 @@ namespace std {
     };
 }
 
+#ifdef GTSAM // gtsam already defined the serialization for MatrixXd and VectorXd;
+
+#else
 namespace boost {
    namespace serialization {
 
@@ -109,7 +112,12 @@ namespace boost {
             split_free(ar, g, version);
         }
 
+   }
+}
+#endif
 
+namespace boost {
+   namespace serialization {
         typedef std::unordered_map<std::tuple<double, double>, std::tuple<Eigen::MatrixXd, Eigen::VectorXd>> Map;
         
         template<class Archive>
