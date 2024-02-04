@@ -19,7 +19,7 @@
 std::string source_root{XSTRING(SOURCE_ROOT)};
 
 #ifdef VIMP_ENV
-std::string map_file{source_root+"vimp/GaussianVI/quadrature/SparseGHQuadratureWeights.bin"};
+std::string map_file{source_root+"/GaussianVI/quadrature/SparseGHQuadratureWeights.bin"};
 #else
 std::string map_file{source_root+"/quadrature/SparseGHQuadratureWeights.bin"};
 #endif
