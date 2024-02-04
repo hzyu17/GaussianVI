@@ -14,12 +14,13 @@
 
 #include "quadrature/SparseGHQuadratureWeights.h"
 
-#ifdef VIMP
-std::string map_file{source_root+"vimp/GaussianVI/quadrature/SparseGHQuadratureWeights.bin"};
-#else
 #define STRING(x) #x
 #define XSTRING(x) STRING(x)
 std::string source_root{XSTRING(SOURCE_ROOT)};
+
+#ifdef VIMP
+std::string map_file{source_root+"vimp/GaussianVI/quadrature/SparseGHQuadratureWeights.bin"};
+#else
 std::string map_file{source_root+"/quadrature/SparseGHQuadratureWeights.bin"};
 #endif
 
