@@ -18,8 +18,12 @@
 #include <assert.h>
 #include <memory>
 
-// #include "quadrature/GaussHermite.h"
-#include "quadrature/SparseGaussHermite.h"
+// #define STRING(x) #x
+// #define XSTRING(x) STRING(x)
+// std::string source_root{XSTRING(SOURCE_ROOT)};
+
+#include "quadrature/GaussHermite.h"
+// #include "quadrature/SparseGaussHermite.h"
 #include "helpers/CommonDefinitions.h"
 #include "helpers/MatrixHelper.h"
 
@@ -228,8 +232,8 @@ public:
     GHFunction _func_Vmumu;
 
     /// G-H quadrature class
-    // using GH = GaussHermite<GHFunction> ;
-    using GH = SparseGaussHermite<GHFunction>;
+    using GH = gvi::GaussHermite<GHFunction> ;
+    // using GH = SparseGaussHermite<GHFunction>;
     std::shared_ptr<GH> _gh;
 
 protected:

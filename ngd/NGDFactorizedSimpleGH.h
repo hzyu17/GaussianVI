@@ -21,7 +21,8 @@ class NGDFactorizedSimpleGH: public NGDFactorizedBase{
 
     using Base = NGDFactorizedBase;
     using GHFunction = std::function<MatrixXd(const VectorXd&)>;
-    using GH = SparseGaussHermite<GHFunction>;
+    // using GH = SparseGaussHermite<GHFunction>;
+    using GH = GaussHermite<GHFunction>;
 
 public:
     ///@param dimension The dimension of the state

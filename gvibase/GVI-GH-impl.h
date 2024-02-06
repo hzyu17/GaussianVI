@@ -49,10 +49,14 @@ void GVIGH<Factor>::optimize(std::optional<bool> verbose)
         // ============= Collect factor costs =============
         VectorXd fact_costs_iter = factor_cost_vector();
 
+        std::cout << "debug 1" << std::endl;
+
         _res_recorder.update_data(_mu, _covariance, _precision, cost_iter, fact_costs_iter);
 
         // gradients
         std::tuple<VectorXd, SpMat> gradients = compute_gradients();
+
+        std::cout << "debug 2" << std::endl;
 
         VectorXd dmu = std::get<0>(gradients);
         SpMat dprecision = std::get<1>(gradients);
@@ -69,13 +73,15 @@ void GVIGH<Factor>::optimize(std::optional<bool> verbose)
 
             auto onestep_res = onestep_linesearch(step_size, dmu, dprecision);
 
+            std::cout << "debug 3" << std::endl;
+
             double new_cost = std::get<0>(onestep_res);
             VectorXd new_mu = std::get<1>(onestep_res);
             auto new_precision = std::get<2>(onestep_res);
 
             // accept new cost and update mu and precision matrix
             if (new_cost < cost_iter){
-                /// update mean and covariance
+                // update mean and covariance
                 this->update_proposal(new_mu, new_precision);
                 break;
             }else{ 
@@ -87,7 +93,7 @@ void GVIGH<Factor>::optimize(std::optional<bool> verbose)
             if (cnt > _niters_backtrack)
             {
                 if (is_verbose){
-                    std::cout << "Too many iterations in the backtracking ... Dead" << std::endl;
+                    std::cout << "Reached the maximum backtracking steps." << std::endl;
                 }
                 update_proposal(new_mu, new_precision);
                 break;
@@ -95,6 +101,7 @@ void GVIGH<Factor>::optimize(std::optional<bool> verbose)
         }
     }
 
+    std::cout << "=========== Saving Data ===========" << std::endl;
     save_data(is_verbose);
 
 }
@@ -141,7 +148,9 @@ double GVIGH<Factor>::cost_value(const VectorXd &mean, SpMat &Precision)
 
     double value = 0.0;
     for (auto &opt_k : _vec_factors)
-    {
+    {   
+        const std::type_info& typeInfo = typeid(*opt_k);
+        std::cout << "Class type name: " << typeInfo.name() << std::endl;
         value += opt_k->fact_cost_value(mean, Cov); // / _temperature;
     }
 

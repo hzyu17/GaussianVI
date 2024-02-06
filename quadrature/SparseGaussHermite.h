@@ -18,7 +18,7 @@
 #define XSTRING(x) STRING(x)
 std::string source_root{XSTRING(SOURCE_ROOT)};
 
-#ifdef VIMP_ENV
+#ifdef GVI_SUBDUR_ENV
 std::string map_file{source_root+"/GaussianVI/quadrature/SparseGHQuadratureWeights.bin"};
 #else
 std::string map_file{source_root+"/quadrature/SparseGHQuadratureWeights.bin"};
@@ -107,7 +107,9 @@ public:
         for (int i=0; i<_sigmapts.rows(); i++){
             
             pt = _sigmapts.row(i);
-            res += function(pt)*_Weights(i);
+            std::cout << "pt " << std::endl << pt << std::endl;
+            Eigen::MatrixXd f_pt{function(pt)};
+            res += f_pt*_Weights(i);
 
         }
         
@@ -128,7 +130,14 @@ public:
         // compute matrix sqrt of P
         Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> es(_P);
         _sqrtP = es.operatorSqrt();
+
+        if (_sqrtP.hasNaN()) {
+            std::cerr << "Error: sqrt Covariance matrix contains NaN values." << std::endl;
+            // Handle the situation where _sqrtP contains NaN values
+        }
+
         _sigmapts = (_zeromeanpts*_sqrtP).rowwise() + _mean.transpose(); 
+        
     }
 
     inline void set_polynomial_deg(const int& deg){ 
