@@ -12,8 +12,8 @@
 namespace gvi{
 
 using DimDegTuple = std::tuple<double, double>;
-using PointsWeightsTuple = std::tuple<Eigen::MatrixXd, Eigen::VectorXd>;
-using QuadratureWeightsMap = std::unordered_map<DimDegTuple, PointsWeightsTuple>;
+using NodesWeightsTuple = std::tuple<Eigen::MatrixXd, Eigen::VectorXd>;
+using QuadratureWeightsMap = std::unordered_map<DimDegTuple, NodesWeightsTuple>;
 
 
 }

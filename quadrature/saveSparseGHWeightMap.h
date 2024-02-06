@@ -17,7 +17,7 @@ void save_pointweightmaps(double max_dim, double max_deg){
         for (double k = 1.0; k <= max_deg; k += 1.0){
             DimDegTuple dim_k= std::make_tuple(dim, k);
 
-            PointsWeightsTuple pt_wts;
+            NodesWeightsTuple pt_wts;
             pt_wts = get_sigmapts_weights(dim, k);
 
             map[dim_k] = pt_wts;
@@ -25,7 +25,7 @@ void save_pointweightmaps(double max_dim, double max_deg){
     }
 
     DimDegTuple dim_k= std::make_tuple(1.0, 2.0);
-    PointsWeightsTuple pt_wt = map[dim_k];
+    NodesWeightsTuple pt_wt = map[dim_k];
 
     // Save the tuple to a binary file
     {

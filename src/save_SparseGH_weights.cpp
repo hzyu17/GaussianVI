@@ -23,7 +23,7 @@ int main(){
 
     // Read from the saved bin file
     // Load the map from the binary file
-    std::unordered_map<gvi::DimDegTuple, gvi::PointsWeightsTuple> loadedWeightMap;
+    std::unordered_map<gvi::DimDegTuple, gvi::NodesWeightsTuple> loadedWeightMap;
 
     {
         std::ifstream ifs(source_root+"/quadrature/SparseGHQuadratureWeights.bin", std::ios::binary);
