@@ -19,7 +19,7 @@ std::string source_root{XSTRING(SOURCE_ROOT)};
 
 namespace gvi{
 
-NodesWeightsTuple get_sigmapts_weights(double D, double k) {
+PointsWeightsTuple get_sigmapts_weights(double D, double k) {
     
     // Inputs
     mwArray mw_dim(D);

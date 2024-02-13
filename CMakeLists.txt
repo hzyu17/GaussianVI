@@ -16,7 +16,7 @@ set(gvi_subdirs
 include_directories("${CMAKE_CURRENT_SOURCE_DIR}")
 
 add_compile_definitions("SOURCE_ROOT=${CMAKE_CURRENT_SOURCE_DIR}")
-add_compile_definitions(GVI_SUBDUR_ENV=0)
+# add_compile_definitions(GVI_SUBDUR_ENV=0)
 
 # Eigen
 find_package(Eigen3 3.4.0 REQUIRED)

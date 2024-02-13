@@ -218,3 +218,50 @@ TEST(SparseGaussHermite, three_dim){
     ASSERT_LE((integral1_sp - integral_expected).norm(), 1e-7);
 
 }
+
+TEST(SparseGaussHermite, external_weight_map){
+    int dim = 3;
+    int deg = 8;
+    VectorXd m = VectorXd::Ones(dim);
+    MatrixXd P = MatrixXd::Identity(dim, dim);
+
+    QuadratureWeightsMap nodes_weights_map;
+
+    // Read the weight and node map for sparse GH
+    try {
+        std::ifstream ifs(map_file, std::ios::binary);
+        if (!ifs.is_open()) {
+            throw std::runtime_error("Failed to open file for GH weights reading. File: " + map_file);
+        }
+
+        boost::archive::binary_iarchive ia(ifs);
+        ia >> nodes_weights_map;
+
+    } catch (const boost::archive::archive_exception& e) {
+        std::cerr << "Boost archive exception: " << e.what() << std::endl;
+    } catch (const std::exception& e) {
+        std::cerr << "Standard exception: " << e.what() << std::endl;
+    }
+
+    // Initialize the sparse GH using the read weight map
+    SparseGaussHermite<Function> gausshermite_sp(deg, dim, m, P, nodes_weights_map);
+
+    // Start time
+    auto start_time = std::chrono::high_resolution_clock::now();
+    
+    MatrixXd integral1_sp{gausshermite_sp.Integrate(gx_1d)};
+    for (int i=0; i<10; i++){
+        integral1_sp = gausshermite_sp.Integrate(gx_1d);
+    }
+    // End time
+    auto end_time = std::chrono::high_resolution_clock::now();
+    // Calculate duration
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end_time - start_time);
+    // Print the duration
+    std::cout << "Time taken for 3dim integration sparse grid GH: " << duration.count() << " microseconds" << std::endl;
+
+    MatrixXd integral_expected{MatrixXd::Constant(1, 1, 6.00e+4)};
+
+    ASSERT_LE((integral1_sp - integral_expected).norm(), 1e-7);
+
+}

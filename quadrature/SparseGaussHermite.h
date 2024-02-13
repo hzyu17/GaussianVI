@@ -65,38 +65,21 @@ public:
                 computeSigmaPtsWeights();
             }
 
-    /**
-     * @brief Constructor with a computed nodes and weights
-     * 
-     * @param nodes_weights_tuple Computed tuple containing (nodes, weights).
-     * @param mean mean 
-     * @param P covariance matrix
-     */
     SparseGaussHermite(
         const int& deg, 
         const int& dim, 
-        const NodesWeightsTuple& nodes_weights_tuple, 
         const Eigen::VectorXd& mean, 
-        const Eigen::MatrixXd& P): 
+        const Eigen::MatrixXd& P,
+        const QuadratureWeightsMap& weights_map): 
             _deg(deg),
             _dim(dim),
             _mean(mean),
             _P(P)
             {  
-                computeSigmaPtsWeights(nodes_weights_tuple);
+                computeSigmaPtsWeights(weights_map);
             }
-    
+            
 
-    void computeSigmaPtsWeights(const NodesWeightsTuple& nodes_weights_tuple)
-    {
-        _zeromeanpts = std::get<0>(nodes_weights_tuple);
-        _Weights = std::get<1>(nodes_weights_tuple);
-        // compute matrix sqrt of P
-        Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> es(_P);
-        _sqrtP = es.operatorSqrt();
-
-        _sigmapts = (_zeromeanpts*_sqrtP).rowwise() + _mean.transpose(); 
-    }
     /**
      * @brief Compute the Sigma Pts
      */
@@ -105,12 +88,12 @@ public:
         DimDegTuple dim_deg;
         dim_deg = std::make_tuple(_dim, _deg);;
 
-        NodesWeightsTuple nodes_weights;
+        PointsWeightsTuple pts_weights;
         if (_nodes_weights_map.count(dim_deg) > 0) {
-            nodes_weights = _nodes_weights_map[dim_deg];
+            pts_weights = _nodes_weights_map[dim_deg];
 
-            _zeromeanpts = std::get<0>(nodes_weights);
-            _Weights = std::get<1>(nodes_weights);
+            _zeromeanpts = std::get<0>(pts_weights);
+            _Weights = std::get<1>(pts_weights);
 
             // compute matrix sqrt of P
             Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> es(_P);
@@ -127,6 +110,34 @@ public:
     }
 
     /**
+     * @brief Compute the Sigma Pts
+     */
+    void computeSigmaPtsWeights(const QuadratureWeightsMap& weights_map){
+        
+        DimDegTuple dim_deg;
+        dim_deg = std::make_tuple(_dim, _deg);;
+
+        PointsWeightsTuple pts_weights;
+        if (weights_map.count(dim_deg) > 0) {
+            pts_weights = weights_map.at(dim_deg);
+
+            _zeromeanpts = std::get<0>(pts_weights);
+            _Weights = std::get<1>(pts_weights);
+
+            // compute matrix sqrt of P
+            Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> es(_P);
+            _sqrtP = es.operatorSqrt();
+
+            _sigmapts = (_zeromeanpts*_sqrtP).rowwise() + _mean.transpose(); 
+        } else {
+            std::cout << "(dimension, degree) " << "(" << _dim << ", " << _deg << ") " <<
+             "key does not exist in the GH weight map." << std::endl;
+        }
+        
+        return ;
+    }
+
+    /**
      * @brief Compute the approximated integration using Gauss-Hermite.
      */
     Eigen::MatrixXd Integrate(const Function& function){
@@ -139,7 +150,7 @@ public:
         for (int i=0; i<_sigmapts.rows(); i++){
             
             pt = _sigmapts.row(i);
-            std::cout << "pt " << std::endl << pt << std::endl;
+            // std::cout << "pt " << std::endl << pt << std::endl;
             Eigen::MatrixXd f_pt{function(pt)};
             res += f_pt*_Weights(i);
 
