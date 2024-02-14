@@ -1,16 +1,16 @@
 #include <gtest/gtest.h>
 #include "helpers/test_serialization.h"
+#include "helpers/Serialization.h"
 
 #define STRING(x) #x
 #define XSTRING(x) STRING(x)
 std::string source_root{XSTRING(SOURCE_ROOT)};
+using namespace gvi;
 
-TEST(Serialization, initialize){
-    using namespace gvi;
-
+TEST(Serialization, MyData){
+    
+    // ======================= Serialize and De-serialize of the data ========================
     MyData d(2, 2);
-    std::cout << "======== print data ========" << std::endl;
-    d.print_data();
 
     Matrix3D mat3d(2,2,2);
     mat3d(0,0) = 1.0;
@@ -18,40 +18,50 @@ TEST(Serialization, initialize){
     mat3d(2,1) = 3.0;
 
     d.update_data(mat3d);
-    std::cout << "======== print saved data ========" << std::endl;
-    d.print_data();
 
     std::string fname = source_root+"/tests/test_serialize_mydata.bin";
-    // Save the tuple to a binary file
-    std::ofstream ofs(fname, std::ios::binary);
-    boost::archive::binary_oarchive oa(ofs);
-    oa << d;
-    ofs.close();
 
-    // d.save_data(source_root+"/tests/test_serialize_mydata.bin");
+    // Save the data to a binary file
+    serialize<MyData>(fname, d);
 
-    MyData loaded_d(2,2);
-    try {
-        std::ifstream ifs(fname, std::ios::binary);
-        if (!ifs.is_open()) {
-            throw std::runtime_error("Failed to open file of iteration data. \n File: " + fname);
-        }
+    // Load data from the just saved file
+    MyData loaded_d;
+    deserialize<MyData>(fname, loaded_d);
 
-        boost::archive::binary_iarchive ia(ifs);
-        ia >> loaded_d;
+    ASSERT_EQ((d.mat() - loaded_d.mat()).norm(), 0);
 
-        ifs.close();
+}
 
-    } catch (const boost::archive::archive_exception& e) {
-        std::cerr << "Boost archive exception: " << e.what() << std::endl;
-    } catch (const std::exception& e) {
-        std::cerr << "Standard exception: " << e.what() << std::endl;
-    }
+TEST(Serialization, MapMyData){
+// ======================= Serialize and De-serialize of the data map ========================
+    // Create a map from int to MyData type
+    typedef std::unordered_map<int, MyData> IterDataMap;
+    IterDataMap test_map;
+    MyData d1(2, 2);
 
-    // loaded_d.load_data(source_root+"/tests/test_serialize_mydata.bin");
-    std::cout << "======== print loaded data ========" << std::endl;
-    loaded_d.print_data();
+    Matrix3D mat3d1(2,2,2);
+    mat3d1(0,1) = 2.0;
+    mat3d1(1,1) = 5.0;
+    mat3d1(0,0) = 7.0;
 
+    d1.update_data(mat3d1);
+    test_map[0] = d1;
+
+    std::string file_name_map = source_root+"/tests/test_serialize_mapdata.bin";
+
+    // Save the map to a binary file
+    serialize<IterDataMap>(file_name_map, test_map);
+
+    // Load the map data
+    IterDataMap test_loaded_map;
+    deserialize<IterDataMap>(file_name_map, test_loaded_map);
+
+    ASSERT_EQ((test_map[0].mat() - test_loaded_map[0].mat()).norm(), 0);
+}
+
+
+TEST(Serialization, IterationMyData){
+    // ======================= Serialize and De-serialize of the iteration data ========================
     // Create iteration data
     IterationMydata iter_data;
 
@@ -69,34 +79,21 @@ TEST(Serialization, initialize){
 
         iter_data.add_data(i, d);
     }
-    std::cout << "======== print saved iteration data ========" << std::endl;
-    iter_data.print_data();
 
     std::string file_name = source_root+"/tests/test_serialize_iterdata.bin";
+
     // Save data
-    iter_data.save_data(file_name);
+    serialize<IterationMydata>(file_name, iter_data);
 
     // Load data
     IterationMydata data_loaded;
+    deserialize<IterationMydata>(file_name, data_loaded);
 
-    // try {
-    //     std::ifstream ifs(file_name, std::ios::binary);
-    //     if (!ifs.is_open()) {
-    //         throw std::runtime_error("Failed to open file of iteration data. \n File: " + file_name);
-    //     }
+    std::unordered_map<int, MyData> saved_map = iter_data.map();
+    std::unordered_map<int, MyData> load_map = data_loaded.map();
 
-    //     boost::archive::binary_iarchive ia(ifs);
-    //     ia >> data_loaded;
-
-    //     ifs.close();
-
-    // } catch (const boost::archive::archive_exception& e) {
-    //     std::cerr << "Boost archive exception: " << e.what() << std::endl;
-    // } catch (const std::exception& e) {
-    //     std::cerr << "Standard exception: " << e.what() << std::endl;
-    // }
-
-    data_loaded.load_data(source_root+"/tests/test_serialize_iterdata.bin");
-    data_loaded.print_data();
-
+    std::cout << "======== print loaded iteration data ========" << std::endl;
+    for (int i=0; i<niter; i++){
+        ASSERT_EQ((load_map[i].mat() - saved_map[i].mat()).norm(), 0);
+    }
 }

@@ -92,7 +92,6 @@ public:
         return _map;
     }
 
-
     void save_data(const std::string& file_name) const {
         // Save the tuple to a binary file
         std::ofstream ofs(file_name, std::ios::binary);
@@ -176,7 +175,7 @@ namespace boost {
             ar & nt;
             ar & dim;
 
-            Matrix3D mat(nt, dim, dim);
+            Eigen::MatrixXd mat(dim*dim, nt);
 
             ar & mat;
 
