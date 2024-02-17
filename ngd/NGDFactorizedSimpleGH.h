@@ -20,9 +20,7 @@ template <typename Function>
 class NGDFactorizedSimpleGH: public NGDFactorizedBase{
 
     using Base = NGDFactorizedBase;
-    using GHFunction = std::function<MatrixXd(const VectorXd&)>;
-    // using GH = SparseGaussHermite<GHFunction>;
-    using GH = GaussHermite<GHFunction>;
+    // using GHFunction = std::function<MatrixXd(const VectorXd&)>;
 
 public:
     ///@param dimension The dimension of the state

@@ -26,9 +26,7 @@ template <typename Function, typename CostClass>
 class NGDFactorizedGH: public NGDFactorizedBase{
 
     using OptBase = NGDFactorizedBase;
-    using GHFunction = std::function<MatrixXd(const VectorXd&)>;
-    using GH = GaussHermite<GHFunction>;
-    // using GH = SparseGaussHermite<GHFunction>:
+    // using GHFunction = std::function<MatrixXd(const VectorXd&)>;
 
 public:
     ///@param dimension The dimension of the state

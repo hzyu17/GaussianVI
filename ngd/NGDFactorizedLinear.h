@@ -40,8 +40,6 @@ public:
             Base::_func_Vmu = [this, function, linear_factor](const VectorXd& x){return (x-Base::_mu) * function(x, linear_factor) / this->temperature();};
             Base::_func_Vmumu = [this, function, linear_factor](const VectorXd& x){return MatrixXd{(x-Base::_mu) * (x-Base::_mu).transpose() * function(x, linear_factor) / this->temperature() };};
 
-            using GH = GaussHermite<GHFunction>;
-            // using GH = SparseGaussHermite<GHFunction>;
             Base::_gh = std::make_shared<GH>(GH{10, dimension, Base::_mu, Base::_covariance});
 
             _target_mean = linear_factor.get_mu();

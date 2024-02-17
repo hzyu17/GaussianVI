@@ -36,9 +36,7 @@ class NGDFactorizedNonlinerGH : public NGDFactorizedBase{
             Base::_func_phi = [this, function, cost_class, temperature](const VectorXd& x){return MatrixXd{MatrixXd::Constant(1, 1, function(x, cost_class) / this->temperature())};};
             Base::_func_Vmu = [this, function, cost_class, temperature](const VectorXd& x){return (x-Base::_mu) * function(x, cost_class) / this->temperature() ;};
             Base::_func_Vmumu = [this, function, cost_class, temperature](const VectorXd& x){return MatrixXd{(x-Base::_mu) * (x-Base::_mu).transpose().eval() * function(x, cost_class) / this->temperature()};};
-            
-            using GH = GaussHermite<GHFunction>;
-            // using GH = SparseGaussHermite<GHFunction>;
+
             Base::_gh = std::make_shared<GH>(GH{10, dimension, Base::_mu, Base::_covariance});
             
         }
