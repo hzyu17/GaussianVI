@@ -149,8 +149,8 @@ double GVIGH<Factor>::cost_value(const VectorXd &mean, SpMat &Precision)
     double value = 0.0;
     for (auto &opt_k : _vec_factors)
     {   
-        const std::type_info& typeInfo = typeid(*opt_k);
-        std::cout << "Class type name: " << typeInfo.name() << std::endl;
+        // const std::type_info& typeInfo = typeid(*opt_k);
+        // std::cout << "Class type name: " << typeInfo.name() << std::endl;
         value += opt_k->fact_cost_value(mean, Cov); // / _temperature;
     }
 

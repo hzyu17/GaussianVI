@@ -144,7 +144,7 @@ TEST(GaussHermite, two_dim_input_two_dim_output){
 
 TEST(SparseGaussHermite, two_dim_input_two_dim_output){
     int dim = 2;
-    int deg = 8;
+    int deg = 25;
     VectorXd m = VectorXd::Ones(dim);
     MatrixXd prec(dim, dim);
     prec << 1.0,-0.74,-0.74,1.0;

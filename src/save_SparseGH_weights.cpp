@@ -13,9 +13,7 @@ int main(){
         std::cerr << "Could not initialize the library properly" << std::endl;
         
     } else {
-        // save_pointweightmaps(double max_dim, double max_deg)
-        double max_dim = 8.0, max_deg = 10.0;
-        gvi::save_pointweightmaps(max_dim, max_deg);
+        gvi::save_pointweightmaps();
     }
 
     libSpGHTerminate();
