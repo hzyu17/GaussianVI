@@ -18,10 +18,6 @@
 #include <assert.h>
 #include <memory>
 
-// #define STRING(x) #x
-// #define XSTRING(x) STRING(x)
-// std::string source_root{XSTRING(SOURCE_ROOT)};
-
 // #include "quadrature/GaussHermite.h"
 #include "quadrature/SparseGaussHermite.h"
 #include "helpers/CommonDefinitions.h"
@@ -32,6 +28,7 @@ using namespace Eigen;
 namespace gvi{
 using GHFunction = std::function<MatrixXd(const VectorXd&)>;
 using GH = SparseGaussHermite<GHFunction>;
+// using GH = gvi::GaussHermite<GHFunction>;
 
 class GVIFactorizedBase{
 public:

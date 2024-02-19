@@ -27,6 +27,7 @@ class NGDFactorizedLinear : public NGDFactorizedBase{
 public:
     NGDFactorizedLinear(const int& dimension,
                         int dim_state,
+                        int gh_degree,
                         const CostFunction& function, 
                         const Factor& linear_factor,
                         int num_states,
@@ -40,7 +41,7 @@ public:
             Base::_func_Vmu = [this, function, linear_factor](const VectorXd& x){return (x-Base::_mu) * function(x, linear_factor) / this->temperature();};
             Base::_func_Vmumu = [this, function, linear_factor](const VectorXd& x){return MatrixXd{(x-Base::_mu) * (x-Base::_mu).transpose() * function(x, linear_factor) / this->temperature() };};
 
-            Base::_gh = std::make_shared<GH>(GH{10, dimension, Base::_mu, Base::_covariance});
+            Base::_gh = std::make_shared<GH>(GH{gh_degree, dimension, Base::_mu, Base::_covariance});
 
             _target_mean = linear_factor.get_mu();
             _target_precision = linear_factor.get_precision();

@@ -15,6 +15,10 @@
 #include <iostream>
 #include <fstream>
 
+#define STRING(x) #x
+#define XSTRING(x) STRING(x)
+std::string source_root{XSTRING(SOURCE_ROOT)};
+
 namespace gvi{
     
 typedef Eigen::SparseMatrix<double, Eigen::ColMajor> SpMat; // declares a column-major sparse matrix type of double

@@ -30,13 +30,14 @@ class NGDFactorizedFixedGaussian : public NGDFactorizedLinear<LinearFactor>{
 public:
     NGDFactorizedFixedGaussian(const int& dimension,
                                 int dim_state,
+                                int gh_degree,
                                 const CostFunction& function, 
                                 const LinearFactor& linear_factor,
                                 int num_states,
                                 int start_indx,
                                 double temperature,
                                 double high_temperature):
-        Base(dimension, dim_state, function, linear_factor, num_states, start_indx, temperature, high_temperature)
+        Base(dimension, dim_state, gh_degree, function, linear_factor, num_states, start_indx, temperature, high_temperature)
         { }    
 };
 

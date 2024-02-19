@@ -13,10 +13,8 @@
 #pragma once
 
 #include "quadrature/SparseGHQuadratureWeights.h"
+#include "helpers/CommonDefinitions.h"
 
-#define STRING(x) #x
-#define XSTRING(x) STRING(x)
-std::string source_root{XSTRING(SOURCE_ROOT)};
 
 #ifdef GVI_SUBDUR_ENV
 std::string map_file{source_root+"/GaussianVI/quadrature/SparseGHQuadratureWeights.bin"};

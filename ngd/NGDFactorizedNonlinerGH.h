@@ -25,6 +25,7 @@ class NGDFactorizedNonlinerGH : public NGDFactorizedBase{
     public:
         NGDFactorizedNonlinerGH(int dimension,
                                 int dim_state,
+                                int gh_degree,
                                 const CostFunction& function, 
                                 const CostClass& cost_class,
                                 int num_states,
@@ -37,7 +38,7 @@ class NGDFactorizedNonlinerGH : public NGDFactorizedBase{
             Base::_func_Vmu = [this, function, cost_class, temperature](const VectorXd& x){return (x-Base::_mu) * function(x, cost_class) / this->temperature() ;};
             Base::_func_Vmumu = [this, function, cost_class, temperature](const VectorXd& x){return MatrixXd{(x-Base::_mu) * (x-Base::_mu).transpose().eval() * function(x, cost_class) / this->temperature()};};
 
-            Base::_gh = std::make_shared<GH>(GH{10, dimension, Base::_mu, Base::_covariance});
+            Base::_gh = std::make_shared<GH>(GH{gh_degree, dimension, Base::_mu, Base::_covariance});
             
         }
 

@@ -2,9 +2,6 @@
 #include "helpers/test_serialization.h"
 #include "helpers/Serialization.h"
 
-#define STRING(x) #x
-#define XSTRING(x) STRING(x)
-std::string source_root{XSTRING(SOURCE_ROOT)};
 using namespace gvi;
 
 TEST(Serialization, MyData){

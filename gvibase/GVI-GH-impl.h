@@ -49,14 +49,10 @@ void GVIGH<Factor>::optimize(std::optional<bool> verbose)
         // ============= Collect factor costs =============
         VectorXd fact_costs_iter = factor_cost_vector();
 
-        std::cout << "debug 1" << std::endl;
-
         _res_recorder.update_data(_mu, _covariance, _precision, cost_iter, fact_costs_iter);
 
         // gradients
         std::tuple<VectorXd, SpMat> gradients = compute_gradients();
-
-        std::cout << "debug 2" << std::endl;
 
         VectorXd dmu = std::get<0>(gradients);
         SpMat dprecision = std::get<1>(gradients);
@@ -72,8 +68,6 @@ void GVIGH<Factor>::optimize(std::optional<bool> verbose)
             step_size = pow(_step_size_base, B);
 
             auto onestep_res = onestep_linesearch(step_size, dmu, dprecision);
-
-            std::cout << "debug 3" << std::endl;
 
             double new_cost = std::get<0>(onestep_res);
             VectorXd new_mu = std::get<1>(onestep_res);
