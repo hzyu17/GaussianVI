@@ -18,8 +18,8 @@
 #include <assert.h>
 #include <memory>
 
-// #include "quadrature/GaussHermite.h"
-#include "quadrature/SparseGaussHermite.h"
+#include "quadrature/GaussHermite.h"
+// #include "quadrature/SparseGaussHermite.h"
 #include "helpers/CommonDefinitions.h"
 #include "helpers/MatrixHelper.h"
 
@@ -27,8 +27,8 @@ using namespace Eigen;
 
 namespace gvi{
 using GHFunction = std::function<MatrixXd(const VectorXd&)>;
-using GH = SparseGaussHermite<GHFunction>;
-// using GH = gvi::GaussHermite<GHFunction>;
+// using GH = SparseGaussHermite<GHFunction>;
+using GH = gvi::GaussHermite<GHFunction>;
 
 class GVIFactorizedBase{
 public:
@@ -44,8 +44,7 @@ public:
      * @param dimension The dimension of the state
      */
     GVIFactorizedBase(int dimension, int state_dim, int num_states, int start_index, 
-                        double temperature=10.0, double high_temperature=100.0, bool is_linear=false):
-            _is_linear{is_linear},
+                        double temperature=10.0, double high_temperature=100.0):
             _dim{dimension},
             _state_dim{state_dim},
             _num_states{num_states},
@@ -57,7 +56,10 @@ public:
             _dprecision(_dim, _dim),
             _dcovariance(_dim, _dim),
             _block{state_dim, num_states, start_index, dimension},
-            _Pk(dimension, state_dim*num_states)
+            _Pk(dimension, state_dim*num_states),
+            _E_Phi(0.0),
+            _Vdmu(_dim),
+            _Vddmu(_dim, _dim)
             {   
                 _joint_size = state_dim * num_states;
                 _Pk.setZero();
@@ -67,12 +69,7 @@ public:
 /// public functions
 public:
 
-    /// update the GH approximator
-    void updateGH(const VectorXd& x, const MatrixXd& P){
-        _gh->update_mean(x);
-        _gh->update_P(P); 
-    }
-
+    
     /**
      * @brief Update the step size
      */
@@ -132,10 +129,7 @@ public:
     /**
      * @brief Compute the cost function. V(x) = E_q(\phi(x))
      */
-    virtual double fact_cost_value(const VectorXd& fill_joint_mean, const SpMat& joint_cov) {
-        
-        
-    }
+    virtual double fact_cost_value(const VectorXd& fill_joint_mean, const SpMat& joint_cov) {}
 
     // /**
     //  * @brief Compute the cost function. V(x) = E_q(\phi(x)) using the current values.
@@ -186,25 +180,6 @@ public:
         return _func_phi(x);
     }    
 
-    /**
-     * @brief returns the E_q{phi(x)} = E_q{-log(p(x,z))}
-     */
-    inline double E_Phi() {
-        return _gh->Integrate(_func_phi)(0, 0);
-    }
-
-    inline MatrixXd E_xMuPhi(){
-        return _gh->Integrate(_func_Vmu);
-    }
-
-    inline MatrixXd E_xMuxMuTPhi(){
-        return _gh->Integrate(_func_Vmumu);
-    }
-
-    void set_GH_points(int p){
-        _gh->set_polynomial_deg(p);
-    }
-
     void switch_to_high_temperature(){
         _temperature = _high_temperature;
     }
@@ -216,22 +191,12 @@ public:
     /// Public members for the inherited classes access
 public:
 
-    bool _is_linear;
-
     /// dimension
     int _dim, _state_dim, _num_states, _joint_size;
 
     VectorXd _mu;
     
-    /// Intermediate functions for Gauss-Hermite quadratures, default definition, needed to be overrided by the
-    /// derived classes.
-
     GHFunction _func_phi;
-    GHFunction _func_Vmu;
-    GHFunction _func_Vmumu;
-
-    /// G-H quadrature class
-    std::shared_ptr<GH> _gh;
 
 protected:
 
@@ -242,6 +207,7 @@ protected:
     /// step sizes
     double _step_size_mu = 0.9;
     double _step_size_Sigma = 0.9;
+    double _E_Phi = 0.0;
 
     double _temperature, _high_temperature;
     
@@ -249,6 +215,9 @@ protected:
     TrajectoryBlock _block;
 
     MatrixXd _Pk;
+
+    VectorXd _Vdmu;
+    MatrixXd _Vddmu;
     
 };
 

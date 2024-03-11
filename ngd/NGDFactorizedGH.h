@@ -15,7 +15,7 @@
 #ifndef NGDFactorizedGH_H
 #define NGDFactorizedGH_H
 
-#include "ngd/NGDFactorizedBase.h"
+#include "gvibase/GVIFactorizedNonLinearBase.h"
 #include <memory>
 
 using namespace Eigen;
@@ -23,9 +23,9 @@ using namespace Eigen;
 namespace gvi{
 
 template <typename Function, typename CostClass>
-class NGDFactorizedGH: public NGDFactorizedBase{
+class NGDFactorizedGH: public GVIFactorizedNonLinearBase{
 
-    using OptBase = NGDFactorizedBase;
+    using OptBase = GVIFactorizedNonLinearBase;
     // using GHFunction = std::function<MatrixXd(const VectorXd&)>;
 
 public:

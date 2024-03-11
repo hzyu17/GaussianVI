@@ -47,9 +47,9 @@ void GVIGH<Factor>::optimize(std::optional<bool> verbose)
         }
 
         // ============= Collect factor costs =============
-        VectorXd fact_costs_iter = factor_cost_vector();
+        // VectorXd fact_costs_iter = factor_cost_vector();
 
-        _res_recorder.update_data(_mu, _covariance, _precision, cost_iter, fact_costs_iter);
+        // _res_recorder.update_data(_mu, _covariance, _precision, cost_iter, fact_costs_iter);
 
         // gradients
         std::tuple<VectorXd, SpMat> gradients = compute_gradients();
@@ -95,8 +95,8 @@ void GVIGH<Factor>::optimize(std::optional<bool> verbose)
         }
     }
 
-    std::cout << "=========== Saving Data ===========" << std::endl;
-    save_data(is_verbose);
+    // std::cout << "=========== Saving Data ===========" << std::endl;
+    // save_data(is_verbose);
 
 }
 

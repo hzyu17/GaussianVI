@@ -44,9 +44,12 @@ int main(){
     int dim_state = 1;
     int num_states = 1;
     int dim_factor = 1;
+    int gh_degree = 8;
+    int start_index = 0;
 
     std::vector<std::shared_ptr<OptFact>> vec_opt_fact;
-    std::shared_ptr<OptFact> p_opt_fac{new OptFact(dim_factor, dim_state, num_states, 0, cost_function)};
+    std::shared_ptr<OptFact> p_opt_fac{new OptFact(dim_factor, dim_state, num_states, 
+                                                   start_index, cost_function, gh_degree)};
     VectorXd init_mu{VectorXd::Constant(1, 20.0)};
     SpMat init_prec(1, 1);
     init_prec.setZero();
@@ -62,7 +65,7 @@ int main(){
     std::string costmap_file{source_root+"/data/1d/costmap.csv"};
     opt.save_costmap(costmap_file);
 
-    opt.set_GH_degree(8);
+    // opt.set_GH_degree(8);
     opt.set_initial_values(init_mu, init_prec);
     opt.set_step_size_base(0.75);
     std::cout << "opt.mu " << std::endl << opt.mean() << std::endl;

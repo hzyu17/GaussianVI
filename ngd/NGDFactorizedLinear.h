@@ -16,31 +16,29 @@
 #ifndef NGDFactorizedLinear_H
 #define NGDFactorizedLinear_H
 
-#include "NGDFactorizedBase.h"
+#include "gvibase/GVIFactorizedLinearBase.h"
 #include "gp/linear_factor.h"
 
 namespace gvi{
 template <typename Factor>
-class NGDFactorizedLinear : public NGDFactorizedBase{
-    using Base = NGDFactorizedBase;
+class NGDFactorizedLinear : public GVIFactorizedLinearBase{
+    using Base = GVIFactorizedLinearBase;
     using CostFunction = std::function<double(const VectorXd&, const Factor&)>;
 public:
     NGDFactorizedLinear(const int& dimension,
                         int dim_state,
-                        // int gh_degree,
                         const CostFunction& function, 
                         const Factor& linear_factor,
                         int num_states,
                         int start_indx,
                         double temperature,
                         double high_temperature):
-        Base(dimension, dim_state, num_states, start_indx, temperature, high_temperature, true),
+        Base(dimension, dim_state, num_states, start_indx, temperature, high_temperature),
         _linear_factor{linear_factor}
         {
             Base::_func_phi = [this, function, linear_factor](const VectorXd& x){return MatrixXd::Constant(1, 1, function(x, linear_factor) / this->temperature() );};
-            Base::_func_Vmu = [this, function, linear_factor](const VectorXd& x){return (x-Base::_mu) * function(x, linear_factor) / this->temperature();};
-            Base::_func_Vmumu = [this, function, linear_factor](const VectorXd& x){return MatrixXd{(x-Base::_mu) * (x-Base::_mu).transpose() * function(x, linear_factor) / this->temperature() };};
-
+            // Base::_func_Vmu = [this, function, linear_factor](const VectorXd& x){return (x-Base::_mu) * function(x, linear_factor) / this->temperature();};
+            // Base::_func_Vmumu = [this, function, linear_factor](const VectorXd& x){return MatrixXd{(x-Base::_mu) * (x-Base::_mu).transpose() * function(x, linear_factor) / this->temperature() };};
             // Base::_gh = std::make_shared<GH>(GH{gh_degree, dimension, Base::_mu, Base::_covariance});
 
             _target_mean = linear_factor.get_mu();
@@ -123,8 +121,9 @@ public:
         VectorXd mean_k = Base::extract_mu_from_joint(fill_joint_mean);
         MatrixXd Cov_k = Base::extract_cov_from_joint(joint_cov);
 
-        return ((_Lambda.transpose()*_target_precision*_Lambda * Cov_k).trace() + 
-                (_Lambda*mean_k-_Psi*_target_mean).transpose() * _target_precision * (_Lambda*mean_k-_Psi*_target_mean)) * constant() / this->temperature();
+        _E_Phi = ((_Lambda.transpose()*_target_precision*_Lambda * Cov_k).trace() + 
+                    (_Lambda*mean_k-_Psi*_target_mean).transpose() * _target_precision * (_Lambda*mean_k-_Psi*_target_mean)) * constant() / this->temperature();
+        return _E_Phi;
     }
 
 };

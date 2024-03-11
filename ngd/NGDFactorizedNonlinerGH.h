@@ -14,12 +14,12 @@
 #ifndef NGDFactorizedNonlinerGH_H
 #define NGDFactorizedNonlinerGH_H
 
-#include "ngd/NGDFactorizedBase.h"
+#include "gvibase/GVIFactorizedNonLinearBase.h"
 
 namespace gvi{
 template <typename CostClass>
-class NGDFactorizedNonlinerGH : public NGDFactorizedBase{
-    using Base = NGDFactorizedBase;
+class NGDFactorizedNonlinerGH : public GVIFactorizedNonLinearBase{
+    using Base = GVIFactorizedNonLinearBase;
     using GHFunction = std::function<MatrixXd(const VectorXd&)>;
     using CostFunction = std::function<double(const VectorXd&, const CostClass&)>;
     public:
@@ -55,27 +55,30 @@ class NGDFactorizedNonlinerGH : public NGDFactorizedBase{
         this->_Vddmu.setZero();
 
         /// Integrate for E_q{_Vdmu} 
-        this->_Vdmu = this->_gh->Integrate(this->_func_Vmu);
-        this->_Vdmu = this->_precision * this->_Vdmu;
+        this->_Vdmu = this->_precision * this->_gh->Integrate(this->_func_Vmu);
+        // this->_Vdmu = this->_precision * this->_Vdmu;
 
         /// Integrate for E_q{phi(x)}
-        double E_phi = this->_gh->Integrate(this->_func_phi)(0, 0);
+        _E_Phi = this->_gh->Integrate(this->_func_phi)(0, 0);
         
         /// Integrate for partial V^2 / ddmu_ 
         MatrixXd E_xxphi{this->_gh->Integrate(this->_func_Vmumu)};
 
-        this->_Vddmu.triangularView<Upper>() = (this->_precision * E_xxphi * this->_precision - this->_precision * E_phi).triangularView<Upper>();
+        this->_Vddmu.triangularView<Upper>() = (this->_precision * E_xxphi * this->_precision - this->_precision * _E_Phi).triangularView<Upper>();
         this->_Vddmu.triangularView<StrictlyLower>() = this->_Vddmu.triangularView<StrictlyUpper>().transpose();
 
     }
 
     double fact_cost_value(const VectorXd& fill_joint_mean, const SpMat& joint_cov) override{
-        VectorXd mean_k = extract_mu_from_joint(fill_joint_mean);
-        MatrixXd Cov_k = extract_cov_from_joint(joint_cov);
+        if (_E_Phi == 0){
+            VectorXd mean_k = extract_mu_from_joint(fill_joint_mean);
+            MatrixXd Cov_k = extract_cov_from_joint(joint_cov);
 
-        updateGH(mean_k, Cov_k);
-
-        return this->_gh->Integrate(this->_func_phi)(0, 0);
+            updateGH(mean_k, Cov_k);
+            _E_Phi = this->_gh->Integrate(this->_func_phi)(0, 0);
+        }
+            
+        return _E_Phi;
     }
 };
 
