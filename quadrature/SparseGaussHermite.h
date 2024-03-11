@@ -149,8 +149,8 @@ public:
             
             pt = _sigmapts.row(i);
             // std::cout << "pt " << std::endl << pt << std::endl;
-            Eigen::MatrixXd f_pt{function(pt)};
-            res += f_pt*_Weights(i);
+            // Eigen::MatrixXd f_pt{function(pt)};
+            res += function(pt)*_Weights(i);
 
         }
         
