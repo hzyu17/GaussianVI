@@ -16,6 +16,8 @@
 #include "helpers/CommonDefinitions.h"
 
 
+#include "helpers/timer.h"
+
 #ifdef GVI_SUBDUR_ENV
 std::string map_file{source_root+"/GaussianVI/quadrature/SparseGHQuadratureWeights.bin"};
 #else
@@ -94,8 +96,10 @@ public:
             _Weights = std::get<1>(pts_weights);
 
             // compute matrix sqrt of P
-            Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> es(_P);
-            _sqrtP = es.operatorSqrt();
+            Eigen::LLT<MatrixXd> lltP(_P);
+            _sqrtP = lltP.matrixL();
+            // Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> es(_P);
+            // _sqrtP = es.operatorSqrt();
 
             _sigmapts = (_zeromeanpts*_sqrtP).rowwise() + _mean.transpose(); 
         } else {
@@ -112,8 +116,7 @@ public:
      */
     void computeSigmaPtsWeights(const QuadratureWeightsMap& weights_map){
         
-        DimDegTuple dim_deg;
-        dim_deg = std::make_tuple(_dim, _deg);;
+        DimDegTuple dim_deg{std::make_tuple(_dim, _deg)};
 
         PointsWeightsTuple pts_weights;
         if (weights_map.count(dim_deg) > 0) {
@@ -123,8 +126,11 @@ public:
             _Weights = std::get<1>(pts_weights);
 
             // compute matrix sqrt of P
-            Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> es(_P);
-            _sqrtP = es.operatorSqrt();
+            Eigen::LLT<MatrixXd> lltP(_P);
+            _sqrtP = lltP.matrixL();
+
+            // Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> es(_P);
+            // _sqrtP = es.operatorSqrt();
 
             _sigmapts = (_zeromeanpts*_sqrtP).rowwise() + _mean.transpose(); 
         } else {
@@ -139,20 +145,25 @@ public:
      * @brief Compute the approximated integration using Gauss-Hermite.
      */
     Eigen::MatrixXd Integrate(const Function& function){
-              
+        
         Eigen::MatrixXd res{function(_mean)};
         res.setZero();
         
         Eigen::VectorXd pt(_dim);
 
+        // Timer timer;
+        // timer.start();
+
         for (int i=0; i<_sigmapts.rows(); i++){
             
             pt = _sigmapts.row(i);
             // std::cout << "pt " << std::endl << pt << std::endl;
-            Eigen::MatrixXd f_pt{function(pt)};
-            res += f_pt*_Weights(i);
+            // Eigen::MatrixXd f_pt{function(pt)};
+            res += function(pt)*_Weights(i);
 
         }
+        // std::cout << "========== Integration time" << std::endl;
+        // timer.end_mus();
         
         return res;
         
@@ -169,8 +180,11 @@ public:
     inline void update_P(const Eigen::MatrixXd& P){ 
         _P = P; 
         // compute matrix sqrt of P
-        Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> es(_P);
-        _sqrtP = es.operatorSqrt();
+        Eigen::LLT<MatrixXd> lltP(_P);
+        _sqrtP = lltP.matrixL();
+        
+        // Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> es(_P);
+        // _sqrtP = es.operatorSqrt();
 
         if (_sqrtP.hasNaN()) {
             std::cerr << "Error: sqrt Covariance matrix contains NaN values." << std::endl;
@@ -196,7 +210,13 @@ public:
         _dim = dim;
         _mean = mean;
         _P = P;
+
+        Timer timer;
+        timer.start();
         computeSigmaPtsWeights();
+
+        std::cout << "========== Compute weight time" << std::endl;
+        timer.end_mus();
     }
 
 

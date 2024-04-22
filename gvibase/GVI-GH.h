@@ -224,11 +224,11 @@ public:
         _nnz = _ei.find_nnz(lower, _Rows, _Cols, _Vals); // the Rows and Cols table are fixed since the initialization.
     }
 
-    inline void set_GH_degree(const int deg){
-        for (auto & opt_fact : _vec_factors){
-            opt_fact->set_GH_points(deg);
-        }
-    }
+    // inline void set_GH_degree(const int deg){
+    //     for (auto & opt_fact : _vec_factors){
+    //         opt_fact->set_GH_points(deg);
+    //     }
+    // }
 
     inline void set_niter_low_temperature(int iters_low_temp){
         _niters_lowtemp = iters_low_temp;
