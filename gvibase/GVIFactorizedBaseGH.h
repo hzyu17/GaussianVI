@@ -41,8 +41,9 @@ public:
 
     /// update the GH approximator
     void updateGH(const VectorXd& x, const MatrixXd& P){
-        _gh->update_mean(x);
+        // This order cannot be changed! Need to update P before updating mean.
         _gh->update_P(P); 
+        _gh->update_mean(x);
     }
 
     /**

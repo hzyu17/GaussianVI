@@ -178,24 +178,24 @@ public:
      * */
     inline void update_mean(const Eigen::VectorXd& mean){ 
         _mean = mean; 
-        _sigmapts = (_zeromeanpts*_sqrtP).rowwise() + _mean.transpose(); 
+        _sigmapts = (_zeromeanpts*_sqrtP.transpose()).rowwise() + _mean.transpose(); 
     }
 
     inline void update_P(const Eigen::MatrixXd& P){ 
         _P = P; 
         // compute matrix sqrt of P
-        Eigen::LLT<MatrixXd> lltP(_P);
-        _sqrtP = lltP.matrixL();
+        // Eigen::LLT<MatrixXd> lltP(_P);
+        // _sqrtP = lltP.matrixL();
         
-        // Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> es(_P);
-        // _sqrtP = es.operatorSqrt();
+        Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> es(_P);
+        _sqrtP = es.operatorSqrt();
 
         if (_sqrtP.hasNaN()) {
             std::cerr << "Error: sqrt Covariance matrix contains NaN values." << std::endl;
             // Handle the situation where _sqrtP contains NaN values
         }
 
-        _sigmapts = (_zeromeanpts*_sqrtP).rowwise() + _mean.transpose(); 
+        // _sigmapts = (_zeromeanpts*_sqrtP).rowwise() + _mean.transpose(); 
         
     }
 
