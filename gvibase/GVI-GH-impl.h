@@ -47,9 +47,9 @@ void GVIGH<Factor>::optimize(std::optional<bool> verbose)
         }
 
         // ============= Collect factor costs =============
-        VectorXd fact_costs_iter = factor_cost_vector();
+        // VectorXd fact_costs_iter = factor_cost_vector();
 
-        _res_recorder.update_data(_mu, _covariance, _precision, cost_iter, fact_costs_iter);
+        // _res_recorder.update_data(_mu, _covariance, _precision, cost_iter, fact_costs_iter);
 
         // gradients
         std::tuple<VectorXd, SpMat> gradients = compute_gradients();
@@ -75,7 +75,7 @@ void GVIGH<Factor>::optimize(std::optional<bool> verbose)
 
             // accept new cost and update mu and precision matrix
             if (new_cost < cost_iter){
-                /// update mean and covariance
+                // update mean and covariance
                 this->update_proposal(new_mu, new_precision);
                 break;
             }else{ 
@@ -87,7 +87,7 @@ void GVIGH<Factor>::optimize(std::optional<bool> verbose)
             if (cnt > _niters_backtrack)
             {
                 if (is_verbose){
-                    std::cout << "Too many iterations in the backtracking ... Dead" << std::endl;
+                    std::cout << "Reached the maximum backtracking steps." << std::endl;
                 }
                 update_proposal(new_mu, new_precision);
                 break;
@@ -95,7 +95,8 @@ void GVIGH<Factor>::optimize(std::optional<bool> verbose)
         }
     }
 
-    save_data(is_verbose);
+    // std::cout << "=========== Saving Data ===========" << std::endl;
+    // save_data(is_verbose);
 
 }
 
@@ -141,7 +142,9 @@ double GVIGH<Factor>::cost_value(const VectorXd &mean, SpMat &Precision)
 
     double value = 0.0;
     for (auto &opt_k : _vec_factors)
-    {
+    {   
+        // const std::type_info& typeInfo = typeid(*opt_k);
+        // std::cout << "Class type name: " << typeInfo.name() << std::endl;
         value += opt_k->fact_cost_value(mean, Cov); // / _temperature;
     }
 

@@ -18,8 +18,6 @@
 #include "helpers/EigenWrapper.h"
 #include <vector>
 
-#include <vector>
-
 using namespace Eigen;
 
 namespace gvi{

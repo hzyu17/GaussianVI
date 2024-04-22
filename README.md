@@ -6,27 +6,16 @@ $$q^{\star} = \underset{q \in \mathcal{Q}}{\arg\min}\; {\rm KL} [q(X) || p(X|Z)]
 
 If we denote the objective function $J(q) \triangleq {\rm KL} [q(X) || p(X|Z)] $, and define the negative-log-probability of the posterior distribution as $\psi(X) = -\log p(X|Z)$, then the update law of a natural gradient paradigm has closed-from [[1]](#1) as expectations of $\psi$ with respect to the proposal Gaussian. For generic distributions $\psi$, the expectations can be estimated using nonlinear quadratures; For Gaussian like posteriors, $p(X|Z) = \exp \left( \| \Lambda X - \Psi \mu \|_{K^{-1}}^2 \right)$, the expectations have closed-form, which is much more efficient.
 
+## A simple 1D example
+[A simple 1D example for nonlinear factor estimation](https://github.com/hzyu17/GaussianVI/blob/FB-GVI/scripts)
+
 ## Example applications
 Nonlinear state estimation [[2]](#2).
 
 [Stochastic Motion Planning](https://github.com/hzyu17/VIMP) [[3]](#3).
 
-## A simple 1-dimensional nonlinear estimation example
-A simple 1D example nonlinear posterior is under src folder. 
 
-**To run the code**
-```
-mkdir build && cd build
-cmake ..
-make
-./src/1d_example
-```
-This will run the experiment and save all the optimization results under the data/1d folder.
 
-**To visualize** the groundtruth cost map, the iteration results, and the total cost of each iteration, run the jupyter notebook 
-```
-scripts/plot1dexample.ipynb
-``` 
 
 ## References
 <a id="1">[1]</a> 

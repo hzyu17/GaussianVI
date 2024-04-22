@@ -163,7 +163,7 @@ TEST(TestGH, sp_gh){
 
 TEST(TestGH, sp_gh_multidim){
     // Test for multiple dimension functions
-    int deg = 8; 
+    int deg = 10; 
     int dim = 2;
     VectorXd mean_2d(2);
     mean_2d.setZero();

@@ -13,6 +13,8 @@
 
 #include <eigen3/Eigen/Dense>
 #include <iostream>
+#include "helpers/CommonDefinitions.h"
+
 using namespace Eigen;
 
 namespace gvi{

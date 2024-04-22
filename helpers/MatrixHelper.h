@@ -16,7 +16,8 @@
 
 #include "helpers/CommonDefinitions.h"
 #include <Eigen/Dense>
-
+#include <boost/archive/binary_oarchive.hpp>
+#include <boost/archive/binary_iarchive.hpp>
 
 using namespace Eigen;
 
@@ -25,8 +26,8 @@ namespace gvi {
 class Matrix3D : public MatrixXd{
 public:
     Matrix3D(){}
-    Matrix3D(int row, int col, int nt):MatrixXd(row*col, nt) {}    
-    Matrix3D(const Matrix3D& mat): Eigen::MatrixXd(mat) {}
+    Matrix3D(int row, int col, int nt):_row{row}, _col{col}, _nt{nt}, MatrixXd(row*col, nt) {}    
+    Matrix3D(const Matrix3D& mat):_row{mat._row}, _col{mat._col}, _nt{mat._nt},  Eigen::MatrixXd(mat) {}
     Matrix3D(const MatrixXd & mat): MatrixXd(mat){}
 
     // Overloaded assignment operator that takes an Eigen::MatrixXd as input
@@ -35,8 +36,12 @@ public:
         // additional custom logic for MyMatrix
         return *this;
     }
+
+public:
+    int _row, _col, _nt;
     
 };
+
 
 class MatrixIO{
     public:
@@ -157,5 +162,59 @@ private:
 
 
 } // namespace gvi
+
+
+using namespace gvi;
+// Define the serialization of iteration data type.
+namespace boost {
+   namespace serialization {        
+        template<class Archive>
+        void save(Archive& ar, 
+                  const Matrix3D& mat3d, 
+                  const unsigned int version) 
+        {   
+            int row = mat3d._row;
+            int col = mat3d._col;
+            int nt = mat3d._nt;
+
+            MatrixXd mat{mat3d};
+            ar & row;
+            ar & col;
+            ar & nt;
+            ar & mat;
+        }
+
+        template<class Archive>
+        void load(Archive& ar, Matrix3D& mat3d, const unsigned int version) {
+            
+            int row = 0;
+            int col = 0;
+            int nt = 0;
+            
+
+            ar & row;
+            ar & col;
+            ar & nt;
+
+            MatrixXd mat(row*col, nt);
+
+            ar & mat;
+
+            mat3d = mat;
+
+        }
+
+        // The serialization is split into save and load here.
+        template<class Archive>
+        inline void serialize(
+            Archive & ar, 
+            Matrix3D& mat3d, 
+            const unsigned int version)
+        {
+            split_free(ar, mat3d, version);
+        }
+
+    }
+}
 
 #endif // MATRIX_HELPER_H

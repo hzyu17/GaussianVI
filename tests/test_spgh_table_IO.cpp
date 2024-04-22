@@ -33,7 +33,7 @@ TEST(TestGH, data_io){
 
     // Save the map to a binary file
     {
-        std::ofstream ofs(source_root+"/tests/map_data.bin", std::ios::binary);
+        std::ofstream ofs("tests/map_data.bin", std::ios::binary);
         boost::archive::binary_oarchive oa(ofs);
         oa << testMap;
     }
@@ -42,7 +42,7 @@ TEST(TestGH, data_io){
     std::unordered_map<DegreeDim, PointsWeights> loadedHashMap;
 
     {
-        std::ifstream ifs(source_root+"/tests/map_data.bin", std::ios::binary);
+        std::ifstream ifs("tests/map_data.bin", std::ios::binary);
         boost::archive::binary_iarchive ia(ifs);
         ia >> loadedHashMap;
     }
@@ -60,7 +60,7 @@ TEST(TestGH, gh_weight_data){
     std::unordered_map<DegreeDim, PointsWeights> loadedWeightMap;
 
     {
-        std::ifstream ifs(source_root+"/quadrature/SparseGHQuadratureWeights.bin", std::ios::binary);
+        std::ifstream ifs("quadrature/SparseGHQuadratureWeights.bin", std::ios::binary);
         boost::archive::binary_iarchive ia(ifs);
         ia >> loadedWeightMap;
     }

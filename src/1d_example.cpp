@@ -22,7 +22,7 @@
 using namespace Eigen;
 using namespace gvi;
 
-double cost_function(const VectorXd& vec_x){
+double cost_function(const VectorXd& vec_x, const gvi::NoneType& none_type){
     double x = vec_x(0);
     double mu_p = 20, f = 400, b = 0.1, sig_r_sq = 0.09;
     double sig_p_sq = 9;
@@ -39,21 +39,32 @@ int main(){
 
     EigenWrapper _ei;
     typedef std::function<double(const VectorXd&)> Function;
-    typedef NGDFactorizedSimpleGH<Function> OptFact;
     
     int dim_state = 1;
     int num_states = 1;
     int dim_factor = 1;
+    int start_index = 0;
+    int gh_degree = 10;
 
-    std::vector<std::shared_ptr<OptFact>> vec_opt_fact;
-    std::shared_ptr<OptFact> p_opt_fac{new OptFact(dim_factor, dim_state, num_states, 0, cost_function)};
+    double temperature = 1.0;
+    double high_temperature = 10.0;
+
+    std::vector<std::shared_ptr<NGDFactorizedSimpleGH>> vec_opt_fact;
+    gvi::NoneType none_type;
+
+    std::shared_ptr<NGDFactorizedSimpleGH> p_opt_fac{new NGDFactorizedSimpleGH(dim_factor, dim_state, gh_degree, 
+                                                                               cost_function, none_type, 
+                                                                               num_states, start_index,
+                                                                               temperature, high_temperature)
+                                                    };
+    
     VectorXd init_mu{VectorXd::Constant(1, 20.0)};
     SpMat init_prec(1, 1);
     init_prec.setZero();
     init_prec.coeffRef(0, 0) = 1.0/9.0;
 
     vec_opt_fact.emplace_back(p_opt_fac);
-    NGDGH<OptFact> opt{vec_opt_fact, dim_state, num_states};
+    NGDGH<NGDFactorizedSimpleGH> opt{vec_opt_fact, dim_state, num_states};
 
     std::string source_root{XSTRING(SOURCE_ROOT)};
     std::string prefix{source_root+"/data/1d/"};
@@ -62,7 +73,7 @@ int main(){
     std::string costmap_file{source_root+"/data/1d/costmap.csv"};
     opt.save_costmap(costmap_file);
 
-    opt.set_GH_degree(20);
+    // opt.set_GH_degree(8);
     opt.set_initial_values(init_mu, init_prec);
     opt.set_step_size_base(0.75);
     std::cout << "opt.mu " << std::endl << opt.mean() << std::endl;
