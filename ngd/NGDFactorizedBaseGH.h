@@ -23,11 +23,13 @@ using namespace Eigen;
 
 namespace gvi{
 
+struct NoneType {};
+
 template <typename CostClass = NoneType>
 class NGDFactorizedBaseGH: public NGDFactorizedBase{
 
     using NGDBase = NGDFactorizedBase;
-    typedef std::function<double(const VectorXd&, const gvi::NoneType &)> Function;
+    using Function = std::function<double(const VectorXd&, const CostClass &)>;
 
 public:
     ///@param dimension The dimension of the state
