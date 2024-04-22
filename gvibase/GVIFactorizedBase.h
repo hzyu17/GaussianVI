@@ -69,6 +69,31 @@ public:
 /// public functions
 public:
 
+/// update the GH approximator
+    void updateGH(const VectorXd& x, const MatrixXd& P){
+        _gh->update_mean(x);
+        _gh->update_P(P); 
+    }
+
+    /**
+     * @brief returns the E_q{phi(x)} = E_q{-log(p(x,z))}
+     */
+    inline double E_Phi() {
+        return _gh->Integrate(_func_phi)(0, 0);
+    }
+
+    inline MatrixXd E_xMuPhi(){
+        return _gh->Integrate(_func_Vmu);
+    }
+
+    inline MatrixXd E_xMuxMuTPhi(){
+        return _gh->Integrate(_func_Vmumu);
+    }
+
+    void set_GH_points(int p){
+        _gh->set_polynomial_deg(p);
+    }
+
     
     /**
      * @brief Update the step size
@@ -197,6 +222,11 @@ public:
     VectorXd _mu;
     
     GHFunction _func_phi;
+    GHFunction _func_Vmu;
+    GHFunction _func_Vmumu;
+
+    /// G-H quadrature class
+    std::shared_ptr<GH> _gh;
 
 protected:
 

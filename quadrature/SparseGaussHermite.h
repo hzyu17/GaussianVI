@@ -15,9 +15,6 @@
 #include "quadrature/SparseGHQuadratureWeights.h"
 #include "helpers/CommonDefinitions.h"
 
-
-#include "helpers/timer.h"
-
 #ifdef GVI_SUBDUR_ENV
 std::string map_file{source_root+"/GaussianVI/quadrature/SparseGHQuadratureWeights.bin"};
 #else
@@ -151,14 +148,9 @@ public:
         
         Eigen::VectorXd pt(_dim);
 
-        // Timer timer;
-        // timer.start();
-
         for (int i=0; i<_sigmapts.rows(); i++){
             
             pt = _sigmapts.row(i);
-            // std::cout << "pt " << std::endl << pt << std::endl;
-            // Eigen::MatrixXd f_pt{function(pt)};
             res += function(pt)*_Weights(i);
 
         }
@@ -211,12 +203,12 @@ public:
         _mean = mean;
         _P = P;
 
-        Timer timer;
-        timer.start();
+        // Timer timer;
+        // timer.start();
         computeSigmaPtsWeights();
 
-        std::cout << "========== Compute weight time" << std::endl;
-        timer.end_mus();
+        // std::cout << "========== Compute weight time" << std::endl;
+        // timer.end_mus();
     }
 
 
