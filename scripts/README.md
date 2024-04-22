@@ -15,5 +15,4 @@ This will run the experiment and save all the optimization results under the dat
 scripts/plot1dexample.ipynb
 ``` 
 
-Extected output figure:
-<img src="https://github.com/hzyu17/GaussianVI/blob/FB-GVI/scripts/figures/1d_NGD_gt.pdf" width="800">
+<a href="path/to/document.pdf" target="_blank">View the Extected output figure</a>
