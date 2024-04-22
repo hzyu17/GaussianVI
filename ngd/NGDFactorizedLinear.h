@@ -16,13 +16,13 @@
 #ifndef NGDFactorizedLinear_H
 #define NGDFactorizedLinear_H
 
-#include "gvibase/GVIFactorizedLinearBase.h"
+#include "gvibase/GVIFactorizedBase.h"
 #include "gp/linear_factor.h"
 
 namespace gvi{
-template <typename Factor>
-class NGDFactorizedLinear : public GVIFactorizedLinearBase{
-    using Base = GVIFactorizedLinearBase;
+template <typename Factor = NoneType>
+class NGDFactorizedLinear : public GVIFactorizedBase{
+    using Base = GVIFactorizedBase;
     using CostFunction = std::function<double(const VectorXd&, const Factor&)>;
 public:
     NGDFactorizedLinear(const int& dimension,
@@ -37,10 +37,7 @@ public:
         _linear_factor{linear_factor}
         {
             Base::_func_phi = [this, function, linear_factor](const VectorXd& x){return MatrixXd::Constant(1, 1, function(x, linear_factor) / this->temperature() );};
-            // Base::_func_Vmu = [this, function, linear_factor](const VectorXd& x){return (x-Base::_mu) * function(x, linear_factor) / this->temperature();};
-            // Base::_func_Vmumu = [this, function, linear_factor](const VectorXd& x){return MatrixXd{(x-Base::_mu) * (x-Base::_mu).transpose() * function(x, linear_factor) / this->temperature() };};
-            // Base::_gh = std::make_shared<GH>(GH{gh_degree, dimension, Base::_mu, Base::_covariance});
-
+        
             _target_mean = linear_factor.get_mu();
             _target_precision = linear_factor.get_precision();
             _Lambda = linear_factor.get_Lambda();
