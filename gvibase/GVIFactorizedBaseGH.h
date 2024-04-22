@@ -33,9 +33,8 @@ public:
      * @param dimension The dimension of the state
      */
     GVIFactorizedBaseGH(int dimension, int state_dim, int num_states, int start_index, 
-                        double temperature=10.0, double high_temperature=100.0, bool is_linear=false):
-            Base(dimension, state_dim, num_states, start_index, temperature, high_temperature, is_linear){
-
+                        double temperature=10.0, double high_temperature=100.0):
+            Base(dimension, state_dim, num_states, start_index, temperature, high_temperature){
             }
             
 public:
@@ -66,8 +65,8 @@ public:
     }
     
 public:
-    CostFunction _func_Vmu;
-    CostFunction _func_Vmumu;
+    GHFunction _func_Vmu;
+    GHFunction _func_Vmumu;
 
     /// G-H quadrature class
     std::shared_ptr<GH> _gh;
