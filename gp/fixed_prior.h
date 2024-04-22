@@ -12,7 +12,7 @@
 
 #pragma once
 
-#include "linear_factor.h"
+#include "gp/linear_factor.h"
 
 namespace gvi{
 
