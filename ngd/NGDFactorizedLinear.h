@@ -17,7 +17,7 @@
 #define NGDFactorizedLinear_H
 
 #include "gvibase/GVIFactorizedBase.h"
-#include "gp/linear_factor.h"
+// #include "gp/linear_factor.h"
 
 namespace gvi{
 template <typename Factor = NoneType>
@@ -61,6 +61,36 @@ public:
         * (partial V^2) / (partial mu)(partial mu^T): higher order moments of a Gaussian.
     */
 
+    inline VectorXd local2joint_dmu() override{ 
+        VectorXd res(this->_joint_size);
+        res.setZero();
+        this->_block.fill_vector(res, this->_Vdmu);
+        return res;
+    }
+
+    inline SpMat local2joint_dprecision() override{ 
+        SpMat res(this->_joint_size, this->_joint_size);
+        res.setZero();
+        this->_block.fill(this->_Vddmu, res);
+        return res;
+    }
+
+
+    /**
+     * @brief returns the (x-mu)*Phi(x) 
+     */
+    inline MatrixXd xMu_negative_log_probability(const VectorXd& x) const{
+        return _func_Vmu(x);
+    }
+
+    /**
+     * @brief returns the (x-mu)(x-mu)^T*Phi(x) 
+     */
+    inline MatrixXd xMuxMuT_negative_log_probability(const VectorXd& x) const{
+        return _func_Vmumu(x);
+    }
+
+
     void calculate_partial_V() override{
         _Vdmu.setZero();
         _Vddmu.setZero();
@@ -87,32 +117,6 @@ public:
 
         _Vddmu = (_precision * tmp * _precision - _precision * (AT_precision_A*_covariance).trace()) * constant() / this->temperature();
     }
-
-    // /**
-    //  * Same function calculate_partial_V() using GH quadratures.
-    //  */
-
-    // void calculate_partial_V() override{
-    //     // update the mu and sigma inside the gauss-hermite integrator
-    //     updateGH(this->_mu, this->_covariance);
-
-    //     this->_Vdmu.setZero();
-    //     this->_Vddmu.setZero();
-
-    //     /// Integrate for E_q{_Vdmu} 
-    //     this->_Vdmu = this->_gh->Integrate(this->_func_Vmu);
-    //     this->_Vdmu = this->_precision * this->_Vdmu;
-
-    //     /// Integrate for E_q{phi(x)}
-    //     double E_phi = this->_gh->Integrate(this->_func_phi)(0, 0);
-        
-    //     /// Integrate for partial V^2 / ddmu_ 
-    //     MatrixXd E_xxphi{this->_gh->Integrate(this->_func_Vmumu)};
-
-    //     this->_Vddmu.triangularView<Upper>() = (this->_precision * E_xxphi * this->_precision - this->_precision * E_phi).triangularView<Upper>();
-    //     this->_Vddmu.triangularView<StrictlyLower>() = this->_Vddmu.triangularView<StrictlyUpper>().transpose();
-
-    // }
 
     double fact_cost_value(const VectorXd& fill_joint_mean, const SpMat& joint_cov) override {
         VectorXd mean_k = Base::extract_mu_from_joint(fill_joint_mean);
