@@ -76,19 +76,19 @@ public:
     }
 
 
-    /**
-     * @brief returns the (x-mu)*Phi(x) 
-     */
-    inline MatrixXd xMu_negative_log_probability(const VectorXd& x) const{
-        return _func_Vmu(x);
-    }
+    // /**
+    //  * @brief returns the (x-mu)*Phi(x) 
+    //  */
+    // inline MatrixXd xMu_negative_log_probability(const VectorXd& x) const{
+    //     return _func_Vmu(x);
+    // }
 
-    /**
-     * @brief returns the (x-mu)(x-mu)^T*Phi(x) 
-     */
-    inline MatrixXd xMuxMuT_negative_log_probability(const VectorXd& x) const{
-        return _func_Vmumu(x);
-    }
+    // /**
+    //  * @brief returns the (x-mu)(x-mu)^T*Phi(x) 
+    //  */
+    // inline MatrixXd xMuxMuT_negative_log_probability(const VectorXd& x) const{
+    //     return _func_Vmumu(x);
+    // }
 
 
     void calculate_partial_V() override{
