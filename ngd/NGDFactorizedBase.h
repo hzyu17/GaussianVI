@@ -18,8 +18,9 @@
 
 namespace gvi{
 
-class NGDFactorizedBase : public GVIFactorizedBase{
+struct NoneType{};
 
+class NGDFactorizedBase : public GVIFactorizedBase{
 public:
 
     NGDFactorizedBase(int dimension, int state_dim, int num_states, int start_index, 

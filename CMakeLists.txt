@@ -38,7 +38,7 @@ else()
     set(Matlab_INCLUDE_DIRS "${MATLAB_ROOT_DIR}/extern/include")
     set(Matlab_MEX_LIBRARY "${MATLAB_ROOT_DIR}/bin/glnxa64/libmex.so")  # Adjust the path accordingly
     set(MCR_LIBRARY_PATH "${MATLAB_ROOT_DIR}/runtime/glnxa64") 
-    find_library(Matlab_MX_LIBRARY NAMES libmx.so PATHS "{MATLAB_ROOT_DIR}/bin/glnxa64")
+    # find_library(Matlab_MX_LIBRARY NAMES libmx.so PATHS "{MATLAB_ROOT_DIR}/bin/glnxa64")
     set(libSpGH_LIBRARY "${CMAKE_CURRENT_SOURCE_DIR}/quadrature/libSpGH/for_testing/libSpGH.so")
 
 
@@ -58,7 +58,8 @@ foreach(gvi_source ${gvi_SOURCES})
                             RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/src"
                             )   
     target_link_libraries(${gvi_name} ${EIGEN3_LIBRARIES} ${Matlab_MEX_LIBRARY} 
-                          ${Matlab_MX_LIBRARY} ${libSpGH_LIBRARY} ${MCR_LIBRARY_PATH}/libmwmclmcrrt.so.9.9 Boost::serialization)
+                        #   ${Matlab_MX_LIBRARY} 
+                          ${libSpGH_LIBRARY} ${MCR_LIBRARY_PATH}/libmwmclmcrrt.so.9.9 Boost::serialization)
     target_include_directories(${gvi_name} PRIVATE ${Matlab_INCLUDE_DIRS})
 endforeach()
 
@@ -81,7 +82,8 @@ foreach(test_source ${test_SOURCES})
     set_target_properties(${test_name} PROPERTIES
                             RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/tests"
                             )  
-    target_link_libraries( ${test_name} GTest::gtest_main ${Matlab_MEX_LIBRARY} ${Matlab_MX_LIBRARY} 
+    target_link_libraries( ${test_name} GTest::gtest_main ${Matlab_MEX_LIBRARY} 
+    # ${Matlab_MX_LIBRARY} 
                            ${libSpGH_LIBRARY} ${MCR_LIBRARY_PATH}/libmwmclmcrrt.so.9.9 Boost::serialization)
     gtest_discover_tests(${test_name})
     target_include_directories(${test_name} PRIVATE ${Matlab_INCLUDE_DIRS})

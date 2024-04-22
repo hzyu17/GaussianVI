@@ -22,7 +22,7 @@
 using namespace Eigen;
 using namespace gvi;
 
-double cost_function(const VectorXd& vec_x){
+double cost_function(const VectorXd& vec_x, const gvi::NoneType& none_type){
     double x = vec_x(0);
     double mu_p = 20, f = 400, b = 0.1, sig_r_sq = 0.09;
     double sig_p_sq = 9;
@@ -38,22 +38,23 @@ double cost_function(const VectorXd& vec_x){
 int main(){
 
     EigenWrapper _ei;
-    typedef std::function<double(const VectorXd&)> Function;
-    typedef NGDFactorizedSimpleGH<Function> OptFact;
+    // typedef std::function<double(const VectorXd&, const gvi::NoneType &)> Function;
+    // typedef NGDFactorizedSimpleGH<Function> OptFact;
     
     int dim_state = 1;
     int num_states = 1;
     int dim_factor = 1;
 
-    std::vector<std::shared_ptr<OptFact>> vec_opt_fact;
-    std::shared_ptr<OptFact> p_opt_fac{new OptFact(dim_factor, dim_state, num_states, 0, cost_function)};
+    std::vector<std::shared_ptr<NGDFactorizedSimpleGH>> vec_opt_fact;
+    NoneType none_type_instance;
+    std::shared_ptr<NGDFactorizedSimpleGH> p_opt_fac{new NGDFactorizedSimpleGH(dim_factor, dim_state, num_states, 0, cost_function, none_type_instance)};
     VectorXd init_mu{VectorXd::Constant(1, 20.0)};
     SpMat init_prec(1, 1);
     init_prec.setZero();
     init_prec.coeffRef(0, 0) = 1.0/9.0;
 
     vec_opt_fact.emplace_back(p_opt_fac);
-    NGDGH<OptFact> opt{vec_opt_fact, dim_state, num_states};
+    NGDGH<NGDFactorizedSimpleGH> opt{vec_opt_fact, dim_state, num_states};
 
     std::string source_root{XSTRING(SOURCE_ROOT)};
     std::string prefix{source_root+"/data/1d/"};
