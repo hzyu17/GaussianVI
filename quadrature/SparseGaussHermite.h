@@ -91,14 +91,23 @@ public:
 
             _zeromeanpts = std::get<0>(pts_weights);
             _Weights = std::get<1>(pts_weights);
+            
+            // Eigenvalue decomposition
+            Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> eigensolver(_P);
+            if (eigensolver.info() != Eigen::Success) {
+                std::cerr << "Eigenvalue decomposition failed!" << std::endl;
+                return;
+            }
 
-            // compute matrix sqrt of P
-            Eigen::LLT<MatrixXd> lltP(_P);
-            _sqrtP = lltP.matrixL();
-            // Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> es(_P);
-            // _sqrtP = es.operatorSqrt();
+            // Compute square roots of the eigenvalues
+            Eigen::MatrixXd D = eigensolver.eigenvalues().asDiagonal();
+            Eigen::MatrixXd sqrtD = D.unaryExpr([](double elem) { return std::sqrt(std::max(0.0, elem)); });
 
-            _sigmapts = (_zeromeanpts*_sqrtP).rowwise() + _mean.transpose(); 
+            // Compute the square root of the matrix
+            Eigen::MatrixXd _sqrtP = eigensolver.eigenvectors() * sqrtD * eigensolver.eigenvectors().transpose();
+
+            _sigmapts = (_zeromeanpts*_sqrtP.transpose()).rowwise() + _mean.transpose(); 
+
         } else {
             std::cout << "(dimension, degree) " << "(" << _dim << ", " << _deg << ") " <<
              "key does not exist in the GH weight map." << std::endl;
@@ -117,6 +126,9 @@ public:
 
         PointsWeightsTuple pts_weights;
         if (weights_map.count(dim_deg) > 0) {
+            std::cout << "(dimension, degree) tuple: " << "(" << _dim << ", " << _deg << ") " <<
+             "exists in the GH weight map." << std::endl;
+            
             pts_weights = weights_map.at(dim_deg);
 
             _zeromeanpts = std::get<0>(pts_weights);

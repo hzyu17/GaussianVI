@@ -144,9 +144,7 @@ tic
 [x_sp, w_sp] = nwspgr('GQN', D, maxk);
 
 % ------ Shift the mean and cov of the sigma points ------
-disp("sig:  ")
-sig
-
+disp("sig"
 num_pts = size(x_sp, 1);
 pts = x_sp*sig' + m';
 g21 = zeros(num_pts,2);
