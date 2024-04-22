@@ -16,4 +16,4 @@ scripts/plot1dexample.ipynb
 ``` 
 
 Extected output figure:
-<img src="https://github.com/hzyu17/GaussianVI/blob/master/figures/compare_go_through_go_around.png" width="600">
+<img src="https://github.com/hzyu17/GaussianVI/blob/FB-GVI/scripts/figures/1d_NGD_gt.pdf" width="800">
