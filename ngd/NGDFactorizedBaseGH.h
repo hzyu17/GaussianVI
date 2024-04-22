@@ -34,16 +34,17 @@ public:
     ///@param function Template function class which calculate the cost
     // NGDFactorizedBaseGH(const int& dimension, const Function& function, const CostClass& cost_class_, const MatrixXd& Pk_):
     
-    NGDFactorizedBaseGH(int dimension, int state_dim, int num_states, int start_index, 
-                          const Function& function, const CostClass& cost_class,
-                            double temperature=1.0, double high_temperature=10.0):
+    NGDFactorizedBaseGH(int dimension, int state_dim, int gh_degree, 
+                        const Function& function, const CostClass& cost_class,
+                        int num_states, int start_index, 
+                        double temperature=1.0, double high_temperature=10.0):
                 GVIBase(dimension, state_dim, num_states, start_index, temperature, high_temperature)
             {
                 /// Override of the GVIBase classes.
                 GVIBase::_func_phi = [this, function, cost_class](const VectorXd& x){return MatrixXd::Constant(1, 1, function(x, cost_class));};
                 GVIBase::_func_Vmu = [this, function, cost_class](const VectorXd& x){return (x-GVIBase::_mu) * function(x, cost_class);};
                 GVIBase::_func_Vmumu = [this, function, cost_class](const VectorXd& x){return MatrixXd{(x-GVIBase::_mu) * (x-GVIBase::_mu).transpose().eval() * function(x, cost_class)};};
-                GVIBase::_gh = std::make_shared<GH>(GH{10, GVIBase::_dim, GVIBase::_mu, GVIBase::_covariance});
+                GVIBase::_gh = std::make_shared<GH>(GH{gh_degree, GVIBase::_dim, GVIBase::_mu, GVIBase::_covariance});
             }
 public:
 void calculate_partial_V() override{

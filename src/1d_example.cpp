@@ -44,11 +44,19 @@ int main(){
     int num_states = 1;
     int dim_factor = 1;
     int start_index = 0;
+    int gh_degree = 10;
+
+    double temperature = 1.0;
+    double high_temperature = 10.0;
 
     std::vector<std::shared_ptr<NGDFactorizedSimpleGH>> vec_opt_fact;
     gvi::NoneType none_type;
 
-    std::shared_ptr<NGDFactorizedSimpleGH> p_opt_fac{new NGDFactorizedSimpleGH(dim_factor, dim_state, num_states, start_index, cost_function, none_type)};
+    std::shared_ptr<NGDFactorizedSimpleGH> p_opt_fac{new NGDFactorizedSimpleGH(dim_factor, dim_state, gh_degree, 
+                                                                               cost_function, none_type, 
+                                                                               num_states, start_index,
+                                                                               temperature, high_temperature)
+                                                    };
     
     VectorXd init_mu{VectorXd::Constant(1, 20.0)};
     SpMat init_prec(1, 1);
