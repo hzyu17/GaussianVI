@@ -15,4 +15,4 @@ This will run the experiment and save all the optimization results under the dat
 scripts/plot1dexample.ipynb
 ``` 
 
-<a href="path/to/document.pdf" target="_blank">View the Extected output figure</a>
+<a href="figures/1d_NGD_gt.pdf" target="_blank">View the Extected output figure</a>

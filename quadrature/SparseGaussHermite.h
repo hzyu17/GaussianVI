@@ -47,9 +47,11 @@ public:
                 try {
                     std::ifstream ifs(map_file, std::ios::binary);
                     if (!ifs.is_open()) {
-                        throw std::runtime_error("Failed to open file for GH weights reading");
+                        std::string error_msg = "Failed to open file for GH weights reading in file: " + map_file;
+                        throw std::runtime_error(error_msg);
                     }
 
+                    std::cout << "Opening file for GH weights reading in file: " << map_file << std::endl;
                     boost::archive::binary_iarchive ia(ifs);
                     ia >> _nodes_weights_map;
 
