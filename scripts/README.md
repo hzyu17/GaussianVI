@@ -8,7 +8,7 @@ $$x \sim \mathcal{N}(\mu_p, \sigma_p^2).$$
 Generate an artificial measurement following
 $$y = \frac{fb}{x}+n, ~ ~ n\sim \mathcal{N}(0, \sigma_r^2).$$
 
-The two factors are thus defined as 
+The two factors (1 Gaussian and 1 nonlinear) are thus defined as 
 $$\phi = \frac{1}{2}\frac{(x-\mu_p)^2}{\sigma_p^2}, ~ ~ \psi = \frac{1}{2} \frac{(y-\frac{fb}{x})^2}{\sigma_r^2}.$$
 
 The cost function in the variational inference problem is 
