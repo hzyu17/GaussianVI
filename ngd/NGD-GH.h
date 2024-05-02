@@ -65,24 +65,24 @@ public:
     std::tuple<VectorXd, SpMat> compute_gradients() override;
 
 
-    // std::tuple<double, VectorXd, SpMat> onestep_linesearch(const double &step_size, const VectorXd& dmu, const SpMat& dprecision) override;
+    std::tuple<double, VectorXd, SpMat> onestep_linesearch(const double &step_size, const VectorXd& dmu, const SpMat& dprecision) override;
 
-    // inline void update_proposal(const VectorXd& new_mu, const SpMat& new_precision) override;
+    inline void update_proposal(const VectorXd& new_mu, const SpMat& new_precision) override;
 
     /**
      * @brief Compute the total cost function value given a state, using current values.
      */
-    // double cost_value() override;
+    double cost_value() override;
 
     /**
      * @brief given a state, compute the total cost function value without the entropy term, using current values.
      */
-    // double cost_value_no_entropy() override;
+    double cost_value_no_entropy() override;
 
     /**
      * @brief Compute the costs of all factors, using current values.
      */
-    // VectorXd factor_cost_vector() override;
+    VectorXd factor_cost_vector() override;
     
 
     inline VectorXd Vdmu() const {return _Vdmu; }

@@ -127,21 +127,21 @@ public:
     //  */
     // virtual void optimize(std::optional<bool> verbose= std::nullopt);
 
-    std::tuple<double, VectorXd, SpMat> onestep_linesearch(const double &step_size, const VectorXd& dmu, const SpMat& dprecision);
+    virtual std::tuple<double, VectorXd, SpMat> onestep_linesearch(const double &step_size, const VectorXd& dmu, const SpMat& dprecision){};
 
-    inline void update_proposal(const VectorXd& new_mu, const SpMat& new_precision);
+    virtual inline void update_proposal(const VectorXd& new_mu, const SpMat& new_precision){};
 
-    double cost_value();
+    virtual double cost_value(){};
 
     /**
      * @brief given a state, compute the total cost function value without the entropy term, using current values.
      */
-    double cost_value_no_entropy();
+    virtual double cost_value_no_entropy(){};
 
     /**
      * @brief Default computation of the cost vector.
      */
-    VectorXd factor_cost_vector();
+    virtual VectorXd factor_cost_vector(){};
 
 
 /// **************************************************************

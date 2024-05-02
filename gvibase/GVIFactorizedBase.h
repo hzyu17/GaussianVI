@@ -75,8 +75,7 @@ public:
      * @brief Update the step size
      */
     inline void set_step_size(double ss_mean, double ss_precision){
-        _step_size_mu = ss_mean;
-        _step_size_Sigma = ss_precision; 
+        _step_size = ss_mean;
     }
 
     /**
@@ -211,8 +210,7 @@ protected:
     MatrixXd _covariance, _dcovariance;
 
     /// step sizes
-    double _step_size_mu = 0.9;
-    double _step_size_Sigma = 0.9;
+    double _step_size = 0.9;
     double _E_Phi = 0.0;
 
     double _temperature, _high_temperature;

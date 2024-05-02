@@ -108,7 +108,6 @@ void calculate_partial_V() override{
         return this->_gh->Integrate(this->_func_phi)(0, 0);
     }
     
-    typedef std::shared_ptr<NGDFactorizedBaseGH> shared_ptr;
 
 };
 
