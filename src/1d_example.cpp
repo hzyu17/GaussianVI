@@ -45,6 +45,7 @@ int main(){
     int dim_factor = 1;
     int start_index = 0;
     int gh_degree = 10;
+    int n_iters = 10;
 
     double temperature = 1.0;
     double high_temperature = 10.0;
@@ -64,7 +65,8 @@ int main(){
     init_prec.coeffRef(0, 0) = 1.0/9.0;
 
     vec_opt_fact.emplace_back(p_opt_fac);
-    NGDGH<NGDFactorizedSimpleGH> opt{vec_opt_fact, dim_state, num_states};
+    NGDGH<NGDFactorizedSimpleGH> opt{vec_opt_fact, dim_state, num_states, n_iters};
+    opt.set_niter_low_temperature(n_iters);
 
     std::string source_root{XSTRING(SOURCE_ROOT)};
     std::string prefix{source_root+"/data/1d/"};
