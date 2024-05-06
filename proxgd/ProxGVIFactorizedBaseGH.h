@@ -60,12 +60,12 @@ public:
         Eigen::MatrixXd Sigk(this->_dim, this->_dim);
         Sigk.setZero();
 
-        Mk = Identity - Sk;
+        Mk = Identity - this->_step_size*Sk;
         Sigk = this->_covariance;
 
         Eigen::MatrixXd Sigk_half(this->_dim, this->_dim);
         Sigk_half.setZero();
-        Sigk_half = Sigk - this->_step_size* Mk*Sigk*Mk.transpose();
+        Sigk_half = Mk*Sigk*Mk.transpose();
         
         Eigen::MatrixXd temp = Identity;
         temp = Sigk_half*(Sigk_half + 4.0*this->_step_size*Identity);

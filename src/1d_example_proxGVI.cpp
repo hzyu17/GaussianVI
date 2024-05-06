@@ -45,7 +45,7 @@ int main(){
     int dim_factor = 1;
     int start_index = 0;
     int gh_degree = 10;
-    int n_iters = 10;
+    int n_iters = 20;
 
     double temperature = 1.0;
     double high_temperature = 10.0;
@@ -57,7 +57,7 @@ int main(){
                                                                                cost_function, none_type, 
                                                                                num_states, start_index,
                                                                                temperature, high_temperature)
-                                                    };
+                                                        };
     
     VectorXd init_mu{VectorXd::Constant(1, 20.0)};
     SpMat init_prec(1, 1);
