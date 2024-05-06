@@ -131,6 +131,17 @@ public:
      */
     virtual double fact_cost_value(const VectorXd& fill_joint_mean, const SpMat& joint_cov) {}
 
+    /**
+     * @brief Place holder for computing BW gradients for Gaussian distributions.
+     */
+    virtual void compute_BW_grads(){}
+
+    /**
+     * @brief Place holder for proximal GVI algorithm line search.
+     * 
+     */
+    virtual std::tuple<Eigen::VectorXd, Eigen::MatrixXd> compute_gradients_linesearch(const double & step_size){}
+
     // /**
     //  * @brief Compute the cost function. V(x) = E_q(\phi(x)) using the current values.
     //  */
@@ -140,12 +151,16 @@ public:
      */
     virtual inline VectorXd local2joint_dmu() {}
 
+    virtual inline VectorXd local2joint_dmu(Eigen::VectorXd & dmu_lcl) {}
+
     /**
      * @brief Get the joint Pk.T * V^2 / dmu /dmu * Pk using block insertion
      */
     virtual inline SpMat local2joint_dprecision() {}
 
     virtual inline SpMat local2joint_dcovariance() {}
+
+    virtual inline SpMat local2joint_dprecision(Eigen::MatrixXd & dprecision_lcl){}
 
     inline SpMat fill_joint_cov(){
         SpMat joint_cov(_joint_size, _joint_size);
@@ -160,6 +175,8 @@ public:
         _block.fill_vector(_mu, joint_mean);
         return joint_mean;
     }
+
+
 
     /**
      * @brief Get the mean 

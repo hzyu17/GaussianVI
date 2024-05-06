@@ -73,7 +73,11 @@ public:
         return std::make_tuple(_dmu, _dprecision);
     }
 
-    std::tuple<double, VectorXd, SpMat> onestep_linesearch(const double &step_size, const VectorXd& dmu, const SpMat& dprecision) override;
+    std::tuple<double, VectorXd, SpMat> onestep_linesearch_prox(const double &step_size);
+
+    void compute_marginal_gradients();
+
+    void optimize(std::optional<bool> verbose=std::nullopt) override;
 
     inline void update_proposal(const VectorXd& new_mu, const SpMat& new_precision) override;
 

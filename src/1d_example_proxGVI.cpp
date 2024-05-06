@@ -57,7 +57,7 @@ int main(){
                                                                                cost_function, none_type, 
                                                                                num_states, start_index,
                                                                                temperature, high_temperature)
-                                                        };
+                                                    };
     
     VectorXd init_mu{VectorXd::Constant(1, 20.0)};
     SpMat init_prec(1, 1);

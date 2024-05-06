@@ -165,6 +165,7 @@ public:
         for (int i=0; i<_sigmapts.rows(); i++){
             
             pt = _sigmapts.row(i);
+            // std::cout << "sigma pt" << pt << std::endl;
             res += function(pt)*_Weights(i);
 
         }

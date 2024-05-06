@@ -37,7 +37,10 @@ void save_pointweightmaps(){
 
     // Save the tuple to a binary file
     {
-        std::ofstream ofs(source_root+"/quadrature/SparseGHQuadratureWeights.bin", std::ios::binary);
+        std::string file_name = source_root+"/quadrature/SparseGHQuadratureWeights.bin";
+        std::cout << "Saving the sigma points and weights into the following file: " << std::endl <<
+         file_name << std::endl;
+        std::ofstream ofs(file_name, std::ios::binary);
         boost::archive::binary_oarchive oa(ofs);
         oa << map;
     }

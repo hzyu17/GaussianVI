@@ -103,7 +103,7 @@ public:
     /*
     * @brief The main optimization loop with line search algorithm.
     */
-    void optimize(std::optional<bool> verbose=std::nullopt);
+    virtual void optimize(std::optional<bool> verbose=std::nullopt);
 
     /**
      * @brief Compute the total cost function value given a mean and covariace.
