@@ -74,8 +74,8 @@ public:
     /**
      * @brief Update the step size
      */
-    inline void set_step_size(double ss_mean, double ss_precision){
-        _step_size = ss_mean;
+    inline void set_step_size(double step_size){
+        _step_size = step_size;
     }
 
     /**
@@ -124,7 +124,7 @@ public:
     /**
      * @brief Compute the increment on mean and precision (or covariance) matrix on the factorized level.
     */
-    virtual void calculate_partial_V(){}
+    virtual void calculate_partial_V(std::optional<double> step_size=std::nullopt){}
 
     /**
      * @brief Compute the cost function. V(x) = E_q(\phi(x))

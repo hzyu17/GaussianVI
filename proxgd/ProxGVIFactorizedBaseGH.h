@@ -43,7 +43,75 @@ public:
      * \hat b_k = K^{-1}(\mu_\theta - \mu) + \Sigma_\theta\mE[h(x)*(x-\mu_\theta)]
      * \hat S_k = K^{-1} + \Sigma_\theta\mE[(x-\mu_\theta)@(\nabla(h(x)).T)]
      */
-    void calculate_partial_V() override{
+    void calculate_partial_V(std::optional<double> stepsize_option=std::nullopt) override{
+
+        this->compute_BW_grads();
+        std::tuple<Eigen::VectorXd, Eigen::MatrixXd> gradients;
+
+        if (stepsize_option.has_value()){
+            gradients = BW_JKO(stepsize_option.value());
+        }else{
+            std::cout << "no step size input, using the default value in the class!" << std::endl;
+            gradients = BW_JKO(this->_step_size);
+        }
+        
+        this->_Vdmu = std::get<0>(gradients);
+        this->_Vddmu = std::get<1>(gradients);
+    }
+
+
+    std::tuple<Eigen::VectorXd, Eigen::MatrixXd> BW_JKO(double step_size){
+        Eigen::MatrixXd Identity(this->_dim, this->_dim);
+        Identity.setZero();
+        Identity = Eigen::MatrixXd::Identity(this->_dim, this->_dim);
+        
+        // Compute the proximal step
+        Eigen::MatrixXd Mk(this->_dim, this->_dim);
+        Mk.setZero();
+        Eigen::MatrixXd Sigk(this->_dim, this->_dim);
+        Sigk.setZero();
+
+        Mk = Identity - step_size*this->_Sk;
+        Sigk = this->_covariance;
+
+        bool Sk_symm = isSymmetric(this->_Sk);
+        bool Mk_symm = isSymmetric(Mk);
+
+        std::cout << "Sk_symm: " << Sk_symm << std::endl;
+        std::cout << "Mk_symm: " << Mk_symm << std::endl;
+
+        Eigen::MatrixXd Sigk_half(this->_dim, this->_dim);
+        Sigk_half.setZero();
+        Sigk_half = Mk*Sigk*Mk.transpose();
+        
+        Eigen::MatrixXd temp(this->_dim, this->_dim);
+        temp.setZero();
+        temp = Sigk_half*(Sigk_half + 4.0*step_size*Identity);
+
+        bool is_temp_spd = isSymmetricPositiveDefinite(temp);
+        std::cout << "is_temp_spd: " << is_temp_spd << std::endl;
+
+        temp = this->sqrtm(temp);
+
+        Eigen::VectorXd mk_new = this->_mu - step_size * this->_bk;
+        Eigen::MatrixXd Sigk_new(this->_dim, this->_dim);
+        Sigk_new.setZero();
+        Sigk_new = 0.5*Sigk_half + step_size*Identity + 0.5*temp;
+
+        bool is_Sigk_new_spd = isSymmetricPositiveDefinite(Sigk_new);
+        std::cout << "is_inv_Sigk_new_spd: " << is_Sigk_new_spd << std::endl;
+
+        Eigen::MatrixXd Precision_new(this->_dim, this->_dim);
+        Precision_new.setZero();
+        Precision_new = Sigk_new.inverse();
+
+        Eigen::VectorXd Vdmu = (mk_new - this->_mu) / step_size;
+        Eigen::MatrixXd Vddmu = (Precision_new - this->_precision) / step_size;
+        
+        return std::make_tuple(Vdmu, Vddmu);
+    }
+
+    std::tuple<Eigen::VectorXd, Eigen::MatrixXd> compute_gradients_linesearch(const double & step_size){
 
         this->compute_BW_grads();
 
@@ -62,7 +130,7 @@ public:
 
         Eigen::MatrixXd Sigk_half(this->_dim, this->_dim);
         Sigk_half.setZero();
-        Sigk_half = Mk*Sigk*Mk.transpose();
+        Sigk_half = Mk*Sigk*Mk;
         
         Eigen::MatrixXd temp = Identity;
         temp = Sigk_half*(Sigk_half + 4.0*this->_step_size*Identity);
@@ -74,44 +142,8 @@ public:
         Eigen::VectorXd mk_new = this->_mu - this->_step_size * _bk;
         Eigen::MatrixXd inv_Sigk_new = (0.5*Sigk_half + this->_step_size*Identity + 0.5*temp_2).inverse();
 
-        this->_Vdmu = (mk_new - this->_mu) / this->_step_size;
-        this->_Vddmu = (inv_Sigk_new - this->_precision) / this->_step_size;
-
-    }
-
-    std::tuple<Eigen::VectorXd, Eigen::MatrixXd> compute_gradients_linesearch(const double & step_size){
-
-        // compute_BW_grads();
-
-        Eigen::MatrixXd Identity(this->_dim, this->_dim);
-        Identity.setZero();
-        Identity = Eigen::MatrixXd::Identity(this->_dim, this->_dim);
-        
-        // Compute the proximal step
-        Eigen::MatrixXd Mk(this->_dim, this->_dim);
-        Mk.setZero();
-        Eigen::MatrixXd Sigk(this->_dim, this->_dim);
-        Sigk.setZero();
-
-        Mk = Identity - step_size*_Sk;
-        Sigk = this->_covariance;
-
-        Eigen::MatrixXd Sigk_half(this->_dim, this->_dim);
-        Sigk_half.setZero();
-        Sigk_half = Mk*Sigk*Mk.transpose();
-        
-        Eigen::MatrixXd temp = Identity;
-        temp = Sigk_half*(Sigk_half + 4.0*step_size*Identity);
-
-        Eigen::MatrixXd temp_2(this->_dim, this->_dim);
-        temp_2.setZero();
-        temp_2 = this->sqrtm(temp);
-
-        Eigen::VectorXd mk_new = this->_mu - step_size * _bk;
-        Eigen::MatrixXd inv_Sigk_new = (0.5*Sigk_half + step_size*Identity + 0.5*temp_2).inverse();
-
-        Eigen::VectorXd dmu = (mk_new - this->_mu) / step_size;
-        Eigen::MatrixXd dprecision = (inv_Sigk_new - this->_precision) / step_size;
+        Eigen::VectorXd dmu = (mk_new - this->_mu) / this->_step_size;
+        Eigen::MatrixXd dprecision = (inv_Sigk_new - this->_precision) / this->_step_size;
 
         return std::make_tuple(dmu, dprecision);
 
@@ -141,21 +173,46 @@ public:
         return res;
     }
 
-    inline VectorXd local2joint_dmu(Eigen::VectorXd & dmu_lcl){ 
-        VectorXd res(this->_joint_size);
-        res.setZero();
-        this->_block.fill_vector(res, dmu_lcl);
-        return res;
+    // inline VectorXd local2joint_dmu(Eigen::VectorXd & dmu_lcl){ 
+    //     VectorXd res(this->_joint_size);
+    //     res.setZero();
+    //     this->_block.fill_vector(res, dmu_lcl);
+    //     return res;
+    // }
+
+    // inline SpMat local2joint_dprecision(Eigen::MatrixXd & dprecision_lcl){ 
+    //     SpMat res(this->_joint_size, this->_joint_size);
+    //     res.setZero();
+    //     this->_block.fill(dprecision_lcl, res);
+    //     return res;
+    // }
+
+    // Helper functions
+    bool isSymmetric(const Eigen::MatrixXd& matrix, double precision = 1e-10) {
+        return (matrix - matrix.transpose()).cwiseAbs().maxCoeff() <= precision;
     }
 
-    inline SpMat local2joint_dprecision(Eigen::MatrixXd & dprecision_lcl){ 
-        SpMat res(this->_joint_size, this->_joint_size);
-        res.setZero();
-        this->_block.fill(dprecision_lcl, res);
-        return res;
+    // Function to check if a matrix is symmetric positive-definite
+    bool isSymmetricPositiveDefinite(const Eigen::MatrixXd& matrix, double precision = 1e-10) {
+        if (!isSymmetric(matrix, precision)) {
+            return false;  // Matrix is not symmetric
+        }
+
+        // Compute the eigenvalues using the Eigen solver
+        Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> eigenSolver(matrix);
+        if (eigenSolver.info() != Eigen::Success) {
+            throw std::runtime_error("Eigenvalue computation did not converge");
+        }
+
+        // Check if all eigenvalues are non-negative
+        for (int i = 0; i < matrix.rows(); ++i) {
+            if (eigenSolver.eigenvalues()[i] <= precision) {
+                return false;  // Found a negative eigenvalue
+            }
+        }
+        return true;
     }
 
-    // Helper function
     Eigen::MatrixXd sqrtm(const Eigen::MatrixXd& mat){
         assert(mat.rows() == mat.cols());
 

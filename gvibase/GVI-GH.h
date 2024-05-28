@@ -120,7 +120,7 @@ public:
     /**
      * @brief Function which computes one step of update.
      */
-    virtual std::tuple<VectorXd, SpMat> compute_gradients(){};
+    virtual std::tuple<VectorXd, SpMat> compute_gradients(std::optional<double>step_size=std::nullopt){};
 
     // /**
     //  * @brief The optimizing process.
@@ -165,7 +165,12 @@ public:
     }
 
     /// update the step sizes
-    inline void set_step_size(double step_size){ _step_size = step_size; }
+    inline void set_step_size(double step_size){ 
+        _step_size = step_size; 
+        for (std::shared_ptr<FactorizedOptimizer> & opt_fact : _vec_factors){
+            opt_fact->set_step_size(step_size);
+        }
+    }
 
     inline void set_stop_err(double stop_err) { _stop_err = stop_err; }
 

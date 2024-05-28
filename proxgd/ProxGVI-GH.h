@@ -54,32 +54,51 @@ protected:
     SpMat _dprecision;    
 
 public:
-/// ************************* Override functions for NGD algorithm *************************************
-/// Optimizations related
-    /**
-     * @brief Function which computes one step of update.
-     */
-    std::tuple<VectorXd, SpMat> compute_gradients() override{
-        _dmu.setZero();
-        _dprecision.setZero();
+/// ************************* Override functions for Prox-GVI algorithm *************************************
+bool isSymmetric(const Eigen::MatrixXd& matrix, double precision = 1e-10) {
+    return (matrix - matrix.transpose()).cwiseAbs().maxCoeff() <= precision;
+}
 
-        for (auto &opt_k : Base::_vec_factors)
-        {
-            opt_k->calculate_partial_V();
-            _dmu = _dmu + opt_k->local2joint_dmu();
-            _dprecision = _dprecision + opt_k->local2joint_dprecision();
-        }
-
-        return std::make_tuple(_dmu, _dprecision);
+// Function to check if a matrix is symmetric positive-definite
+bool isSymmetricPositiveDefinite(const Eigen::MatrixXd& matrix, double precision = 1e-10) {
+    if (!isSymmetric(matrix, precision)) {
+        return false;  // Matrix is not symmetric
     }
 
-    std::tuple<double, VectorXd, SpMat> onestep_linesearch_prox(const double &step_size);
+    // Compute the eigenvalues using the Eigen solver
+    Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> eigenSolver(matrix);
+    if (eigenSolver.info() != Eigen::Success) {
+        throw std::runtime_error("Eigenvalue computation did not converge");
+    }
+
+    // Check if all eigenvalues are non-negative
+    for (int i = 0; i < matrix.rows(); ++i) {
+        if (eigenSolver.eigenvalues()[i] <= precision) {
+            return false;  // Found a negative eigenvalue
+        }
+    }
+    return true;
+}
+
+/// Optimizations related
+    /**
+     * @brief Compute gradient and Hessian from marginal distributions.
+     */
+    std::tuple<VectorXd, SpMat> compute_gradients(std::optional<double>step_size=std::nullopt) override;
+
+    virtual std::tuple<double, VectorXd, SpMat> onestep_linesearch(const double &step_size, const VectorXd& dmu, const SpMat& dprecision) override;
+
+    // std::tuple<double, VectorXd, SpMat> onestep_linesearch_prox(const double &step_size);
+    std::tuple<VectorXd, SpMat> onestep_linesearch_prox(const double &step_size);
 
     void compute_marginal_gradients();
 
-    void optimize(std::optional<bool> verbose=std::nullopt) override;
+    // void optimize(std::optional<bool> verbose=std::nullopt) override;
 
     inline void update_proposal(const VectorXd& new_mu, const SpMat& new_precision) override;
+
+
+    void optimize(std::optional<bool> verbose=std::nullopt) override;
 
     /**
      * @brief Compute the total cost function value given a state, using current values.

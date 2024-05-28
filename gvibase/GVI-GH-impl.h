@@ -22,6 +22,7 @@ void GVIGH<Factor>::switch_to_high_temperature(){
     this->initilize_precision_matrix();
 }
 
+
 /**
  * @brief optimize with backtracking
  */ 
