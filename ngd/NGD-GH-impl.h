@@ -17,7 +17,7 @@ namespace gvi{
  * @brief One step of optimization.
  */
 template <typename Factor>
-std::tuple<VectorXd, SpMat> NGDGH<Factor>::compute_gradients(){
+std::tuple<VectorXd, SpMat> NGDGH<Factor>::compute_gradients(std::optional<double>step_size){
     _Vdmu.setZero();
     _Vddmu.setZero();
 

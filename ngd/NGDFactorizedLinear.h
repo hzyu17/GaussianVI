@@ -91,7 +91,7 @@ public:
     // }
 
 
-    void calculate_partial_V() override{
+    void calculate_partial_V(std::optional<double> step_size=std::nullopt) override{
         _Vdmu.setZero();
         _Vddmu.setZero();
 

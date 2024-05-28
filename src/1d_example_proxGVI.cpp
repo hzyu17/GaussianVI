@@ -1,5 +1,5 @@
 /**
- * @file conv_1d_example.cpp
+ * @file 1d_example_proxGVI.cpp
  * @author Hongzhe Yu (hyu419@gatech.edu)
  * @brief Recover the results of 1d estimation example in the paper:
  * Barfoot, Timothy D., James R. Forbes, and David J. Yoon. 
@@ -7,17 +7,17 @@
  * derivative-free batch nonlinear state estimation." 
  * The International Journal of Robotics Research 39.13 (2020): 1473-1502.
  * @version 0.1
- * @date 2022-07-25
+ * @date 2024-05-01
  * 
- * @copyright Copyright (c) 2022
+ * @copyright Copyright (c) 2024
  * 
  */
 
 #define STRING(x) #x
 #define XSTRING(x) STRING(x)
 
-#include "ngd/NGDFactorizedSimpleGH.h"
-#include "ngd/NGD-GH.h"
+#include "proxgd/ProxGVIFactorizedSimpleGH.h"
+#include "proxgd/ProxGVI-GH.h"
 
 using namespace Eigen;
 using namespace gvi;
@@ -50,14 +50,14 @@ int main(){
     double temperature = 1.0;
     double high_temperature = 10.0;
 
-    std::vector<std::shared_ptr<NGDFactorizedSimpleGH>> vec_opt_fact;
+    std::vector<std::shared_ptr<ProxGVIFactorizedSimpleGH>> vec_opt_fact;
     gvi::NoneType none_type;
 
-    std::shared_ptr<NGDFactorizedSimpleGH> p_opt_fac{new NGDFactorizedSimpleGH(dim_factor, dim_state, gh_degree, 
-                                                                               cost_function, none_type, 
-                                                                               num_states, start_index,
-                                                                               temperature, high_temperature)
-                                                    };
+    std::shared_ptr<ProxGVIFactorizedSimpleGH> p_opt_fac{new ProxGVIFactorizedSimpleGH(dim_factor, dim_state, gh_degree, 
+                                                                                        cost_function, none_type, 
+                                                                                        num_states, start_index,
+                                                                                        temperature, high_temperature)
+                                                                };
     
     VectorXd init_mu{VectorXd::Constant(1, 20.0)};
     SpMat init_prec(1, 1);
@@ -65,14 +65,14 @@ int main(){
     init_prec.coeffRef(0, 0) = 1.0/9.0;
 
     vec_opt_fact.emplace_back(p_opt_fac);
-    NGDGH<NGDFactorizedSimpleGH> opt{vec_opt_fact, dim_state, num_states, n_iters};
+    ProxGVIGH<ProxGVIFactorizedSimpleGH> opt{vec_opt_fact, dim_state, num_states, n_iters};
     opt.set_niter_low_temperature(n_iters);
 
     std::string source_root{XSTRING(SOURCE_ROOT)};
-    std::string prefix{source_root+"/data/1d/"};
+    std::string prefix{source_root+"/data/1d_proxgvi/"};
 
     opt.update_file_names(prefix);
-    std::string costmap_file{source_root+"/data/1d/costmap.csv"};
+    std::string costmap_file{source_root+"/data/1d_proxgvi/costmap.csv"};
     opt.save_costmap(costmap_file);
 
     // opt.set_GH_degree(8);

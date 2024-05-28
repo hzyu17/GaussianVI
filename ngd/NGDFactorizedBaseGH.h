@@ -47,7 +47,8 @@ public:
                 GVIBase::_gh = std::make_shared<GH>(GH{gh_degree, GVIBase::_dim, GVIBase::_mu, GVIBase::_covariance});
             }
 public:
-void calculate_partial_V() override{
+
+void calculate_partial_V(std::optional<double> step_size=std::nullopt) override{
         // update the mu and sigma inside the gauss-hermite integrator
         updateGH(this->_mu, this->_covariance);
 
@@ -108,7 +109,6 @@ void calculate_partial_V() override{
         return this->_gh->Integrate(this->_func_phi)(0, 0);
     }
     
-    typedef std::shared_ptr<NGDFactorizedBaseGH> shared_ptr;
 
 };
 
