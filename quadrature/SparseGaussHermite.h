@@ -15,7 +15,7 @@
 #include "quadrature/SparseGHQuadratureWeights.h"
 #include "helpers/CommonDefinitions.h"
 
-#ifdef GVI_SUBDUR_ENV
+#ifdef GVI_SUBDUR_ENV 
 std::string map_file{source_root+"/GaussianVI/quadrature/SparseGHQuadratureWeights.bin"};
 #else
 std::string map_file{source_root+"/quadrature/SparseGHQuadratureWeights.bin"};

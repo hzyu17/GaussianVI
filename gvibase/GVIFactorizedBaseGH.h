@@ -66,17 +66,14 @@ public:
     }
     
 public:
+    // The function (x-\mu)*\phi(x)
     GHFunction _func_Vmu;
+    // The function [(x-\mu)@(x-\mu)^T]*\phi(x)
     GHFunction _func_Vmumu;
 
     /// G-H quadrature class
     std::shared_ptr<GH> _gh;
 
 };
-
-
-
-
-
 
 }

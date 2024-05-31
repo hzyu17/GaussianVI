@@ -74,9 +74,8 @@ public:
     /**
      * @brief Update the step size
      */
-    inline void set_step_size(double ss_mean, double ss_precision){
-        _step_size_mu = ss_mean;
-        _step_size_Sigma = ss_precision; 
+    inline void set_step_size(double step_size){
+        _step_size = step_size;
     }
 
     /**
@@ -125,12 +124,23 @@ public:
     /**
      * @brief Compute the increment on mean and precision (or covariance) matrix on the factorized level.
     */
-    virtual void calculate_partial_V(){}
+    virtual void calculate_partial_V(std::optional<double> step_size=std::nullopt){}
 
     /**
      * @brief Compute the cost function. V(x) = E_q(\phi(x))
      */
     virtual double fact_cost_value(const VectorXd& fill_joint_mean, const SpMat& joint_cov) {}
+
+    /**
+     * @brief Place holder for computing BW gradients for Gaussian distributions.
+     */
+    virtual void compute_BW_grads(){}
+
+    /**
+     * @brief Place holder for proximal GVI algorithm line search.
+     * 
+     */
+    virtual std::tuple<Eigen::VectorXd, Eigen::MatrixXd> compute_gradients_linesearch(const double & step_size){}
 
     // /**
     //  * @brief Compute the cost function. V(x) = E_q(\phi(x)) using the current values.
@@ -141,12 +151,16 @@ public:
      */
     virtual inline VectorXd local2joint_dmu() {}
 
+    virtual inline VectorXd local2joint_dmu(Eigen::VectorXd & dmu_lcl) {}
+
     /**
      * @brief Get the joint Pk.T * V^2 / dmu /dmu * Pk using block insertion
      */
     virtual inline SpMat local2joint_dprecision() {}
 
     virtual inline SpMat local2joint_dcovariance() {}
+
+    virtual inline SpMat local2joint_dprecision(Eigen::MatrixXd & dprecision_lcl){}
 
     inline SpMat fill_joint_cov(){
         SpMat joint_cov(_joint_size, _joint_size);
@@ -161,6 +175,8 @@ public:
         _block.fill_vector(_mu, joint_mean);
         return joint_mean;
     }
+
+
 
     /**
      * @brief Get the mean 
@@ -211,8 +227,7 @@ protected:
     MatrixXd _covariance, _dcovariance;
 
     /// step sizes
-    double _step_size_mu = 0.9;
-    double _step_size_Sigma = 0.9;
+    double _step_size = 0.9;
     double _E_Phi = 0.0;
 
     double _temperature, _high_temperature;
