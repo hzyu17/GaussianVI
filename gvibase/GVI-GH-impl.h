@@ -8,6 +8,7 @@ using namespace Eigen;
 
 #include <stdexcept>
 #include <optional>
+#include <omp.h>
 
 #define STRING(x) #x
 #define XSTRING(x) STRING(x)
@@ -16,9 +17,11 @@ namespace gvi{
 
 template <typename Factor>
 void GVIGH<Factor>::switch_to_high_temperature(){
-    for (auto& i_factor:_vec_factors){
+    #pragma omp parallel for
+    for (auto& i_factor : _vec_factors) {
         i_factor->switch_to_high_temperature();
     }
+
     this->initilize_precision_matrix();
 }
 
@@ -108,9 +111,13 @@ inline void GVIGH<Factor>::set_precision(const SpMat &new_precision)
     // sparse inverse
     inverse_inplace();
 
-    for (auto &factor : _vec_factors)
+    #pragma omp parallel
     {
-        factor->update_precision_from_joint(_covariance);
+        #pragma omp for nowait // Nowait allows threads to continue without waiting at the end of the loop
+        for (auto &factor : _vec_factors)
+        {
+            factor->update_precision_from_joint(_covariance);
+        }
     }
 }
 
@@ -124,11 +131,22 @@ VectorXd GVIGH<Factor>::factor_cost_vector(const VectorXd& fill_joint_mean, SpMa
     fac_costs.setZero();
     int cnt = 0;
     SpMat joint_cov = inverse(joint_precision);
-    for (auto &opt_k : _vec_factors)
+    // Use a private counter for each thread to avoid race conditions
+    int thread_cnt = 0;
+
+    #pragma omp for
+    for (int i = 0; i < _vec_factors.size(); ++i)
     {
-        fac_costs(cnt) = opt_k->fact_cost_value(fill_joint_mean, joint_cov); // / _temperature;
-        cnt += 1;
+        auto &opt_k = _vec_factors[i];
+        fac_costs(thread_cnt) = opt_k->fact_cost_value(fill_joint_mean, joint_cov); // / _temperature;
+        thread_cnt += 1;
     }
+
+    #pragma omp critical
+    {
+        cnt += thread_cnt; // Safely update the global counter
+    }
+    
     return fac_costs;
 }
 
@@ -142,10 +160,12 @@ double GVIGH<Factor>::cost_value(const VectorXd &mean, SpMat &Precision)
     SpMat Cov = inverse(Precision);
 
     double value = 0.0;
-    for (auto &opt_k : _vec_factors)
-    {   
-        // const std::type_info& typeInfo = typeid(*opt_k);
-        // std::cout << "Class type name: " << typeInfo.name() << std::endl;
+
+    #pragma omp parallel for reduction(+:value)
+    for (int i = 0; i < _vec_factors.size(); ++i)
+    {
+        // Access the current element - ensure this is safe in a parallel context
+        auto &opt_k = _vec_factors[i];
         value += opt_k->fact_cost_value(mean, Cov); // / _temperature;
     }
 
