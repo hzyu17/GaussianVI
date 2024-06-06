@@ -159,15 +159,33 @@ public:
         
         Eigen::MatrixXd res{function(_mean)};
         res.setZero();
-        
-        Eigen::VectorXd pt(_dim);
 
-        for (int i=0; i<_sigmapts.rows(); i++){
-            
-            pt = _sigmapts.row(i);
-            res += function(pt)*_Weights(i);
+        #pragma omp parallel
+        {
+            // Create a private copy of the res matrix for each thread
+            Eigen::MatrixXd private_res = Eigen::MatrixXd::Zero(res.rows(), res.cols());
+            Eigen::VectorXd pt(_dim);
 
+            #pragma omp for nowait  // The 'nowait' clause can be used if there is no need for synchronization after the loop
+            for (int i = 0; i < _sigmapts.rows(); i++) {
+                pt = _sigmapts.row(i);
+                private_res += function(pt) * _Weights(i);
+            }
+
+            // Use a critical section to sum up results from all threads
+            #pragma omp critical
+            res += private_res;
         }
+        
+        // Eigen::VectorXd pt(_dim);
+
+        // for (int i=0; i<_sigmapts.rows(); i++){
+            
+        //     pt = _sigmapts.row(i);
+        //     res += function(pt)*_Weights(i);
+
+        // }
+        
         // std::cout << "========== Integration time" << std::endl;
         // timer.end_mus();
         

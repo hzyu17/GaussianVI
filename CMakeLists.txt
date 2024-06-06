@@ -57,7 +57,7 @@ foreach(gvi_source ${gvi_SOURCES})
     set_target_properties(${gvi_name} PROPERTIES
                             RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/src"
                             )   
-    target_link_libraries(${gvi_name} ${EIGEN3_LIBRARIES} ${Matlab_MEX_LIBRARY} 
+    target_link_libraries(${gvi_name} ${EIGEN3_LIBRARIES} ${Matlab_MEX_LIBRARY} OpenMP::OpenMP_CXX
                         #   ${Matlab_MX_LIBRARY} 
                           ${libSpGH_LIBRARY} ${MCR_LIBRARY_PATH}/libmwmclmcrrt.so.9.9 Boost::serialization)
     target_include_directories(${gvi_name} PRIVATE ${Matlab_INCLUDE_DIRS})
