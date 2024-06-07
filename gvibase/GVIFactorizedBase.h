@@ -197,7 +197,7 @@ public:
         return _func_phi(x);
     }    
 
-    void switch_to_high_temperature(){
+    void factor_switch_to_high_temperature(){
         _temperature = _high_temperature;
     }
 
