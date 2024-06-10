@@ -168,7 +168,7 @@ public:
     void save_data(bool verbose=true){
         // Early ended
         if (_cur_iter < _niters){
-            _res_mean = _res_mean
+            _res_mean = _res_mean;
         }
         /// save mean
         _m_io.saveData(_file_mean, _res_mean, verbose);
