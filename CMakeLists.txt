@@ -27,6 +27,9 @@ find_package(Boost COMPONENTS serialization REQUIRED)
 include_directories(${Boost_INCLUDE_DIR})
 link_directories(${Boost_LIBRARY_DIRS})
 
+# OpenMP
+find_package(OpenMP)
+
 if(DEFINED libSpGH_LIBRARY AND NOT "${libSpGH_LIBRARY}" STREQUAL "")
     message("Variable libSpGH_LIBRARY is defined and not empty.")
     # Your code for the case when the variable is defined and not empty
@@ -34,7 +37,7 @@ else()
     message("Variable libSpGH_LIBRARY is either NOT defined or empty.")
     # Find Matlab
     message("Finding Matlab Library")
-    set(MATLAB_ROOT_DIR "/usr/local/MATLAB/R2020b")
+    set(MATLAB_ROOT_DIR "/usr/local/MATLAB/MATLAB_Runtime/R2020b")
     set(Matlab_INCLUDE_DIRS "${MATLAB_ROOT_DIR}/extern/include")
     set(Matlab_MEX_LIBRARY "${MATLAB_ROOT_DIR}/bin/glnxa64/libmex.so")  # Adjust the path accordingly
     set(MCR_LIBRARY_PATH "${MATLAB_ROOT_DIR}/runtime/glnxa64") 
