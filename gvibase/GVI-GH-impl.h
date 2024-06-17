@@ -17,12 +17,13 @@ namespace gvi{
 
 template <typename Factor>
 void GVIGH<Factor>::switch_to_high_temperature(){
+    std::cout << "Switching to high temperature.." << std::endl;
     #pragma omp parallel for
     for (auto& i_factor : _vec_factors) {
-        i_factor->switch_to_high_temperature();
+        i_factor->factor_switch_to_high_temperature();
     }
-
-    this->initilize_precision_matrix();
+    this->_temperature = this->_high_temperature;
+    // this->initilize_precision_matrix();
 }
 
 
@@ -34,16 +35,23 @@ void GVIGH<Factor>::optimize(std::optional<bool> verbose)
 {
     // default verbose
     bool is_verbose = verbose.value_or(true);
-    
+    bool is_lowtemp = true;
+    bool converged = false;
     for (int i_iter = 0; i_iter < _niters; i_iter++)
-    {
+    {   
+
+        if (converged){
+            break;
+        }
+
         // ============= High temperature phase =============
-        if (i_iter == _niters_lowtemp){
-            switch_to_high_temperature();
+        if (i_iter == _niters_lowtemp && is_lowtemp){
+            this->switch_to_high_temperature();
+            is_lowtemp = false;
         }
 
         // ============= Cost at current iteration =============
-        double cost_iter = cost_value();
+        double cost_iter = this->cost_value();
 
         if (is_verbose){
             std::cout << "========= iteration " << i_iter << " ========= " << std::endl;
@@ -51,7 +59,7 @@ void GVIGH<Factor>::optimize(std::optional<bool> verbose)
         }
 
         // ============= Collect factor costs =============
-        VectorXd fact_costs_iter = factor_cost_vector();
+        VectorXd fact_costs_iter = this->factor_cost_vector();
 
         _res_recorder.update_data(_mu, _covariance, _precision, cost_iter, fact_costs_iter);
 
@@ -63,13 +71,14 @@ void GVIGH<Factor>::optimize(std::optional<bool> verbose)
         
         int cnt = 0;
         int B = 1;
-        double step_size = 0.0;
+        double step_size = _step_size_base;
 
         // backtracking 
         while (true)
         {   
             // new step size
-            step_size = pow(_step_size_base, B);
+            // step_size = pow(_step_size_base, B);
+            step_size = step_size * 0.75;
 
             auto onestep_res = onestep_linesearch(step_size, dmu, dprecision);
 
@@ -93,7 +102,15 @@ void GVIGH<Factor>::optimize(std::optional<bool> verbose)
                 if (is_verbose){
                     std::cout << "Reached the maximum backtracking steps." << std::endl;
                 }
-                update_proposal(new_mu, new_precision);
+
+                if (is_lowtemp){
+                    this->switch_to_high_temperature();
+                    is_lowtemp = false;
+                }else{
+                    converged = true;
+                }
+
+                // update_proposal(new_mu, new_precision);
                 break;
             }                
         }
@@ -138,7 +155,7 @@ VectorXd GVIGH<Factor>::factor_cost_vector(const VectorXd& fill_joint_mean, SpMa
     for (int i = 0; i < _vec_factors.size(); ++i)
     {
         auto &opt_k = _vec_factors[i];
-        fac_costs(thread_cnt) = opt_k->fact_cost_value(fill_joint_mean, joint_cov); // / _temperature;
+        fac_costs(thread_cnt) = opt_k->fact_cost_value(fill_joint_mean, joint_cov); 
         thread_cnt += 1;
     }
 
@@ -161,23 +178,20 @@ double GVIGH<Factor>::cost_value(const VectorXd &mean, SpMat &Precision)
 
     double value = 0.0;
 
+    // sum up the factor costs
     #pragma omp parallel for reduction(+:value)
     for (int i = 0; i < _vec_factors.size(); ++i)
     {
         // Access the current element - ensure this is safe in a parallel context
         auto &opt_k = _vec_factors[i];
-        value += opt_k->fact_cost_value(mean, Cov); // / _temperature;
+        value += opt_k->fact_cost_value(mean, Cov); 
     }
 
     SparseLDLT ldlt(Precision);
     VectorXd vec_D = ldlt.vectorD();
 
-    double logdet = 0;
-    for (int i_diag=0; i_diag<vec_D.size(); i_diag++){
-        logdet += log(vec_D(i_diag));
-    }
-
-    return value + logdet / 2;
+    // std::cout << "entropy cost" << std::endl << vec_D.array().log().sum() / 2 << std::endl;
+    return value + vec_D.array().log().sum() / 2;
 }
 
 }

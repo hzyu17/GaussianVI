@@ -54,13 +54,6 @@ std::tuple<VectorXd, SpMat> NGDGH<Factor>::compute_gradients(std::optional<doubl
     _Vdmu = Vdmu_sum;
     _Vddmu = Vddmu_sum;
 
-    // for (auto &opt_k : Base::_vec_factors)
-    // {
-    //     opt_k->calculate_partial_V();
-    //     _Vdmu = _Vdmu + opt_k->local2joint_dmu();
-    //     _Vddmu = _Vddmu + opt_k->local2joint_dprecision();
-    // }
-
     SpMat dprecision = _Vddmu - Base::_precision;
 
     Eigen::ConjugateGradient<SpMat, Eigen::Upper> solver;
