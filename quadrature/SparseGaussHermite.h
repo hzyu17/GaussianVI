@@ -198,6 +198,7 @@ public:
             std::cerr << "Error: sqrt Covariance matrix contains NaN values." << std::endl;
             // Handle the situation where _sqrtP contains NaN values
         }
+
         _sigmapts = (_zeromeanpts*_sqrtP.transpose()).rowwise() + _mean.transpose(); 
     }
 
