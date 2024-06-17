@@ -33,7 +33,8 @@ public:
      * @param dimension The dimension of the state
      */
     GVIFactorizedBaseGH(int dimension, int state_dim, int num_states, int start_index, 
-                        double temperature=10.0, double high_temperature=100.0):
+                        double temperature=10.0, double high_temperature=100.0, 
+                        std::optional<QuadratureWeightsMap> weight_sigpts_map_option=std::nullopt):
             Base(dimension, state_dim, num_states, start_index, temperature, high_temperature){
             }
             
@@ -44,6 +45,7 @@ public:
         // This order cannot be changed! Need to update P before updating mean.
         _gh->update_P(P); 
         _gh->update_mean(x);
+        _gh->update_sigmapoints();
     }
 
     /**

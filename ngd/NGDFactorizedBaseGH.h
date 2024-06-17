@@ -37,14 +37,16 @@ public:
     NGDFactorizedBaseGH(int dimension, int state_dim, int gh_degree, 
                         const Function& function, const CostClass& cost_class,
                         int num_states, int start_index, 
-                        double temperature=1.0, double high_temperature=10.0):
-                GVIBase(dimension, state_dim, num_states, start_index, temperature, high_temperature)
+                        double temperature=1.0, double high_temperature=10.0,
+                        std::optional<QuadratureWeightsMap> weight_sigpts_map_option=std::nullopt):
+                GVIBase(dimension, state_dim, num_states, start_index, 
+                        temperature, high_temperature, weight_sigpts_map_option)
             {
                 /// Override of the GVIBase classes.
                 GVIBase::_func_phi = [this, function, cost_class](const VectorXd& x){return MatrixXd::Constant(1, 1, function(x, cost_class));};
                 GVIBase::_func_Vmu = [this, function, cost_class](const VectorXd& x){return (x-GVIBase::_mu) * function(x, cost_class);};
                 GVIBase::_func_Vmumu = [this, function, cost_class](const VectorXd& x){return MatrixXd{(x-GVIBase::_mu) * (x-GVIBase::_mu).transpose().eval() * function(x, cost_class)};};
-                GVIBase::_gh = std::make_shared<GH>(GH{gh_degree, GVIBase::_dim, GVIBase::_mu, GVIBase::_covariance});
+                GVIBase::_gh = std::make_shared<GH>(GH{gh_degree, GVIBase::_dim, GVIBase::_mu, GVIBase::_covariance, weight_sigpts_map_option});
             }
 public:
 
