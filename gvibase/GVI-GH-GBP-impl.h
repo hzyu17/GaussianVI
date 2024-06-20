@@ -147,15 +147,8 @@ VectorXd GVIGH<Factor>::factor_cost_vector(const VectorXd& fill_joint_mean, SpMa
     VectorXd fac_costs(_nfactors);
     fac_costs.setZero();
     int cnt = 0;
-    MatrixXd percision_dense = joint_precision;
-    SpMat joint_cov1 = inverse_GBP(joint_precision);
-    SpMat joint_cov = inverse(joint_precision);
-    
-    MatrixXd joint_cov_dense1 = joint_cov1;
-    MatrixXd joint_cov_dense = joint_cov;
+    SpMat joint_cov = inverse_GBP(joint_precision);
 
-    std::cout << "inverse" << std::endl << joint_cov_dense << std::endl;
-    std::cout << "GBP" << std::endl << joint_cov_dense1 << std::endl;
     // Use a private counter for each thread to avoid race conditions
     int thread_cnt = 0;
 
