@@ -61,7 +61,7 @@ void GVIGH<Factor>::optimize(std::optional<bool> verbose)
         // ============= Collect factor costs =============
         VectorXd fact_costs_iter = this->factor_cost_vector();
 
-        // _res_recorder.update_data(_mu, _covariance, _precision, cost_iter, fact_costs_iter);
+        _res_recorder.update_data(_mu, _covariance, _precision, cost_iter, fact_costs_iter);
 
         // gradients
         std::tuple<VectorXd, SpMat> gradients = compute_gradients();
@@ -116,8 +116,8 @@ void GVIGH<Factor>::optimize(std::optional<bool> verbose)
         }
     }
 
-    // std::cout << "=========== Saving Data ===========" << std::endl;
-    // save_data(is_verbose);
+    std::cout << "=========== Saving Data ===========" << std::endl;
+    save_data(is_verbose);
 
 }
 
@@ -147,8 +147,9 @@ VectorXd GVIGH<Factor>::factor_cost_vector(const VectorXd& fill_joint_mean, SpMa
     VectorXd fac_costs(_nfactors);
     fac_costs.setZero();
     int cnt = 0;
-
     SpMat joint_cov = inverse_GBP(joint_precision);
+
+    // Use a private counter for each thread to avoid race conditions
     int thread_cnt = 0;
 
     #pragma omp for
