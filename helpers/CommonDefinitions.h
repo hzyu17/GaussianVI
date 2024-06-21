@@ -25,6 +25,7 @@ typedef Eigen::SparseMatrix<double, Eigen::ColMajor> SpMat; // declares a column
 typedef Eigen::SparseVector<double> SpVec; 
 typedef Eigen::Triplet<double> Trip;
 typedef Eigen::SimplicialLDLT<SpMat, Eigen::Lower, Eigen::NaturalOrdering<int>> SparseLDLT;
+typedef std::pair <Eigen::VectorXd, Eigen::MatrixXd> Message;
 
 
 //https://eigen.tuxfamily.org/dox/structEigen_1_1IOFormat.html
