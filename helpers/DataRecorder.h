@@ -75,7 +75,16 @@ public:
         _res_precisions(dim_state*dim_state, nstates, niters),
         _res_costs(niters),
         _res_factor_costs(n_factors, 1, niters)
-        {}
+        {
+            _res_mean.setZero();
+            _res_joint_covariances.setZero();
+            _res_joint_precisions.setZero();
+            _res_covariances.setZero();
+            _res_precisions.setZero();
+            _res_costs.setZero();
+            _res_factor_costs.setZero();
+
+        }
 
     /**
      * @brief update the content of data 
@@ -168,8 +177,9 @@ public:
     void save_data(bool verbose=true){
         // Early ended
         if (_cur_iter < _niters){
-            _res_mean = _res_mean;
+            _niters = _cur_iter;
         }
+
         /// save mean
         _m_io.saveData(_file_mean, _res_mean, verbose);
 
