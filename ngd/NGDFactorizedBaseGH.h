@@ -37,14 +37,16 @@ public:
     NGDFactorizedBaseGH(int dimension, int state_dim, int gh_degree, 
                         const Function& function, const CostClass& cost_class,
                         int num_states, int start_index, 
-                        double temperature=1.0, double high_temperature=10.0):
-                GVIBase(dimension, state_dim, num_states, start_index, temperature, high_temperature)
+                        double temperature=1.0, double high_temperature=10.0,
+                        std::optional<QuadratureWeightsMap> weight_sigpts_map_option=std::nullopt):
+                GVIBase(dimension, state_dim, num_states, start_index, 
+                        temperature, high_temperature, weight_sigpts_map_option)
             {
                 /// Override of the GVIBase classes.
                 GVIBase::_func_phi = [this, function, cost_class](const VectorXd& x){return MatrixXd::Constant(1, 1, function(x, cost_class));};
                 GVIBase::_func_Vmu = [this, function, cost_class](const VectorXd& x){return (x-GVIBase::_mu) * function(x, cost_class);};
                 GVIBase::_func_Vmumu = [this, function, cost_class](const VectorXd& x){return MatrixXd{(x-GVIBase::_mu) * (x-GVIBase::_mu).transpose().eval() * function(x, cost_class)};};
-                GVIBase::_gh = std::make_shared<GH>(GH{gh_degree, GVIBase::_dim, GVIBase::_mu, GVIBase::_covariance});
+                GVIBase::_gh = std::make_shared<GH>(GH{gh_degree, GVIBase::_dim, GVIBase::_mu, GVIBase::_covariance, weight_sigpts_map_option});
             }
 public:
 
@@ -58,6 +60,7 @@ void calculate_partial_V(std::optional<double> step_size=std::nullopt) override{
         /// Integrate for E_q{_Vdmu} 
         this->_Vdmu = this->_gh->Integrate(this->_func_Vmu);
         this->_Vdmu = this->_precision * this->_Vdmu;
+        this->_Vdmu = this->_Vdmu / this->temperature();
 
         /// Integrate for E_q{phi(x)}
         double E_phi = this->_gh->Integrate(this->_func_phi)(0, 0);
@@ -67,7 +70,7 @@ void calculate_partial_V(std::optional<double> step_size=std::nullopt) override{
 
         this->_Vddmu.triangularView<Upper>() = (this->_precision * E_xxphi * this->_precision - this->_precision * E_phi).triangularView<Upper>();
         this->_Vddmu.triangularView<StrictlyLower>() = this->_Vddmu.triangularView<StrictlyUpper>().transpose();
-
+        this->_Vddmu = this->_Vddmu / this->temperature();
     }
     
 
@@ -106,7 +109,7 @@ void calculate_partial_V(std::optional<double> step_size=std::nullopt) override{
 
         updateGH(mean_k, Cov_k);
 
-        return this->_gh->Integrate(this->_func_phi)(0, 0);
+        return this->_gh->Integrate(this->_func_phi)(0, 0) / this->temperature();
     }
     
 

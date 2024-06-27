@@ -12,6 +12,7 @@
 
 #pragma once
 
+#include <optional>
 #include "quadrature/SparseGHQuadratureWeights.h"
 #include "helpers/CommonDefinitions.h"
 
@@ -38,29 +39,41 @@ public:
         const int& deg, 
         const int& dim, 
         const Eigen::VectorXd& mean, 
-        const Eigen::MatrixXd& P): 
+        const Eigen::MatrixXd& P,
+        std::optional<QuadratureWeightsMap> weight_sigpts_map_option=std::nullopt): 
             _deg(deg),
             _dim(dim),
             _mean(mean),
             _P(P)
             {  
-                try {
-                    std::ifstream ifs(map_file, std::ios::binary);
-                    if (!ifs.is_open()) {
-                        std::string error_msg = "Failed to open file for GH weights reading in file: " + map_file;
-                        throw std::runtime_error(error_msg);
+                // If input has a loaded map
+                if (weight_sigpts_map_option.has_value()){
+                    _nodes_weights_map = std::make_shared<QuadratureWeightsMap>(weight_sigpts_map_option.value());
+                }
+                // Read map from file
+                else{
+                    QuadratureWeightsMap nodes_weights_map;
+                    try {
+                        std::ifstream ifs(map_file, std::ios::binary);
+                        if (!ifs.is_open()) {
+                            std::string error_msg = "Failed to open file for GH weights reading in file: " + map_file;
+                            throw std::runtime_error(error_msg);
+                        }
+
+                        std::cout << "Opening file for GH weights reading in file: " << map_file << std::endl;
+                        boost::archive::binary_iarchive ia(ifs);
+                        ia >> nodes_weights_map;
+
+                    } catch (const boost::archive::archive_exception& e) {
+                        std::cerr << "Boost archive exception: " << e.what() << std::endl;
+                    } catch (const std::exception& e) {
+                        std::cerr << "Standard exception: " << e.what() << std::endl;
                     }
 
-                    std::cout << "Opening file for GH weights reading in file: " << map_file << std::endl;
-                    boost::archive::binary_iarchive ia(ifs);
-                    ia >> _nodes_weights_map;
+                    _nodes_weights_map = std::make_shared<QuadratureWeightsMap>(nodes_weights_map);
 
-                } catch (const boost::archive::archive_exception& e) {
-                    std::cerr << "Boost archive exception: " << e.what() << std::endl;
-                } catch (const std::exception& e) {
-                    std::cerr << "Standard exception: " << e.what() << std::endl;
                 }
-
+                
                 computeSigmaPtsWeights();
             }
 
@@ -88,8 +101,8 @@ public:
         dim_deg = std::make_tuple(_dim, _deg);;
 
         PointsWeightsTuple pts_weights;
-        if (_nodes_weights_map.count(dim_deg) > 0) {
-            pts_weights = _nodes_weights_map[dim_deg];
+        if (_nodes_weights_map->count(dim_deg) > 0) {
+            pts_weights = _nodes_weights_map->at(dim_deg);
 
             _zeromeanpts = std::get<0>(pts_weights);
             _Weights = std::get<1>(pts_weights);
@@ -101,14 +114,7 @@ public:
                 return;
             }
 
-            // Compute square roots of the eigenvalues
-            Eigen::MatrixXd D = eigensolver.eigenvalues().asDiagonal();
-            Eigen::MatrixXd sqrtD = D.unaryExpr([](double elem) { return std::sqrt(std::max(0.0, elem)); });
-
-            // Compute the square root of the matrix
-            Eigen::MatrixXd _sqrtP = eigensolver.eigenvectors() * sqrtD * eigensolver.eigenvectors().transpose();
-
-            _sigmapts = (_zeromeanpts*_sqrtP.transpose()).rowwise() + _mean.transpose(); 
+            update_sigmapoints();
 
         } else {
             std::cout << "(dimension, degree) " << "(" << _dim << ", " << _deg << ") " <<
@@ -136,14 +142,7 @@ public:
             _zeromeanpts = std::get<0>(pts_weights);
             _Weights = std::get<1>(pts_weights);
 
-            // compute matrix sqrt of P
-            Eigen::LLT<MatrixXd> lltP(_P);
-            _sqrtP = lltP.matrixL();
-
-            // Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> es(_P);
-            // _sqrtP = es.operatorSqrt();
-
-            _sigmapts = (_zeromeanpts*_sqrtP).rowwise() + _mean.transpose(); 
+            update_sigmapoints();
         } else {
             std::cout << "(dimension, degree) " << "(" << _dim << ", " << _deg << ") " <<
              "key does not exist in the GH weight map." << std::endl;
@@ -159,17 +158,23 @@ public:
         
         Eigen::MatrixXd res{function(_mean)};
         res.setZero();
-        
-        Eigen::VectorXd pt(_dim);
 
-        for (int i=0; i<_sigmapts.rows(); i++){
-            
-            pt = _sigmapts.row(i);
-            res += function(pt)*_Weights(i);
+        #pragma omp parallel
+        {
+            // Create a private copy of the res matrix for each thread
+            Eigen::MatrixXd private_res = Eigen::MatrixXd::Zero(res.rows(), res.cols());
+            Eigen::VectorXd pt(_dim);
 
+            #pragma omp for nowait  // The 'nowait' clause can be used if there is no need for synchronization after the loop
+            for (int i = 0; i < _sigmapts.rows(); i++) {
+                pt = _sigmapts.row(i);
+                private_res += function(pt) * _Weights(i);
+            }
+
+            // Use a critical section to sum up results from all threads
+            #pragma omp critical
+            res += private_res;
         }
-        // std::cout << "========== Integration time" << std::endl;
-        // timer.end_mus();
         
         return res;
         
@@ -180,25 +185,25 @@ public:
      * */
     inline void update_mean(const Eigen::VectorXd& mean){ 
         _mean = mean; 
-        _sigmapts = (_zeromeanpts*_sqrtP.transpose()).rowwise() + _mean.transpose(); 
+        
     }
 
-    inline void update_P(const Eigen::MatrixXd& P){ 
-        _P = P; 
-        // compute matrix sqrt of P
-        // Eigen::LLT<MatrixXd> lltP(_P);
-        // _sqrtP = lltP.matrixL();
-        
+    inline void update_sigmapoints(){
         Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> es(_P);
         _sqrtP = es.operatorSqrt();
 
         if (_sqrtP.hasNaN()) {
+            Eigen::VectorXd eigenvalues = es.eigenvalues();
+            std::cout << "eigenvalues" << std::endl << eigenvalues << std::endl;
             std::cerr << "Error: sqrt Covariance matrix contains NaN values." << std::endl;
             // Handle the situation where _sqrtP contains NaN values
         }
 
-        // _sigmapts = (_zeromeanpts*_sqrtP).rowwise() + _mean.transpose(); 
-        
+        _sigmapts = (_zeromeanpts*_sqrtP.transpose()).rowwise() + _mean.transpose(); 
+    }
+
+    inline void update_P(const Eigen::MatrixXd& P){ 
+        _P = P;         
     }
 
     inline void set_polynomial_deg(const int& deg){ 
@@ -237,7 +242,7 @@ protected:
     Eigen::VectorXd _Weights;
     Eigen::MatrixXd _sigmapts, _zeromeanpts;
 
-    QuadratureWeightsMap _nodes_weights_map;
+    std::shared_ptr<QuadratureWeightsMap> _nodes_weights_map;
     
 };
 

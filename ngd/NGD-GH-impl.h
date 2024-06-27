@@ -7,6 +7,7 @@
 using namespace Eigen;
 #include <stdexcept>
 #include <optional>
+#include <omp.h>
 
 #define STRING(x) #x
 #define XSTRING(x) STRING(x)
@@ -21,12 +22,37 @@ std::tuple<VectorXd, SpMat> NGDGH<Factor>::compute_gradients(std::optional<doubl
     _Vdmu.setZero();
     _Vddmu.setZero();
 
-    for (auto &opt_k : Base::_vec_factors)
+    VectorXd Vdmu_sum = VectorXd::Zero(_Vdmu.size());
+    SpMat Vddmu_sum = SpMat(_Vddmu.rows(), _Vddmu.cols());
+
+    /**
+     * @brief OMP parallel on cpu.
+     */
+    omp_set_num_threads(20); 
+
+    #pragma omp parallel
     {
-        opt_k->calculate_partial_V();
-        _Vdmu = _Vdmu + opt_k->local2joint_dmu();
-        _Vddmu = _Vddmu + opt_k->local2joint_dprecision();
+        // Thread-local storage to avoid race conditions
+        VectorXd Vdmu_private = VectorXd::Zero(_Vdmu.size());
+        SpMat Vddmu_private = SpMat(_Vddmu.rows(), _Vddmu.cols());
+
+        #pragma omp for nowait // Nowait allows threads to continue without waiting at the end of the loop
+        for (auto &opt_k : Base::_vec_factors) {
+            opt_k->calculate_partial_V();
+            Vdmu_private += opt_k->local2joint_dmu();
+            Vddmu_private += opt_k->local2joint_dprecision();
+        }
+
+        #pragma omp critical
+        {
+            Vdmu_sum += Vdmu_private;
+            Vddmu_sum += Vddmu_private;
+        }
     }
+
+    // Update the member variables 
+    _Vdmu = Vdmu_sum;
+    _Vddmu = Vddmu_sum;
 
     SpMat dprecision = _Vddmu - Base::_precision;
 

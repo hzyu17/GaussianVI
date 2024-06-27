@@ -3,6 +3,7 @@ cmake_minimum_required(VERSION 3.0)
 enable_testing()
 project(GaussianVI CXX C)
 set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED True)
 # set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -w")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -w")
 
@@ -27,6 +28,9 @@ find_package(Boost COMPONENTS serialization REQUIRED)
 include_directories(${Boost_INCLUDE_DIR})
 link_directories(${Boost_LIBRARY_DIRS})
 
+# OpenMP
+find_package(OpenMP)
+
 if(DEFINED libSpGH_LIBRARY AND NOT "${libSpGH_LIBRARY}" STREQUAL "")
     message("Variable libSpGH_LIBRARY is defined and not empty.")
     # Your code for the case when the variable is defined and not empty
@@ -34,7 +38,7 @@ else()
     message("Variable libSpGH_LIBRARY is either NOT defined or empty.")
     # Find Matlab
     message("Finding Matlab Library")
-    set(MATLAB_ROOT_DIR "/usr/local/MATLAB/MATLAB_Runtime/v99")
+    set(MATLAB_ROOT_DIR "/usr/local/MATLAB/R2020b")
     set(Matlab_INCLUDE_DIRS "${MATLAB_ROOT_DIR}/extern/include")
     set(Matlab_MEX_LIBRARY "${MATLAB_ROOT_DIR}/bin/glnxa64/libmex.so")  # Adjust the path accordingly
     set(MCR_LIBRARY_PATH "${MATLAB_ROOT_DIR}/runtime/glnxa64") 
@@ -57,7 +61,7 @@ foreach(gvi_source ${gvi_SOURCES})
     set_target_properties(${gvi_name} PROPERTIES
                             RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/src"
                             )   
-    target_link_libraries(${gvi_name} ${EIGEN3_LIBRARIES} ${Matlab_MEX_LIBRARY} 
+    target_link_libraries(${gvi_name} ${EIGEN3_LIBRARIES} ${Matlab_MEX_LIBRARY} OpenMP::OpenMP_CXX
                         #   ${Matlab_MX_LIBRARY} 
                           ${libSpGH_LIBRARY} ${MCR_LIBRARY_PATH}/libmwmclmcrrt.so.9.9 Boost::serialization)
     target_include_directories(${gvi_name} PRIVATE ${Matlab_INCLUDE_DIRS})
