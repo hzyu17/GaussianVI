@@ -160,6 +160,25 @@ public:
         Eigen::MatrixXd res{function(_mean)};
         res.setZero();
 
+        // #pragma omp parallel
+        // {
+        //     // Create a private copy of the res matrix for each thread
+        //     Eigen::MatrixXd private_res = Eigen::MatrixXd::Zero(res.rows(), res.cols());
+        //     Eigen::VectorXd pt(_dim);
+
+        //     #pragma omp for nowait  // The 'nowait' clause can be used if there is no need for synchronization after the loop
+        //     for (int i = 0; i < _sigmapts.rows(); i++) {
+        //         pt = _sigmapts.row(i); // Row of the matrix
+        //         // std::cout << pt << std::endl;
+        //         private_res += function(pt) * _Weights(i);
+        //     }
+
+        //     // Use a critical section to sum up results from all threads
+        //     #pragma omp critical
+        //     res += private_res;
+        // }
+        
+        
         Eigen::MatrixXd pts(_sigmapts.rows(), _sigmapts.cols());
         for (int i = 0; i < _sigmapts.rows(); i++) {
             pts.row(i) = function(_sigmapts.row(i));
@@ -184,29 +203,7 @@ public:
 
         Eigen::Map<Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>> res_cuda(res_array, res.rows(), res.cols());
         res = res_cuda;
-
-
-        // #pragma omp parallel
-        // {
-        //     // Create a private copy of the res matrix for each thread
-        //     Eigen::MatrixXd private_res = Eigen::MatrixXd::Zero(res.rows(), res.cols());
-        //     Eigen::VectorXd pt(_dim);
-
-        //     #pragma omp for nowait  // The 'nowait' clause can be used if there is no need for synchronization after the loop
-        //     for (int i = 0; i < _sigmapts.rows(); i++) {
-        //         pt = _sigmapts.row(i); // Row of the matrix
-        //         // std::cout << pt << std::endl;
-        //         private_res += function(pt) * _Weights(i);
-        //     }
-
-        //     // Use a critical section to sum up results from all threads
-        //     #pragma omp critical
-        //     res += private_res;
-        // }
         
-        // std::cout << "res:" << std::endl << res.transpose() << std::endl << std::endl;
-        // std::cout << "res1:" << std::endl << res1.transpose() << std::endl << std::endl;
-
         return res;
         
     };
