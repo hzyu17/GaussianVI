@@ -31,7 +31,8 @@ set(CMAKE_CUDA_ARCHITECTURES "52;60;61;70;75;80")
 find_package(CUDA REQUIRED)
 include_directories(${CUDA_INCLUDE_DIRS})
 include_directories(${CMAKE_CUDA_TOOLKIT_INCLUDE_DIRECTORIES})
-set(CUDA_NVCC_FLAGS ${CUDA_NVCC_FLAGS}; -std=c++17)
+set(CUDA_ARCH "sm_60")
+set(CUDA_NVCC_FLAGS ${CUDA_NVCC_FLAGS}; -arch=${CUDA_ARCH}; -std=c++17; --expt-extended-lambda)
 
 # Specify the CUDA standard
 set(CMAKE_CUDA_STANDARD 17)
@@ -86,30 +87,29 @@ foreach(gvi_source ${gvi_SOURCES})
     target_include_directories(${gvi_name} PRIVATE ${Matlab_INCLUDE_DIRS})
 endforeach()
 
+# include(FetchContent)
+# FetchContent_Declare(
+#   googletest
+#   URL https://github.com/google/googletest/archive/03597a01ee50ed33e9dfd640b249b4be3799d395.zip
+# )
+# # For Windows: Prevent overriding the parent project's compiler/linker settings
+# set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
+# FetchContent_MakeAvailable(googletest)
+# enable_testing()
 
-include(FetchContent)
-FetchContent_Declare(
-  googletest
-  URL https://github.com/google/googletest/archive/03597a01ee50ed33e9dfd640b249b4be3799d395.zip
-)
-# For Windows: Prevent overriding the parent project's compiler/linker settings
-set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
-FetchContent_MakeAvailable(googletest)
-enable_testing()
+# include(GoogleTest)
 
-include(GoogleTest)
+# file(GLOB_RECURSE test_SOURCES tests/*.cpp)
+# foreach(test_source ${test_SOURCES})
+#     get_filename_component(test_name ${test_source} NAME_WE)
+#     add_executable(${test_name} ${test_source} helpers/MatrixMultiplication.cu)
+#     set_target_properties(${test_name} PROPERTIES
+#                             RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/tests"
+#                             )  
+#     target_link_libraries( ${test_name} GTest::gtest_main ${Matlab_MEX_LIBRARY} 
+#     # ${Matlab_MX_LIBRARY} 
+#                            ${libSpGH_LIBRARY} ${MCR_LIBRARY_PATH}/libmwmclmcrrt.so.9.9 Boost::serialization)
+#     gtest_discover_tests(${test_name})
+#     target_include_directories(${test_name} PRIVATE ${Matlab_INCLUDE_DIRS})
 
-file(GLOB_RECURSE test_SOURCES tests/*.cpp)
-foreach(test_source ${test_SOURCES})
-    get_filename_component(test_name ${test_source} NAME_WE)
-    add_executable(${test_name} ${test_source} helpers/MatrixMultiplication.cu)
-    set_target_properties(${test_name} PROPERTIES
-                            RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/tests"
-                            )  
-    target_link_libraries( ${test_name} GTest::gtest_main ${Matlab_MEX_LIBRARY} 
-    # ${Matlab_MX_LIBRARY} 
-                           ${libSpGH_LIBRARY} ${MCR_LIBRARY_PATH}/libmwmclmcrrt.so.9.9 Boost::serialization)
-    gtest_discover_tests(${test_name})
-    target_include_directories(${test_name} PRIVATE ${Matlab_INCLUDE_DIRS})
-
-endforeach()
+# endforeach()

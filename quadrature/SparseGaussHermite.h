@@ -13,9 +13,11 @@
 #pragma once
 
 #include <optional>
+#include <functional>
 #include "quadrature/SparseGHQuadratureWeights.h"
 #include "helpers/CommonDefinitions.h"
 #include "helpers/MatrixMultiplication.h"
+#include "cuda_runtime.h"
 
 #ifdef GVI_SUBDUR_ENV 
 std::string map_file{source_root+"/GaussianVI/quadrature/SparseGHQuadratureWeights.bin"};
@@ -23,9 +25,14 @@ std::string map_file{source_root+"/GaussianVI/quadrature/SparseGHQuadratureWeigh
 std::string map_file{source_root+"/quadrature/SparseGHQuadratureWeights.bin"};
 #endif
 
+typedef void (*FunctionPtr)(double* input, double* output, int size, void* context);
+
+// extern "C" void CudaIntegration(FunctionPtr func_ptr, double* d_sigmapts, double* d_weights, double* d_results, int sigma_rows, int sigma_cols, int res_rows, int res_cols);
+
 namespace gvi{
 template <typename Function>
 class SparseGaussHermite{
+
 public:
 
     /**
@@ -152,6 +159,18 @@ public:
         return ;
     }
 
+    static void functionWrapper(double* input, double* output, int size, void* context) {
+        auto* self = static_cast<SparseGaussHermite*>(context);
+        Eigen::Map<const Eigen::VectorXd> x_vector(input, size);
+        std::cout << x_vector.transpose() << std::endl << std::endl;
+        Eigen::MatrixXd result = self->global_function(x_vector);
+        int rows = result.rows();
+        int cols = result.cols();
+        double* result_array = new double[result.size()];
+        Eigen::Map<Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>>(output, rows, cols) = result;
+        return;
+    }
+
     /**
      * @brief Compute the approximated integration using Gauss-Hermite.
      */
@@ -159,6 +178,7 @@ public:
         
         Eigen::MatrixXd res{function(_mean)};
         res.setZero();
+        global_function = function;
 
         // #pragma omp parallel
         // {
@@ -178,29 +198,32 @@ public:
         //     res += private_res;
         // }
         
-        
-        Eigen::MatrixXd pts(_sigmapts.rows(), _sigmapts.cols());
+        // Calculate the result of functions (Try to integrate it in cuda)
+        Eigen::MatrixXd pts(_sigmapts.rows()*res.rows(), res.cols());
         for (int i = 0; i < _sigmapts.rows(); i++) {
-            pts.row(i) = function(_sigmapts.row(i));
+            pts.block(i * res.rows(), 0, res.rows(), res.cols()) = function(_sigmapts.row(i));
         }
-        pts = pts.transpose();
 
+        double* sigmapts_array = new double[_sigmapts.size()];
         double* pts_array = new double[pts.size()];
-        double* Weight_array = new double[_Weights.size()];
+        double* pts_array1 = new double[pts.size()];
+        double* weight_array = new double[_Weights.size()];
         double* res_array = new double[res.size()];
-
-        // std::cout << "sigma:(" << _sigmapts.rows() << "," << _sigmapts.cols() << ")" << std::endl;
-        // std::cout << "weight:(" << _Weights.rows() << "," << _Weights.cols() << ")" << std::endl;
-        // std::cout << "res:(" << res.rows() << "," << res.cols() << ")" << std::endl;
 
         // std::cout << "pts:" << std::endl << pts << std::endl << std::endl;
         // std::cout << "Weight:" << std::endl << _Weights.transpose() << std::endl << std::endl;
-        
+
+        Eigen::Map<Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>>(sigmapts_array, _sigmapts.rows(), _sigmapts.cols()) = _sigmapts;
         Eigen::Map<Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>>(pts_array, pts.rows(), pts.cols()) = pts;
-        Eigen::Map<Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>>(Weight_array, _Weights.rows(), _Weights.cols()) = _Weights;
+        Eigen::Map<Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>>(weight_array, _Weights.rows(), _Weights.cols()) = _Weights;
+        
+        // std::cout<< "Sigma:" << _sigmapts.transpose() << std::endl;
 
-        MatrixMul(pts_array, Weight_array, res_array, pts.rows(), pts.cols(), _Weights.cols());
+        // CudaIntegration(functionWrapper, sigmapts_array, weight_array, res_array, _sigmapts.rows(), _sigmapts.cols(), res.rows(), res.cols(), this, pts_array, pts_array1);
+        CudaIntegration1(pts_array, weight_array, res_array, _sigmapts.rows(), _sigmapts.cols(), res.rows(), res.cols());
 
+        Eigen::Map<Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>> pts_cuda(pts_array1, pts.rows(), pts.cols());
+        // std::cout << pts_cuda.transpose() <<std::endl;
         Eigen::Map<Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>> res_cuda(res_array, res.rows(), res.cols());
         res = res_cuda;
         
@@ -262,6 +285,9 @@ public:
     inline Eigen::VectorXd weights() const { return this->_W; }
     inline Eigen::MatrixXd sigmapts() const { return this->_sigmapts; }
 
+    // The function to use in kernel function
+    // CudaFunction _func_cuda;
+
 protected:
     int _deg;
     int _dim;
@@ -269,6 +295,7 @@ protected:
     Eigen::MatrixXd _P, _sqrtP;
     Eigen::VectorXd _Weights;
     Eigen::MatrixXd _sigmapts, _zeromeanpts;
+    Function global_function;
 
     std::shared_ptr<QuadratureWeightsMap> _nodes_weights_map;
     
@@ -276,3 +303,25 @@ protected:
 
 
 } // namespace gvi
+
+
+// CudaFunction func_cuda;
+
+// func_cuda = [this, function, res](const double* x){
+//     double* result_array = new double[res.size()];
+//     double* non_const_x = const_cast<double*>(x);
+//     Eigen::Map<Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>> x_vector(non_const_x, res.rows(), res.cols());
+//     Eigen::MatrixXd result = function(x_vector);
+
+//     int rows = result.rows();
+//     int cols = result.cols();
+
+//     Eigen::Map<Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>>(result_array, rows, cols) = result;
+
+//     return std::make_tuple(result_array, rows, cols);
+// };
+
+
+// std::cout << "sigma:(" << _sigmapts.rows() << "," << _sigmapts.cols() << ")" << std::endl;
+// std::cout << "weight:(" << _Weights.rows() << "," << _Weights.cols() << ")" << std::endl;
+// std::cout << "res:(" << res.rows() << "," << res.cols() << ")" << std::endl;
