@@ -105,9 +105,8 @@ void CudaIntegration(FunctionPtr func_ptr, double* d_sigmapts, double* d_weights
     Sigma_function<<<threadperblock1, blockSize1>>>(sigmapts_gpu, pts_gpu, sigma_rows, sigma_cols, res_rows, res_cols, func_ptr, context);
     cudaDeviceSynchronize();
     cudaMemcpy(d_pts2, pts_gpu, sigma_rows * res_rows * res_cols * sizeof(double), cudaMemcpyDeviceToHost);
-
-
     cudaMemcpy(pts_gpu, d_pts1, sigma_rows * res_rows * res_cols * sizeof(double), cudaMemcpyHostToDevice);
+    
     // Dimension for the second kernel function
     dim3 blockSize2(3, 3);
     dim3 threadperblock2((res_cols + blockSize2.x - 1) / blockSize2.x, (res_rows + blockSize2.y - 1) / blockSize2.y);

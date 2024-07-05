@@ -180,29 +180,30 @@ public:
         res.setZero();
         global_function = function;
 
-        // #pragma omp parallel
-        // {
-        //     // Create a private copy of the res matrix for each thread
-        //     Eigen::MatrixXd private_res = Eigen::MatrixXd::Zero(res.rows(), res.cols());
-        //     Eigen::VectorXd pt(_dim);
-
-        //     #pragma omp for nowait  // The 'nowait' clause can be used if there is no need for synchronization after the loop
-        //     for (int i = 0; i < _sigmapts.rows(); i++) {
-        //         pt = _sigmapts.row(i); // Row of the matrix
-        //         // std::cout << pt << std::endl;
-        //         private_res += function(pt) * _Weights(i);
-        //     }
-
-        //     // Use a critical section to sum up results from all threads
-        //     #pragma omp critical
-        //     res += private_res;
-        // }
-        
         // Calculate the result of functions (Try to integrate it in cuda)
         Eigen::MatrixXd pts(_sigmapts.rows()*res.rows(), res.cols());
-        for (int i = 0; i < _sigmapts.rows(); i++) {
-            pts.block(i * res.rows(), 0, res.rows(), res.cols()) = function(_sigmapts.row(i));
+
+        #pragma omp parallel
+        {
+            // // Create a private copy of the res matrix for each thread
+            // Eigen::MatrixXd private_res = Eigen::MatrixXd::Zero(res.rows(), res.cols());
+            // Eigen::VectorXd pt(_dim);
+
+            #pragma omp for nowait  // The 'nowait' clause can be used if there is no need for synchronization after the loop
+            // for (int i = 0; i < _sigmapts.rows(); i++) {
+            //     pt = _sigmapts.row(i); // Row of the matrix
+            //     // std::cout << pt << std::endl;
+            //     private_res += function(pt) * _Weights(i);
+            // }
+            for (int i = 0; i < _sigmapts.rows(); i++) {
+                pts.block(i * res.rows(), 0, res.rows(), res.cols()) = function(_sigmapts.row(i));
+            }
+
+            // // Use a critical section to sum up results from all threads
+            // #pragma omp critical
+            // res += private_res;
         }
+        
 
         double* sigmapts_array = new double[_sigmapts.size()];
         double* pts_array = new double[pts.size()];
@@ -213,7 +214,7 @@ public:
         // std::cout << "pts:" << std::endl << pts << std::endl << std::endl;
         // std::cout << "Weight:" << std::endl << _Weights.transpose() << std::endl << std::endl;
 
-        Eigen::Map<Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>>(sigmapts_array, _sigmapts.rows(), _sigmapts.cols()) = _sigmapts;
+        // Eigen::Map<Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>>(sigmapts_array, _sigmapts.rows(), _sigmapts.cols()) = _sigmapts;
         Eigen::Map<Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>>(pts_array, pts.rows(), pts.cols()) = pts;
         Eigen::Map<Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>>(weight_array, _Weights.rows(), _Weights.cols()) = _Weights;
         
@@ -222,7 +223,7 @@ public:
         // CudaIntegration(functionWrapper, sigmapts_array, weight_array, res_array, _sigmapts.rows(), _sigmapts.cols(), res.rows(), res.cols(), this, pts_array, pts_array1);
         CudaIntegration1(pts_array, weight_array, res_array, _sigmapts.rows(), _sigmapts.cols(), res.rows(), res.cols());
 
-        Eigen::Map<Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>> pts_cuda(pts_array1, pts.rows(), pts.cols());
+        // Eigen::Map<Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>> pts_cuda(pts_array1, pts.rows(), pts.cols());
         // std::cout << pts_cuda.transpose() <<std::endl;
         Eigen::Map<Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>> res_cuda(res_array, res.rows(), res.cols());
         res = res_cuda;
