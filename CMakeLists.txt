@@ -31,7 +31,7 @@ set(CMAKE_CUDA_ARCHITECTURES "52;60;61;70;75;80")
 find_package(CUDA REQUIRED)
 include_directories(${CUDA_INCLUDE_DIRS})
 include_directories(${CMAKE_CUDA_TOOLKIT_INCLUDE_DIRECTORIES})
-set(CUDA_ARCH "sm_60")
+set(CUDA_ARCH "sm_86") #Change it based on the GPU
 set(CUDA_NVCC_FLAGS ${CUDA_NVCC_FLAGS}; -arch=${CUDA_ARCH}; -std=c++17; --expt-extended-lambda)
 
 # Specify the CUDA standard
@@ -81,7 +81,7 @@ foreach(gvi_source ${gvi_SOURCES})
     set_target_properties(${gvi_name} PROPERTIES
                             RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/src"
                             )   
-    target_link_libraries(${gvi_name} ${EIGEN3_LIBRARIES} ${Matlab_MEX_LIBRARY} OpenMP::OpenMP_CXX
+    target_link_libraries(${gvi_name} ${EIGEN3_LIBRARIES} ${Matlab_MEX_LIBRARY} ${CUDA_LIBRARIES} OpenMP::OpenMP_CXX 
                         #   ${Matlab_MX_LIBRARY} 
                           ${libSpGH_LIBRARY} ${MCR_LIBRARY_PATH}/libmwmclmcrrt.so.9.9 Boost::serialization)
     target_include_directories(${gvi_name} PRIVATE ${Matlab_INCLUDE_DIRS})

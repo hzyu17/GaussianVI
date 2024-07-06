@@ -16,7 +16,7 @@
 #include <functional>
 #include "quadrature/SparseGHQuadratureWeights.h"
 #include "helpers/CommonDefinitions.h"
-#include "helpers/MatrixMultiplication.h"
+#include "helpers/MatrixMultiplication.cuh"
 #include "cuda_runtime.h"
 
 #ifdef GVI_SUBDUR_ENV 
@@ -32,6 +32,8 @@ typedef void (*FunctionPtr)(double* input, double* output, int size, void* conte
 namespace gvi{
 template <typename Function>
 class SparseGaussHermite{
+    
+    using CudaFunction = std::function<double*(double*, int)>;
 
 public:
 
@@ -178,6 +180,9 @@ public:
         
         Eigen::MatrixXd res{function(_mean)};
         res.setZero();
+
+        update_function(function, res);
+
         global_function = function;
 
         // Calculate the result of functions (Try to integrate it in cuda)
@@ -220,7 +225,7 @@ public:
         
         // std::cout<< "Sigma:" << _sigmapts.transpose() << std::endl;
 
-        // CudaIntegration(functionWrapper, sigmapts_array, weight_array, res_array, _sigmapts.rows(), _sigmapts.cols(), res.rows(), res.cols(), this, pts_array, pts_array1);
+        // CudaIntegration(this->func_cuda, sigmapts_array, weight_array, res_array, _sigmapts.rows(), _sigmapts.cols(), res.rows(), res.cols(), this, pts_array, pts_array1);
         CudaIntegration1(pts_array, weight_array, res_array, _sigmapts.rows(), _sigmapts.cols(), res.rows(), res.cols());
 
         // Eigen::Map<Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>> pts_cuda(pts_array1, pts.rows(), pts.cols());
@@ -282,6 +287,18 @@ public:
         // timer.end_mus();
     }
 
+    inline void update_function(const Function& function, const Eigen::MatrixXd& res){
+        func_cuda = [this, function, res](const double* x, int size){
+            double* result_array = new double[res.size()];
+            double* non_const_x = const_cast<double*>(x);
+            Eigen::Map<const Eigen::VectorXd> x_vector(non_const_x, size);
+            // Eigen::Map<Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>> x_vector(non_const_x, res.rows(), res.cols());
+            Eigen::MatrixXd result = function(x_vector);
+            Eigen::Map<Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>>(result_array, result.rows(), result.cols()) = result;
+            return result_array;
+        };
+    }
+
 
     inline Eigen::VectorXd weights() const { return this->_W; }
     inline Eigen::MatrixXd sigmapts() const { return this->_sigmapts; }
@@ -297,6 +314,7 @@ protected:
     Eigen::VectorXd _Weights;
     Eigen::MatrixXd _sigmapts, _zeromeanpts;
     Function global_function;
+    CudaFunction func_cuda;
 
     std::shared_ptr<QuadratureWeightsMap> _nodes_weights_map;
     
@@ -306,7 +324,7 @@ protected:
 } // namespace gvi
 
 
-// CudaFunction func_cuda;
+// 
 
 // func_cuda = [this, function, res](const double* x){
 //     double* result_array = new double[res.size()];

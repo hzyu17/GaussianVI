@@ -1,8 +1,9 @@
 #include <cuda_runtime.h>
-#include "helpers/MatrixMultiplication.h"
+#include "helpers/MatrixMultiplication.cuh"
+// #include <nvfunctional>
 
-// using Function = std::function<double(const VectorXd&, const CostClass &)>;
-// using CudaFunction = std::function<double*(const Function& function, const double* x)>;
+
+// using CudaFunction = nvstd::function<double*(double*, int)>;
 
 // CUDA kernel for matrix-vector multiplication
 __global__ void MatrixMultiplication(double* d_matrix, double* d_vectors, double* d_result, int rows, int cols, int vec_num) {
@@ -19,6 +20,7 @@ __global__ void MatrixMultiplication(double* d_matrix, double* d_vectors, double
 
 // __global__ void Sigma_function(double* d_sigmapts, double* d_pts, double* input_vector, double* pts_vector, int sigmapts_rows, int sigmapts_cols, int res_rows, int res_cols, FunctionPtr func_ptr, void* context){
 
+// template <typename Function>
 __global__ void Sigma_function(double* d_sigmapts, double* d_pts, int sigmapts_rows, int sigmapts_cols, int res_rows, int res_cols, FunctionPtr func_ptr, void* context){
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     // double* input_vector = (double*)malloc(sigmapts_cols * sizeof(double));
@@ -84,7 +86,8 @@ void MatrixMul(double* matrix, double* vectorMatrix, double* result, int rows, i
 }
 
 // void CudaIntegration(FunctionPtr func_ptr, double* d_sigmapts, double* d_weights, double* d_results, int sigma_rows, int sigma_cols, int res_rows, int res_cols, void* context)
-void CudaIntegration(FunctionPtr func_ptr, double* d_sigmapts, double* d_weights, double* d_results, int sigma_rows, int sigma_cols, int res_rows, int res_cols, void* context, double* d_pts1, double* d_pts2)
+// template <typename Function>
+void CudaIntegration(FunctionPtr function, double* d_sigmapts, double* d_weights, double* d_results, int sigma_rows, int sigma_cols, int res_rows, int res_cols, void* context, double* d_pts1, double* d_pts2)
 {
     double *sigmapts_gpu, *pts_gpu, *weight_gpu, *result_gpu; 
 
@@ -102,7 +105,7 @@ void CudaIntegration(FunctionPtr func_ptr, double* d_sigmapts, double* d_weights
 
     // Kernel 1: Obtain the result of function 
     // Sigma_function<<<threadperblock1, blockSize1>>>(sigmapts_gpu, pts_gpu, input_vector, pts_vector, sigma_rows, sigma_cols, res_rows, res_cols, func_ptr, context);
-    Sigma_function<<<threadperblock1, blockSize1>>>(sigmapts_gpu, pts_gpu, sigma_rows, sigma_cols, res_rows, res_cols, func_ptr, context);
+    Sigma_function<<<threadperblock1, blockSize1>>>(sigmapts_gpu, pts_gpu, sigma_rows, sigma_cols, res_rows, res_cols, *function, context);
     cudaDeviceSynchronize();
     cudaMemcpy(d_pts2, pts_gpu, sigma_rows * res_rows * res_cols * sizeof(double), cudaMemcpyDeviceToHost);
     cudaMemcpy(pts_gpu, d_pts1, sigma_rows * res_rows * res_cols * sizeof(double), cudaMemcpyHostToDevice);

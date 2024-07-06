@@ -1,4 +1,4 @@
-#include "helpers/MatrixMultiplication.h"
+#include "helpers/MatrixMultiplication.cuh"
 #include <Eigen/Dense>
 
 int main (void){
