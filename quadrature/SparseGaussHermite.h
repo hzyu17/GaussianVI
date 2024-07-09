@@ -25,7 +25,7 @@ std::string map_file{source_root+"/GaussianVI/quadrature/SparseGHQuadratureWeigh
 std::string map_file{source_root+"/quadrature/SparseGHQuadratureWeights.bin"};
 #endif
 
-typedef void (*FunctionPtr)(double* input, double* output, int size, void* context);
+typedef void (*FunctionPtr)(double* input, double* output);
 
 // extern "C" void CudaIntegration(FunctionPtr func_ptr, double* d_sigmapts, double* d_weights, double* d_results, int sigma_rows, int sigma_cols, int res_rows, int res_cols);
 
@@ -33,7 +33,7 @@ namespace gvi{
 template <typename Function>
 class SparseGaussHermite{
     
-    using CudaFunction = std::function<double*(double*, int)>;
+    using CudaFunction = std::function<void(double*, double*)>;
 
 public:
 
@@ -180,8 +180,37 @@ public:
         
         Eigen::MatrixXd res{function(_mean)};
         res.setZero();
+        
+        #pragma omp parallel
+        {
+            // Create a private copy of the res matrix for each thread
+            Eigen::MatrixXd private_res = Eigen::MatrixXd::Zero(res.rows(), res.cols());
+            Eigen::VectorXd pt(_dim);
 
-        update_function(function, res);
+            #pragma omp for nowait  // The 'nowait' clause can be used if there is no need for synchronization after the loop
+            for (int i = 0; i < _sigmapts.rows(); i++) {
+                pt = _sigmapts.row(i); // Row of the matrix
+                // std::cout << pt << std::endl;
+                private_res += function(pt) * _Weights(i);
+            }
+
+            // Use a critical section to sum up results from all threads
+            #pragma omp critical
+            res += private_res;
+        }
+        
+        return res;
+    };
+
+    Eigen::MatrixXd Integrate_cuda(const Function& function, const int& type){
+        
+        Eigen::MatrixXd res{function(_mean)};
+        res.setZero();
+        _mean_func = res;
+
+        update_function(function);
+        FunctionPtr funcPtr = static_cast<FunctionPtr>(func_cuda.target<void(double*, double*)>());
+        // FunctionPtr funcPtr = *static_cast<void (**)(double*, double*)>(func_cuda.target<void(*)(double*, double*)>());
 
         global_function = function;
 
@@ -190,31 +219,20 @@ public:
 
         #pragma omp parallel
         {
-            // // Create a private copy of the res matrix for each thread
-            // Eigen::MatrixXd private_res = Eigen::MatrixXd::Zero(res.rows(), res.cols());
-            // Eigen::VectorXd pt(_dim);
-
             #pragma omp for nowait  // The 'nowait' clause can be used if there is no need for synchronization after the loop
-            // for (int i = 0; i < _sigmapts.rows(); i++) {
-            //     pt = _sigmapts.row(i); // Row of the matrix
-            //     // std::cout << pt << std::endl;
-            //     private_res += function(pt) * _Weights(i);
-            // }
+           
             for (int i = 0; i < _sigmapts.rows(); i++) {
                 pts.block(i * res.rows(), 0, res.rows(), res.cols()) = function(_sigmapts.row(i));
             }
 
-            // // Use a critical section to sum up results from all threads
-            // #pragma omp critical
-            // res += private_res;
         }
-        
 
         double* sigmapts_array = new double[_sigmapts.size()];
         double* pts_array = new double[pts.size()];
         double* pts_array1 = new double[pts.size()];
         double* weight_array = new double[_Weights.size()];
         double* res_array = new double[res.size()];
+        double* mu_array = new double[_mean.size()];
 
         // std::cout << "pts:" << std::endl << pts << std::endl << std::endl;
         // std::cout << "Weight:" << std::endl << _Weights.transpose() << std::endl << std::endl;
@@ -222,20 +240,22 @@ public:
         // Eigen::Map<Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>>(sigmapts_array, _sigmapts.rows(), _sigmapts.cols()) = _sigmapts;
         Eigen::Map<Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>>(pts_array, pts.rows(), pts.cols()) = pts;
         Eigen::Map<Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>>(weight_array, _Weights.rows(), _Weights.cols()) = _Weights;
+        Eigen::Map<Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>>(mu_array, _mean.rows(), _mean.cols()) = _mean;
         
         // std::cout<< "Sigma:" << _sigmapts.transpose() << std::endl;
+        CudaIntegration(funcPtr, sigmapts_array, weight_array, res_array, mu_array, _sigmapts.rows(), _sigmapts.cols(), res.rows(), res.cols(), this, pts_array, pts_array1, type);
+        // CudaIntegration1(pts_array, weight_array, res_array, _sigmapts.rows(), _sigmapts.cols(), res.rows(), res.cols());
 
-        // CudaIntegration(this->func_cuda, sigmapts_array, weight_array, res_array, _sigmapts.rows(), _sigmapts.cols(), res.rows(), res.cols(), this, pts_array, pts_array1);
-        CudaIntegration1(pts_array, weight_array, res_array, _sigmapts.rows(), _sigmapts.cols(), res.rows(), res.cols());
+        Eigen::Map<Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>> res_cuda(res_array, res.rows(), res.cols());
 
         // Eigen::Map<Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>> pts_cuda(pts_array1, pts.rows(), pts.cols());
-        // std::cout << pts_cuda.transpose() <<std::endl;
-        Eigen::Map<Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>> res_cuda(res_array, res.rows(), res.cols());
+        // std::cout << "pts:" << std::endl << pts.transpose() <<std::endl;
+        // std::cout << "pts_cuda:" << std::endl << pts_cuda.transpose() <<std::endl;
         res = res_cuda;
         
         return res;
-        
     };
+
 
     /**
      * Update member variables
@@ -287,15 +307,18 @@ public:
         // timer.end_mus();
     }
 
-    inline void update_function(const Function& function, const Eigen::MatrixXd& res){
-        func_cuda = [this, function, res](const double* x, int size){
-            double* result_array = new double[res.size()];
-            double* non_const_x = const_cast<double*>(x);
-            Eigen::Map<const Eigen::VectorXd> x_vector(non_const_x, size);
+    inline void update_function(const Function& function){
+        func_cuda = [this, function](double* input, double* output){
+            std::cout << "Comming in the function" << std::endl;
+            double* result_array = new double[_mean_func.size()];
+            Eigen::Map<const Eigen::VectorXd> x_vector(input, this->_sigmapts.rows());
             // Eigen::Map<Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>> x_vector(non_const_x, res.rows(), res.cols());
             Eigen::MatrixXd result = function(x_vector);
             Eigen::Map<Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>>(result_array, result.rows(), result.cols()) = result;
-            return result_array;
+            for (int i = 0; i<_mean_func.size(); i++){
+                output[i] = result_array[i];
+            }
+            // output =  result_array;
         };
     }
 
@@ -310,7 +333,7 @@ protected:
     int _deg;
     int _dim;
     Eigen::VectorXd _mean;
-    Eigen::MatrixXd _P, _sqrtP;
+    Eigen::MatrixXd _P, _sqrtP, _mean_func;
     Eigen::VectorXd _Weights;
     Eigen::MatrixXd _sigmapts, _zeromeanpts;
     Function global_function;

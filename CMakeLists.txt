@@ -14,6 +14,8 @@ set(gvi_subdirs
     gvibase
 )
 
+set(CMAKE_CUDA_SEPARABLE_COMPILATION ON)
+
 include_directories("${CMAKE_CURRENT_SOURCE_DIR}")
 
 add_compile_definitions("SOURCE_ROOT=${CMAKE_CURRENT_SOURCE_DIR}")
