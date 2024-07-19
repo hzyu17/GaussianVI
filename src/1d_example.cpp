@@ -29,7 +29,7 @@ double cost_function(const VectorXd& vec_x, const gvi::NoneType& none_type){
 
     // y should be sampled. for single trial just give it a value.
     double y = f*b/mu_p - 0.8;
-
+    
     return ((x - mu_p)*(x - mu_p) / sig_p_sq / 2 + (y - f*b/x)*(y - f*b/x) / sig_r_sq / 2); 
 
 }

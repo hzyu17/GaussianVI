@@ -64,8 +64,8 @@ void calculate_partial_V(std::optional<double> step_size=std::nullopt) override{
         this->_Vdmu = this->_Vdmu / this->temperature();
 
         /// Integrate for E_q{phi(x)}
-        // double E_phi = this->_gh->Integrate(this->_func_phi)(0, 0);
-        double E_phi = this->_gh->Integrate_cuda(this->_func_phi, 0)(0, 0);
+        double E_phi = this->_gh->Integrate(this->_func_phi)(0, 0);
+        // double E_phi = this->_gh->Integrate_cuda(this->_func_phi, 0)(0, 0);
         
         /// Integrate for partial V^2 / ddmu_ 
         // MatrixXd E_xxphi{this->_gh->Integrate(this->_func_Vmumu)};

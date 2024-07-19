@@ -37,8 +37,8 @@ set(CUDA_ARCH "sm_86") #Change it based on the GPU
 set(CUDA_NVCC_FLAGS ${CUDA_NVCC_FLAGS}; -arch=${CUDA_ARCH}; -std=c++17; --expt-extended-lambda)
 
 # Specify the CUDA standard
-set(CMAKE_CUDA_STANDARD 17)
-set(CMAKE_CUDA_STANDARD_REQUIRED ON)
+# set(CMAKE_CUDA_STANDARD 17)
+# set(CMAKE_CUDA_STANDARD_REQUIRED ON)
 
 # Eigen
 find_package(Eigen3 3.4.0 REQUIRED)

@@ -1,4 +1,4 @@
-#include "helpers/MatrixMultiplication.cuh"
+#include "helpers/CudaOperation.h"
 #include <Eigen/Dense>
 
 int main (void){
@@ -23,27 +23,15 @@ int main (void){
         vectorMatrix.col(i) = vectors[i];
     }
 
-    // Allocate memory for arrays to store matrix and vector data
-    double* matrix_array = new double[matrix.size()];
-    double* vectorMatrix_array = new double[vectorMatrix.size()];
-    double* result_array = new double[result.size()];
+    // MatrixMul(matrix.data(), vectorMatrix.data(), result.data(), rows, cols, vec_num);
 
-    // Assign the value in eigen matrix into array
-    Eigen::Map<Eigen::MatrixXd>(matrix_array, matrix.transpose().rows(), matrix.transpose().cols()) = matrix.transpose();
-    Eigen::Map<Eigen::MatrixXd>(vectorMatrix_array, vectorMatrix.transpose().rows(), vectorMatrix.transpose().cols()) = vectorMatrix.transpose();
+    // std::cout << "Result_cuda:" << std::endl << result << std::endl;
+    // std::cout << std::endl;
 
-    MatrixMul(matrix_array, vectorMatrix_array, result_array, rows, cols, vec_num);
+    // result = matrix * vectorMatrix;
 
-    Eigen::Map<Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>> result_transform(result_array, rows, vec_num);
-    // result = result_transform;
-    result = matrix * vectorMatrix;
-
-    std::cout << "Result:" << std::endl << result << std::endl;
-    std::cout << std::endl;
-
+    // std::cout << "Result:" << std::endl << result << std::endl;
+    // std::cout << std::endl;
     
-    std::cout << "Result1:" << std::endl << result_transform << std::endl;
-    std::cout << std::endl;
-    
-    return 0;
+    // return 0;
 }
