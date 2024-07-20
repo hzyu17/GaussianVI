@@ -36,6 +36,7 @@ class SparseGaussHermite{
     
     using CudaFunction = std::function<void(double*, double*)>;
     using GHFunction = std::function<MatrixXd(const VectorXd&)>;
+    // using CostFunction = std::function<double(const VectorXd&, const CostClass &)>;
     using Cuda = CudaOperation<GHFunction>;
 
 public:

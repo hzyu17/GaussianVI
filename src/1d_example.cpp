@@ -18,11 +18,12 @@
 
 #include "ngd/NGDFactorizedSimpleGH.h"
 #include "ngd/NGD-GH.h"
+#include <cuda_runtime.h>
 
 using namespace Eigen;
 using namespace gvi;
 
-double cost_function(const VectorXd& vec_x, const gvi::NoneType& none_type){
+__host__ __device__ double cost_function(const VectorXd& vec_x, const gvi::NoneType& none_type){
     double x = vec_x(0);
     double mu_p = 20, f = 400, b = 0.1, sig_r_sq = 0.09;
     double sig_p_sq = 9;
@@ -33,17 +34,6 @@ double cost_function(const VectorXd& vec_x, const gvi::NoneType& none_type){
     return ((x - mu_p)*(x - mu_p) / sig_p_sq / 2 + (y - f*b/x)*(y - f*b/x) / sig_r_sq / 2); 
 
 }
-
-// double cost_function1(const double* vec_x, int dim){
-//     double x = vec_x[0];
-//     double mu_p = 20, f = 400, b = 0.1, sig_r_sq = 0.09;
-//     double sig_p_sq = 9;
-
-//     // y should be sampled. for single trial just give it a value.
-//     double y = f*b/mu_p - 0.8;
-
-//     return ((x - mu_p)*(x - mu_p) / sig_p_sq / 2 + (y - f*b/x)*(y - f*b/x) / sig_r_sq / 2); 
-// }
 
 int main(){
 

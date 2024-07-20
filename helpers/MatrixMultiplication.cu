@@ -3,7 +3,6 @@
 
 using namespace Eigen;
 using GHFunction = std::function<MatrixXd(const VectorXd&)>;
-// using CudaFunction = nvstd::function<double*(double*, int)>;
 
 // CUDA kernel for matrix-vector multiplication
 __global__ void MatrixMultiplication(double* d_matrix, double* d_vectors, double* d_result, int rows, int cols, int vec_num) {
@@ -89,7 +88,6 @@ __global__ void func_Vmumu(const double* vec_x, double* pt, const double* mu, in
 //     dim3 blockSize(3, 3);
 //     dim3 threadperblock((dim + blockSize.x - 1) / blockSize.x, (dim + blockSize.y - 1) / blockSize.y);
 //     if (type == 1)
-
 // }
 
 
@@ -134,7 +132,6 @@ void CudaOperation<Function>::CudaIntegration(Function function, const MatrixXd&
     // std::cout << "Sigma rows and cols1" << std::endl << sigma_rows << sigma_cols << std::endl << std::endl;
 
     CudaOperation<Function>* class_gpu;
-    // std::cout << sizeof(*this) << std::endl;
     cudaMalloc(&class_gpu, sizeof(CudaOperation<Function>));
     cudaMemcpy(class_gpu, this, sizeof(CudaOperation<Function>), cudaMemcpyHostToDevice);
 

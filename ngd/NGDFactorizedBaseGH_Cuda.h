@@ -17,9 +17,11 @@
 
 // #include "ngd/NGDFactorizedBase.h"
 #include "gvibase/GVIFactorizedBaseGH.h"
+#include <cuda_runtime.h>
 #include <memory>
 
 using namespace Eigen;
+
 
 namespace gvi{
 
@@ -40,7 +42,9 @@ public:
                         double temperature=1.0, double high_temperature=10.0,
                         std::optional<QuadratureWeightsMap> weight_sigpts_map_option=std::nullopt):
                 GVIBase(dimension, state_dim, num_states, start_index, 
-                        temperature, high_temperature, weight_sigpts_map_option)
+                        temperature, high_temperature, weight_sigpts_map_option), 
+                _function{function}, 
+                _cost_class{cost_class}
             {
                 /// Override of the GVIBase classes. _func_phi-> Scalar, _func_Vmu -> Vector, _func_Vmumu -> Matrix
                 GVIBase::_func_phi = [this, function, cost_class](const VectorXd& x){return MatrixXd::Constant(1, 1, function(x, cost_class));};
@@ -50,6 +54,11 @@ public:
             }
 public:
 
+// __host__ __device__ MatrixXd _func_phi (const VectorXd& x){
+//     return MatrixXd::Constant(1, 1, _function(x, _cost_class));
+// }
+
+
 void calculate_partial_V(std::optional<double> step_size=std::nullopt) override{
         // update the mu and sigma inside the gauss-hermite integrator
         updateGH(this->_mu, this->_covariance);
@@ -58,15 +67,15 @@ void calculate_partial_V(std::optional<double> step_size=std::nullopt) override{
         this->_Vddmu.setZero();
 
         /// Integrate for E_q{_Vdmu} 
-        this->_Vdmu = this->_gh->Integrate(this->_func_Vmu);
+        this->_Vdmu = this->_gh->Integrate_cuda(this->_func_Vmu, 1);
         this->_Vdmu = this->_precision * this->_Vdmu;
         this->_Vdmu = this->_Vdmu / this->temperature();
 
         /// Integrate for E_q{phi(x)}
-        double E_phi = this->_gh->Integrate(this->_func_phi)(0, 0);
+        double E_phi = this->_gh->Integrate_cuda(this->_func_phi, 0)(0, 0);
         
         /// Integrate for partial V^2 / ddmu_ 
-        MatrixXd E_xxphi{this->_gh->Integrate(this->_func_Vmumu)};
+        MatrixXd E_xxphi{this->_gh->Integrate_cuda(this->_func_Vmumu, 2)};
 
         this->_Vddmu.triangularView<Upper>() = (this->_precision * E_xxphi * this->_precision - this->_precision * E_phi).triangularView<Upper>();
         this->_Vddmu.triangularView<StrictlyLower>() = this->_Vddmu.triangularView<StrictlyUpper>().transpose();
@@ -111,7 +120,10 @@ void calculate_partial_V(std::optional<double> step_size=std::nullopt) override{
 
         return this->_gh->Integrate(this->_func_phi)(0, 0) / this->temperature();
     }
-    
+
+
+    const Function _function;
+    const CostClass _cost_class;
 
 };
 

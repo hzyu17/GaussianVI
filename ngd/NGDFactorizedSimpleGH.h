@@ -9,7 +9,7 @@
  * 
  */
 
-#include "ngd/NGDFactorizedBaseGH.h"
+#include "ngd/NGDFactorizedBaseGH_Cuda.h"
 #include <memory>
 
 using namespace Eigen;

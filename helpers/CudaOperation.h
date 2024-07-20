@@ -1,20 +1,19 @@
-#ifndef MATRIX_MULTIPLICATION_CUH
-#define MATRIX_MULTIPLICATION_CUH
+#ifndef CUDA_OPERATION_H
+#define CUDA_OPERATION_H
 
-// #include <nvfunctional>
-// #include <thrust/functional.h>
 #include <cuda_runtime.h>
 #include <iostream>
 #include <Eigen/Dense>
 
 using namespace Eigen;
 
-typedef void (*FunctionPtr)(double* input, double* output);
 using GHFunction = std::function<MatrixXd(const VectorXd&)>;
 
 namespace gvi{
+
 template <typename Function>
 class CudaOperation{
+
 public:
     CudaOperation(){}
 
@@ -30,22 +29,17 @@ public:
         double mu_p = 20, f = 400, b = 0.1, sig_r_sq = 0.09;
         double sig_p_sq = 9;
 
-        // printf("x = %lf  ", x);
-
         // y should be sampled. for single trial just give it a value.
         double y = f*b/mu_p - 0.8;
 
         return ((x - mu_p)*(x - mu_p) / sig_p_sq / 2 + (y - f*b/x)*(y - f*b/x) / sig_r_sq / 2); 
     }
 
-    // __host__ __device__ inline double cost_function1(const VectorXd& vec_x, int dim){
-
-
-    Function _func;
+    // __host__ __device__ inline MatrixXd sigma_func(const VectorXd& vec_x){
+    //     return _func(vec_x);
+    // }
 
 };
-
-
 
 // __global__ void MatrixMultiplication(double* d_matrix, double* d_vectors, double* d_result, int rows, int cols, int vec_num);
 
@@ -57,8 +51,7 @@ public:
 
 // __global__ void func_Vmumu(const double* vec_x, double* pt, const double* mu, int dim, int index, double& func_value);
 
-
 }
 
 
-#endif // MATRIX_MULTIPLICATION_CUH
+#endif // CUDA_OPERATION_H
