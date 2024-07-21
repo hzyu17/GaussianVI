@@ -49,47 +49,87 @@ public:
      * @param mean mean 
      * @param P covariance matrix
      */
+
+    // SparseGaussHermite(
+    //     const int& deg, 
+    //     const int& dim, 
+    //     const Eigen::VectorXd& mean, 
+    //     const Eigen::MatrixXd& P,
+    //     std::optional<QuadratureWeightsMap> weight_sigpts_map_option=std::nullopt): 
+    //         _deg(deg),
+    //         _dim(dim),
+    //         _mean(mean),
+    //         _P(P)
+    //         {  
+    //             // If input has a loaded map
+    //             if (weight_sigpts_map_option.has_value()){
+    //                 _nodes_weights_map = std::make_shared<QuadratureWeightsMap>(weight_sigpts_map_option.value());
+    //             }
+    //             // Read map from file
+    //             else{
+    //                 QuadratureWeightsMap nodes_weights_map;
+    //                 try {
+    //                     std::ifstream ifs(map_file, std::ios::binary);
+    //                     if (!ifs.is_open()) {
+    //                         std::string error_msg = "Failed to open file for GH weights reading in file: " + map_file;
+    //                         throw std::runtime_error(error_msg);
+    //                     }
+
+    //                     std::cout << "Opening file for GH weights reading in file: " << map_file << std::endl;
+    //                     boost::archive::binary_iarchive ia(ifs);
+    //                     ia >> nodes_weights_map;
+
+    //                 } catch (const boost::archive::archive_exception& e) {
+    //                     std::cerr << "Boost archive exception: " << e.what() << std::endl;
+    //                 } catch (const std::exception& e) {
+    //                     std::cerr << "Standard exception: " << e.what() << std::endl;
+    //                 }
+
+    //                 _nodes_weights_map = std::make_shared<QuadratureWeightsMap>(nodes_weights_map);
+
+    //             }
+                
+    //             computeSigmaPtsWeights();
+    //         }
+
+
+
     SparseGaussHermite(
         const int& deg, 
         const int& dim, 
         const Eigen::VectorXd& mean, 
-        const Eigen::MatrixXd& P,
-        std::optional<QuadratureWeightsMap> weight_sigpts_map_option=std::nullopt): 
+        const Eigen::MatrixXd& P): 
             _deg(deg),
             _dim(dim),
             _mean(mean),
             _P(P)
             {  
-                // If input has a loaded map
-                if (weight_sigpts_map_option.has_value()){
-                    _nodes_weights_map = std::make_shared<QuadratureWeightsMap>(weight_sigpts_map_option.value());
-                }
-                // Read map from file
-                else{
-                    QuadratureWeightsMap nodes_weights_map;
-                    try {
-                        std::ifstream ifs(map_file, std::ios::binary);
-                        if (!ifs.is_open()) {
-                            std::string error_msg = "Failed to open file for GH weights reading in file: " + map_file;
-                            throw std::runtime_error(error_msg);
-                        }
 
-                        std::cout << "Opening file for GH weights reading in file: " << map_file << std::endl;
-                        boost::archive::binary_iarchive ia(ifs);
-                        ia >> nodes_weights_map;
-
-                    } catch (const boost::archive::archive_exception& e) {
-                        std::cerr << "Boost archive exception: " << e.what() << std::endl;
-                    } catch (const std::exception& e) {
-                        std::cerr << "Standard exception: " << e.what() << std::endl;
+            // Read map from file
+                QuadratureWeightsMap nodes_weights_map;
+                try {
+                    std::ifstream ifs(map_file, std::ios::binary);
+                    if (!ifs.is_open()) {
+                        std::string error_msg = "Failed to open file for GH weights reading in file: " + map_file;
+                        throw std::runtime_error(error_msg);
                     }
 
-                    _nodes_weights_map = std::make_shared<QuadratureWeightsMap>(nodes_weights_map);
+                    std::cout << "Opening file for GH weights reading in file: " << map_file << std::endl;
+                    boost::archive::binary_iarchive ia(ifs);
+                    ia >> nodes_weights_map;
 
+                } catch (const boost::archive::archive_exception& e) {
+                    std::cerr << "Boost archive exception: " << e.what() << std::endl;
+                } catch (const std::exception& e) {
+                    std::cerr << "Standard exception: " << e.what() << std::endl;
                 }
+
+                _nodes_weights_map = std::make_shared<QuadratureWeightsMap>(nodes_weights_map);
                 
                 computeSigmaPtsWeights();
             }
+
+
 
     SparseGaussHermite(
         const int& deg, 
@@ -212,11 +252,7 @@ public:
         _mean_func = res;
 
         update_function(function);
-        // FunctionPtr funcPtr = static_cast<FunctionPtr>(func_cuda.target<void(double*, double*)>());
-        // FunctionPtr funcPtr = *static_cast<void (**)(double*, double*)>(func_cuda.target<void(*)(double*, double*)>());
         FunctionPtr funcPtr;
-
-        // std::cout << sizeof(*this) <<std::endl;
 
         global_function = function;
 
@@ -233,33 +269,17 @@ public:
 
         }
 
-        double* sigmapts_array = new double[_sigmapts.size()];
         double* pts_array = new double[pts.size()];
-        double* pts_array1 = new double[pts.size()];
-        double* weight_array = new double[_Weights.size()];
-        double* res_array = new double[res.size()];
-        double* mu_array = new double[_mean.size()];
 
         // std::cout << "pts:" << std::endl << pts << std::endl << std::endl;
         // std::cout << "Weight:" << std::endl << _Weights.transpose() << std::endl << std::endl;
-
-        // Eigen::Map<Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>>(sigmapts_array, _sigmapts.rows(), _sigmapts.cols()) = _sigmapts;
-        Eigen::Map<Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>>(pts_array, pts.rows(), pts.cols()) = pts;
-        Eigen::Map<Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>>(weight_array, _Weights.rows(), _Weights.cols()) = _Weights;
-        Eigen::Map<Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>>(mu_array, _mean.rows(), _mean.cols()) = _mean;
-        
-        // std::cout<< "Sigma:" << _sigmapts.transpose() << std::endl;
-
-
-        // std::cout << "Sigma rows and cols" << std::endl << _sigmapts.rows() << _sigmapts.cols() << std::endl << std::endl;
-
-        this -> _cuda -> CudaIntegration(function, _sigmapts, _Weights, res, _mean, _sigmapts.rows(), _sigmapts.cols(), res.rows(), res.cols(), pts.data(), pts_array1, type);
-
+    
+        this -> _cuda -> CudaIntegration(function, _sigmapts, _Weights, res, _mean, _sigmapts.rows(), _sigmapts.cols(), res.rows(), res.cols(), pts.data(), pts_array, type);
         // this -> _cuda -> CudaIntegration1(pts, _Weights, res, _sigmapts.rows(), _sigmapts.cols(), res.rows(), res.cols());
 
         // Eigen::Map<Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>> res_cuda(res_array, res.rows(), res.cols());
         
-        // Eigen::Map<Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>> pts_cuda(pts_array1, pts.rows(), pts.cols());
+        // Eigen::Map<Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>> pts_cuda(pts_array, pts.rows(), pts.cols());
         // std::cout << "pts:" << std::endl << pts <<std::endl;
         // std::cout << "pts_cuda:" << std::endl << pts_cuda <<std::endl;
 

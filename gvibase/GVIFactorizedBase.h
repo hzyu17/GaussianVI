@@ -125,6 +125,7 @@ public:
      * @brief Compute the increment on mean and precision (or covariance) matrix on the factorized level.
     */
     virtual void calculate_partial_V(std::optional<double> step_size=std::nullopt){}
+    // virtual void calculate_partial_V(){}
 
     /**
      * @brief Compute the cost function. V(x) = E_q(\phi(x))

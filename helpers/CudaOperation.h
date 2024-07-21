@@ -19,12 +19,11 @@ public:
 
     void MatrixMul(double* d_matrix, double* d_vectors, double* d_result, int rows, int cols, int vec_num);
 
-    // void CudaIntegration(FunctionPtr function, double* d_sigmapts, double* d_weights, double* d_results, double* d_mu, int sigma_rows, int sigma_cols, int res_rows, int res_cols, void* context, double* d_pts1, double* d_pts2, int type);
     void CudaIntegration(Function func, const MatrixXd& sigmapts, const MatrixXd& weights, MatrixXd& results, const MatrixXd& mean, int sigma_rows, int sigma_cols, int res_rows, int res_cols, double* d_pts1, double* d_pts2, int type);
 
     void CudaIntegration1(MatrixXd& d_pts, const MatrixXd& d_weights, MatrixXd& d_results, int sigma_rows, int sigma_cols, int res_rows, int res_cols);
 
-    __host__ __device__ inline double cost_function1(const VectorXd& vec_x, int dim){
+    __host__ __device__ inline double cost_function1(const VectorXd& vec_x){
         double x = vec_x(0);
         double mu_p = 20, f = 400, b = 0.1, sig_r_sq = 0.09;
         double sig_p_sq = 9;

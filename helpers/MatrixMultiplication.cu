@@ -1,5 +1,6 @@
 #include <cuda_runtime.h>
 #include "helpers/CudaOperation.h"
+// #include "ngd/NGDFactorizedBaseGH_Cuda.h"
 
 using namespace Eigen;
 using GHFunction = std::function<MatrixXd(const VectorXd&)>;
@@ -27,7 +28,7 @@ __global__ void Sigma_function(double* d_sigmapts, double* d_pts, double* mu, in
         Eigen::Map<VectorXd> mean(mu, sigmapts_cols);
         // printf("idx=%d:%lf\n", idx, sigmapts(idx));
         // printf("rows:%d, cols:%d\n", sigmapts_rows, sigmapts_cols);
-        double function_value = pointer -> cost_function1(sigmapts.row(idx), sigmapts_cols);
+        double function_value = pointer -> cost_function1(sigmapts.row(idx));
         // printf("Thread%d: %lf  \n", idx, function_value);
         // double function_value = cost_function1(d_sigmapts + idx*sigmapts_cols, sigmapts_cols);
 

@@ -36,8 +36,13 @@ include_directories(${CMAKE_CUDA_TOOLKIT_INCLUDE_DIRECTORIES})
 set(CUDA_ARCH "sm_86") #Change it based on the GPU
 set(CUDA_NVCC_FLAGS ${CUDA_NVCC_FLAGS}; -arch=${CUDA_ARCH}; -std=c++17; --expt-extended-lambda)
 
+if (CMAKE_CUDA_COMPILER)
+    set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} --expt-relaxed-constexpr")
+endif()
+
+
 # Specify the CUDA standard
-# set(CMAKE_CUDA_STANDARD 17)
+set(CMAKE_CUDA_STANDARD 14)
 # set(CMAKE_CUDA_STANDARD_REQUIRED ON)
 
 # Eigen

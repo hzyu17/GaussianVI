@@ -16,7 +16,7 @@
 #define STRING(x) #x
 #define XSTRING(x) STRING(x)
 
-#include "ngd/NGDFactorizedSimpleGH.h"
+#include "ngd/NGDFactorizedSimpleGH_Cuda.h"
 #include "ngd/NGD-GH.h"
 #include <cuda_runtime.h>
 
