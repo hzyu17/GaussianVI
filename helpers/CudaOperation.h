@@ -4,6 +4,7 @@
 #include <cuda_runtime.h>
 #include <iostream>
 #include <Eigen/Dense>
+// #include "ngd/NGDFactorizedBaseGH_Cuda.h"
 
 using namespace Eigen;
 
@@ -11,17 +12,15 @@ using GHFunction = std::function<MatrixXd(const VectorXd&)>;
 
 namespace gvi{
 
-template <typename Function>
+template <typename CostClass>
 class CudaOperation{
 
 public:
     CudaOperation(){}
 
-    void MatrixMul(double* d_matrix, double* d_vectors, double* d_result, int rows, int cols, int vec_num);
+    void CudaIntegration(const MatrixXd& sigmapts, const MatrixXd& weights, MatrixXd& results, const MatrixXd& mean, int type);
 
-    void CudaIntegration(Function func, const MatrixXd& sigmapts, const MatrixXd& weights, MatrixXd& results, const MatrixXd& mean, int sigma_rows, int sigma_cols, int res_rows, int res_cols, double* d_pts1, double* d_pts2, int type);
-
-    void CudaIntegration1(MatrixXd& d_pts, const MatrixXd& d_weights, MatrixXd& d_results, int sigma_rows, int sigma_cols, int res_rows, int res_cols);
+    // void CudaIntegration1(MatrixXd& d_pts, const MatrixXd& d_weights, MatrixXd& d_results, int sigma_rows, int sigma_cols, int res_rows, int res_cols);
 
     __host__ __device__ inline double cost_function1(const VectorXd& vec_x){
         double x = vec_x(0);
@@ -37,6 +36,8 @@ public:
     // __host__ __device__ inline MatrixXd sigma_func(const VectorXd& vec_x){
     //     return _func(vec_x);
     // }
+
+    // GHFunction _func;
 
 };
 

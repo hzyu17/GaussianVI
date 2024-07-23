@@ -12,8 +12,8 @@
 
 #pragma once
 
-#ifndef NGDFactorizedBaseGH_H
-#define NGDFactorizedBaseGH_H
+#ifndef NGDFactorizedBaseGH_CUDA_H
+#define NGDFactorizedBaseGH_CUDA_H
 
 #include <iostream>
 #include <random>
@@ -24,14 +24,13 @@
 #include <cuda_runtime.h>
 #include <memory>
 
-
 #include "quadrature/SparseGaussHermite.h"
 #include "helpers/CommonDefinitions.h"
 #include "helpers/MatrixHelper.h"
+// #include "helpers/CudaOperation.h"
 
 
 using namespace Eigen;
-
 
 namespace gvi{
 
@@ -44,6 +43,7 @@ template <typename CostClass = NoneType>
 class NGDFactorizedBaseGH{
 
     using Function = std::function<double(const VectorXd&, const CostClass &)>;
+    // using Cuda = CudaOperation<CostClass>;
 
 public:
     ///@param dimension The dimension of the state
@@ -145,9 +145,6 @@ public:
         return joint_mean;
     }
 
-    /**
-     * @brief Get the mean 
-     */
     inline VectorXd mean() const{ return _mu; }
 
     inline MatrixXd precision() const {return _precision; }
@@ -169,10 +166,6 @@ public:
         return _temperature;
     }
 
-// __host__ __device__ MatrixXd _func_phi (const VectorXd& x){
-//     return MatrixXd::Constant(1, 1, _function(x, _cost_class));
-// }
-
     void calculate_partial_V(){
         // update the mu and sigma inside the gauss-hermite integrator
         updateGH(this->_mu, this->_covariance);
@@ -181,19 +174,42 @@ public:
         this->_Vddmu.setZero();
 
         /// Integrate for E_q{_Vdmu} 
-        this->_Vdmu = this->_gh->Integrate_cuda(this->_func_Vmu, 1);
+        this->_Vdmu = Integrate_cuda(this->_func_Vmu, 1);
         this->_Vdmu = this->_precision * this->_Vdmu;
         this->_Vdmu = this->_Vdmu / this->temperature();
 
         /// Integrate for E_q{phi(x)}
-        double E_phi = this->_gh->Integrate_cuda(this->_func_phi, 0)(0, 0);
+        double E_phi = Integrate_cuda(this->_func_phi, 0)(0, 0);
         
         /// Integrate for partial V^2 / ddmu_ 
-        MatrixXd E_xxphi{this->_gh->Integrate_cuda(this->_func_Vmumu, 2)};
+        MatrixXd E_xxphi{Integrate_cuda(this->_func_Vmumu, 2)};
 
         this->_Vddmu.triangularView<Upper>() = (this->_precision * E_xxphi * this->_precision - this->_precision * E_phi).triangularView<Upper>();
         this->_Vddmu.triangularView<StrictlyLower>() = this->_Vddmu.triangularView<StrictlyUpper>().transpose();
         this->_Vddmu = this->_Vddmu / this->temperature();
+    }
+
+    MatrixXd Integrate_cuda(GHFunction func, int type){
+        VectorXd mean_gh = this -> _gh -> mean();
+        MatrixXd sigmapts_gh = this -> _gh -> sigmapts();
+        MatrixXd weights_gh = this -> _gh -> weights();
+        MatrixXd result{func(mean_gh)};
+        result.setZero();
+        CudaIntegration(sigmapts_gh, weights_gh, result, mean_gh, type);
+        return result;
+    }
+
+    void CudaIntegration(const MatrixXd& sigmapts, const MatrixXd& weights, MatrixXd& results, const MatrixXd& mean, int type);
+
+    __host__ __device__ inline double cost_function1(const VectorXd& vec_x){
+        double x = vec_x(0);
+        double mu_p = 20, f = 400, b = 0.1, sig_r_sq = 0.09;
+        double sig_p_sq = 9;
+
+        // y should be sampled. for single trial just give it a value.
+        double y = f*b/mu_p - 0.8;
+
+        return ((x - mu_p)*(x - mu_p) / sig_p_sq / 2 + (y - f*b/x)*(y - f*b/x) / sig_r_sq / 2); 
     }
 
     inline VectorXd local2joint_dmu(){ 
@@ -261,7 +277,6 @@ public:
         _gh->set_polynomial_deg(p);
     }
 
-
     public:
 
     /// dimension
@@ -280,6 +295,7 @@ public:
 
     /// G-H quadrature class
     std::shared_ptr<GH> _gh;
+    // std::shared_ptr<Cuda> _cuda;
 
 protected:
 

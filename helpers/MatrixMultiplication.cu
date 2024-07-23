@@ -128,9 +128,7 @@ void CudaOperation<Function>::CudaIntegration(Function function, const MatrixXd&
 {
     double *sigmapts_gpu, *pts_gpu, *weight_gpu, *result_gpu, *mu_gpu;
 
-    // std::cout << "Mean:" << std::endl << mean.transpose() << std::endl << std::endl;
-    // std::cout << "Sigma rows and cols" << std::endl << sigmapts.rows() << sigmapts.cols() << std::endl << std::endl;
-    // std::cout << "Sigma rows and cols1" << std::endl << sigma_rows << sigma_cols << std::endl << std::endl;
+    // _func = function;
 
     CudaOperation<Function>* class_gpu;
     cudaMalloc(&class_gpu, sizeof(CudaOperation<Function>));
