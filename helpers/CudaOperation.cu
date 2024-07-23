@@ -1,4 +1,5 @@
 #include <cuda_runtime.h>
+#include <optional>
 #include "ngd/NGDFactorizedBaseGH_Cuda.h"
 // #include "helpers/CudaOperation.h"
 
@@ -17,9 +18,7 @@ __global__ void Sigma_function(double* d_sigmapts, double* d_pts, double* mu, in
         double function_value = pointer -> cost_function1(sigmapts.row(idx));
         // double function_value = pointer -> _function(sigmapts.row(idx), pointer -> _cost_class);
 
-        // printf("idx=%d:%lf\n", idx, function_value);
-
-        if (type == 0) //res.size = 1*1
+        if (type == 0)
             d_pts[idx] = function_value;
         else if (type == 1){
             for (int i=0; i<sigmapts_cols; i++)

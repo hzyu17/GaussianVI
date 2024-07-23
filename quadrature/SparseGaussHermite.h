@@ -22,11 +22,11 @@
 #include "cuda_runtime.h"
 
 
-#ifdef GVI_SUBDUR_ENV 
-static std::string map_file{source_root+"/GaussianVI/quadrature/SparseGHQuadratureWeights.bin"};
-#else
-static std::string map_file{source_root+"/quadrature/SparseGHQuadratureWeights.bin"};
-#endif
+// #ifdef GVI_SUBDUR_ENV 
+// std::string map_file{source_root+"/GaussianVI/quadrature/SparseGHQuadratureWeights.bin"};
+// #else
+// std::string map_file{source_root+"/quadrature/SparseGHQuadratureWeights.bin"};
+// #endif
 
 namespace gvi{
 template <typename Function>
@@ -102,17 +102,17 @@ public:
             _mean(mean),
             _P(P)
             {  
-
+            std::string map_file_local{"/home/zinuo/Git/GaussianVI/quadrature/SparseGHQuadratureWeights.bin"};
             // Read map from file
                 QuadratureWeightsMap nodes_weights_map;
                 try {
-                    std::ifstream ifs(map_file, std::ios::binary);
+                    std::ifstream ifs(map_file_local, std::ios::binary);
                     if (!ifs.is_open()) {
-                        std::string error_msg = "Failed to open file for GH weights reading in file: " + map_file;
+                        std::string error_msg = "Failed to open file for GH weights reading in file: " + map_file_local;
                         throw std::runtime_error(error_msg);
                     }
 
-                    std::cout << "Opening file for GH weights reading in file: " << map_file << std::endl;
+                    std::cout << "Opening file for GH weights reading in file: " << map_file_local << std::endl;
                     boost::archive::binary_iarchive ia(ifs);
                     ia >> nodes_weights_map;
 

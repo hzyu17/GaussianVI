@@ -25,7 +25,7 @@
 #include <memory>
 
 #include "quadrature/SparseGaussHermite.h"
-#include "helpers/CommonDefinitions.h"
+// #include "helpers/CommonDefinitions.h"
 #include "helpers/MatrixHelper.h"
 // #include "helpers/CudaOperation.h"
 
