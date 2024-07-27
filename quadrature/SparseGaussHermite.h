@@ -48,6 +48,7 @@ public:
      * @param P covariance matrix
      */
 
+
     // SparseGaussHermite(
     //     const int& deg, 
     //     const int& dim, 
@@ -59,6 +60,7 @@ public:
     //         _mean(mean),
     //         _P(P)
     //         {  
+    //             std::string map_file{"/home/zinuo/Git/GaussianVI/quadrature/SparseGHQuadratureWeights.bin"};
     //             // If input has a loaded map
     //             if (weight_sigpts_map_option.has_value()){
     //                 _nodes_weights_map = std::make_shared<QuadratureWeightsMap>(weight_sigpts_map_option.value());
@@ -102,8 +104,8 @@ public:
             _mean(mean),
             _P(P)
             {  
-            std::string map_file_local{"/home/zinuo/Git/GaussianVI/quadrature/SparseGHQuadratureWeights.bin"};
-            // Read map from file
+                std::string map_file_local{"/home/zinuo/Git/GaussianVI/quadrature/SparseGHQuadratureWeights.bin"};
+                // Read map from file
                 QuadratureWeightsMap nodes_weights_map;
                 try {
                     std::ifstream ifs(map_file_local, std::ios::binary);

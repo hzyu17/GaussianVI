@@ -16,6 +16,6 @@ using namespace Eigen;
 
 namespace gvi{
 
-using NGDFactorizedSimpleGH = NGDFactorizedBaseGH<NoneType>;
+using NGDFactorizedSimpleGH_Cuda = NGDFactorizedBaseGH_Cuda<NoneType>;
 
 } // namespace

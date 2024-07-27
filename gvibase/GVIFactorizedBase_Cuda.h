@@ -33,20 +33,20 @@ using GH = SparseGaussHermite<GHFunction>;
 
 struct NoneType {};
 
-class GVIFactorizedBase{
+class GVIFactorizedBase_Cuda{
 public:
-    virtual ~GVIFactorizedBase(){}
+    virtual ~GVIFactorizedBase_Cuda(){}
     /**
      * @brief Default Constructor
      */
-    GVIFactorizedBase(){}
+    GVIFactorizedBase_Cuda(){}
 
     /**
      * @brief Construct a new GVIFactorizedBase object
      * 
      * @param dimension The dimension of the state
      */
-    GVIFactorizedBase(int dimension, int state_dim, int num_states, int start_index, 
+    GVIFactorizedBase_Cuda(int dimension, int state_dim, int num_states, int start_index, 
                         double temperature=10.0, double high_temperature=100.0):
             _dim{dimension},
             _state_dim{state_dim},
@@ -124,7 +124,7 @@ public:
     /**
      * @brief Compute the increment on mean and precision (or covariance) matrix on the factorized level.
     */
-    virtual void calculate_partial_V(std::optional<double> step_size=std::nullopt){}
+    virtual void calculate_partial_V(){}
 
     /**
      * @brief Compute the cost function. V(x) = E_q(\phi(x))
