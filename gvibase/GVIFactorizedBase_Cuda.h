@@ -20,7 +20,7 @@
 #include <type_traits>
 
 // #include "quadrature/GaussHermite.h"
-#include "quadrature/SparseGaussHermite.h"
+#include "quadrature/SparseGaussHermite_Cuda.h"
 #include "helpers/CommonDefinitions.h"
 #include "helpers/MatrixHelper.h"
 
@@ -28,7 +28,7 @@ using namespace Eigen;
 
 namespace gvi{
 using GHFunction = std::function<MatrixXd(const VectorXd&)>;
-using GH = SparseGaussHermite<GHFunction>;
+using GH = SparseGaussHermite_Cuda<GHFunction>;
 // using GH = gvi::GaussHermite<GHFunction>;
 
 struct NoneType {};

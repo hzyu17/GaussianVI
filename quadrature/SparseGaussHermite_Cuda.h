@@ -30,7 +30,7 @@
 
 namespace gvi{
 template <typename Function>
-class SparseGaussHermite{
+class SparseGaussHermite_Cuda{
     
     using CudaFunction = std::function<void(double*, double*)>;
     using GHFunction = std::function<MatrixXd(const VectorXd&)>;
@@ -49,51 +49,88 @@ public:
      */
 
 
-    SparseGaussHermite(
+    // SparseGaussHermite(
+    //     const int& deg, 
+    //     const int& dim, 
+    //     const Eigen::VectorXd& mean, 
+    //     const Eigen::MatrixXd& P,
+    //     std::optional<QuadratureWeightsMap> weight_sigpts_map_option=std::nullopt): 
+    //         _deg(deg),
+    //         _dim(dim),
+    //         _mean(mean),
+    //         _P(P)
+    //         {  
+    //             std::string map_file{"/home/zinuo/Git/GaussianVI/quadrature/SparseGHQuadratureWeights.bin"};
+    //             // If input has a loaded map
+    //             if (weight_sigpts_map_option.has_value()){
+    //                 _nodes_weights_map = std::make_shared<QuadratureWeightsMap>(weight_sigpts_map_option.value());
+    //             }
+    //             // Read map from file
+    //             else{
+    //                 QuadratureWeightsMap nodes_weights_map;
+    //                 try {
+    //                     std::ifstream ifs(map_file, std::ios::binary);
+    //                     if (!ifs.is_open()) {
+    //                         std::string error_msg = "Failed to open file for GH weights reading in file: " + map_file;
+    //                         throw std::runtime_error(error_msg);
+    //                     }
+
+    //                     std::cout << "Opening file for GH weights reading in file: " << map_file << std::endl;
+    //                     boost::archive::binary_iarchive ia(ifs);
+    //                     ia >> nodes_weights_map;
+
+    //                 } catch (const boost::archive::archive_exception& e) {
+    //                     std::cerr << "Boost archive exception: " << e.what() << std::endl;
+    //                 } catch (const std::exception& e) {
+    //                     std::cerr << "Standard exception: " << e.what() << std::endl;
+    //                 }
+
+    //                 _nodes_weights_map = std::make_shared<QuadratureWeightsMap>(nodes_weights_map);
+
+    //             }
+                
+    //             computeSigmaPtsWeights();
+    //         }
+
+
+
+    SparseGaussHermite_Cuda(
         const int& deg, 
         const int& dim, 
         const Eigen::VectorXd& mean, 
-        const Eigen::MatrixXd& P,
-        std::optional<QuadratureWeightsMap> weight_sigpts_map_option=std::nullopt): 
+        const Eigen::MatrixXd& P): 
             _deg(deg),
             _dim(dim),
             _mean(mean),
             _P(P)
             {  
-                std::string map_file{"/home/zinuo/Git/GaussianVI/quadrature/SparseGHQuadratureWeights.bin"};
-                // If input has a loaded map
-                if (weight_sigpts_map_option.has_value()){
-                    _nodes_weights_map = std::make_shared<QuadratureWeightsMap>(weight_sigpts_map_option.value());
-                }
+                std::string map_file_local{"/home/zinuo/Git/GaussianVI/quadrature/SparseGHQuadratureWeights.bin"};
                 // Read map from file
-                else{
-                    QuadratureWeightsMap nodes_weights_map;
-                    try {
-                        std::ifstream ifs(map_file, std::ios::binary);
-                        if (!ifs.is_open()) {
-                            std::string error_msg = "Failed to open file for GH weights reading in file: " + map_file;
-                            throw std::runtime_error(error_msg);
-                        }
-
-                        std::cout << "Opening file for GH weights reading in file: " << map_file << std::endl;
-                        boost::archive::binary_iarchive ia(ifs);
-                        ia >> nodes_weights_map;
-
-                    } catch (const boost::archive::archive_exception& e) {
-                        std::cerr << "Boost archive exception: " << e.what() << std::endl;
-                    } catch (const std::exception& e) {
-                        std::cerr << "Standard exception: " << e.what() << std::endl;
+                QuadratureWeightsMap nodes_weights_map;
+                try {
+                    std::ifstream ifs(map_file_local, std::ios::binary);
+                    if (!ifs.is_open()) {
+                        std::string error_msg = "Failed to open file for GH weights reading in file: " + map_file_local;
+                        throw std::runtime_error(error_msg);
                     }
 
-                    _nodes_weights_map = std::make_shared<QuadratureWeightsMap>(nodes_weights_map);
+                    std::cout << "Opening file for GH weights reading in file: " << map_file_local << std::endl;
+                    boost::archive::binary_iarchive ia(ifs);
+                    ia >> nodes_weights_map;
 
+                } catch (const boost::archive::archive_exception& e) {
+                    std::cerr << "Boost archive exception: " << e.what() << std::endl;
+                } catch (const std::exception& e) {
+                    std::cerr << "Standard exception: " << e.what() << std::endl;
                 }
+
+                _nodes_weights_map = std::make_shared<QuadratureWeightsMap>(nodes_weights_map);
                 
                 computeSigmaPtsWeights();
             }
 
 
-    SparseGaussHermite(
+    SparseGaussHermite_Cuda(
         const int& deg, 
         const int& dim, 
         const Eigen::VectorXd& mean, 
