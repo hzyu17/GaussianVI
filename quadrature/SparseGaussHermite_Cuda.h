@@ -141,7 +141,9 @@ public:
             _mean(mean),
             _P(P)
             {  
-                computeSigmaPtsWeights(weights_map);
+                std::string map_file{"/home/zinuo/Git/GaussianVI/quadrature/SparseGHQuadratureWeights.bin"};
+                _nodes_weights_map = std::make_shared<QuadratureWeightsMap>(weights_map);
+                computeSigmaPtsWeights();
             }
             
 
@@ -232,39 +234,40 @@ public:
         return res;
     };
 
-    // Eigen::MatrixXd Integrate_cuda(const Function& function, const int& type){
+
+    Eigen::MatrixXd Obtain_function_value(const Function& function){
         
-    //     Eigen::MatrixXd res{function(_mean)};
-    //     res.setZero();
+        Eigen::MatrixXd res{function(_mean)};
+        res.setZero();
 
-    //     // update_function(function);
+        // update_function(function);
 
-    //     // _function = function;
+        // _function = function;
 
-    //     // Calculate the result of functions (Try to integrate it in cuda)
-    //     Eigen::MatrixXd pts(res.rows(), _sigmapts.rows()*res.cols());
+        // Calculate the result of functions (Try to integrate it in cuda)
+        Eigen::MatrixXd pts(res.rows(), _sigmapts.rows()*res.cols());
 
-    //     #pragma omp parallel
-    //     {
-    //         #pragma omp for nowait  // The 'nowait' clause can be used if there is no need for synchronization after the loop
+        #pragma omp parallel
+        {
+            #pragma omp for nowait  // The 'nowait' clause can be used if there is no need for synchronization after the loop
            
-    //         for (int i = 0; i < _sigmapts.rows(); i++) {
-    //             pts.block(0, i * res.cols(), res.cols(), res.rows()) = function(_sigmapts.row(i)).transpose();
-    //         }
+            for (int i = 0; i < _sigmapts.rows(); i++) {
+                pts.block(0, i * res.cols(), res.cols(), res.rows()) = function(_sigmapts.row(i)).transpose();
+            }
 
-    //     }
+        }
 
-    //     // double* pts_array = new double[pts.size()];
+        return pts;
     
-    //     CudaIntegration(function, _sigmapts, _Weights, res, _mean, _sigmapts.rows(), _sigmapts.cols(), res.rows(), res.cols(), pts.data(), pts_array, type);
-    //     // this -> _cuda -> CudaIntegration1(pts, _Weights, res, _sigmapts.rows(), _sigmapts.cols(), res.rows(), res.cols());
+        // CudaIntegration(function, _sigmapts, _Weights, res, _mean, _sigmapts.rows(), _sigmapts.cols(), res.rows(), res.cols(), pts.data(), pts_array, type);
+        // this -> _cuda -> CudaIntegration1(pts, _Weights, res, _sigmapts.rows(), _sigmapts.cols(), res.rows(), res.cols());
         
-    //     // Eigen::Map<Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>> pts_cuda(pts_array, pts.rows(), pts.cols());
-    //     // std::cout << "pts:" << std::endl << pts <<std::endl;
-    //     // std::cout << "pts_cuda:" << std::endl << pts_cuda <<std::endl;
+        // Eigen::Map<Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>> pts_cuda(pts_array, pts.rows(), pts.cols());
+        // std::cout << "pts:" << std::endl << pts <<std::endl;
+        // std::cout << "pts_cuda:" << std::endl << pts_cuda <<std::endl;
         
-    //     return res;
-    // };
+        // return res;
+    };
 
 
     // void CudaIntegration(Function func, const MatrixXd& sigmapts, const MatrixXd& weights, MatrixXd& results, const MatrixXd& mean, int sigma_rows, int sigma_cols, int res_rows, int res_cols, double* d_pts1, double* d_pts2, int type);
