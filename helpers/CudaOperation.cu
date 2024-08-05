@@ -1,8 +1,8 @@
 #include <cuda_runtime.h>
 #include <optional>
-#include "ngd/NGDFactorizedBaseGH_Cuda.h"
-#include <gpmp2/obstacle/ObstaclePlanarSDFFactor.h>
-// #include "helpers/CudaOperation.h"
+// #include "ngd/NGDFactorizedBaseGH_Cuda.h"
+// #include <gpmp2/obstacle/ObstaclePlanarSDFFactor.h>
+#include "helpers/CudaOperation.h"
 
 using namespace Eigen;
 using GHFunction = std::function<MatrixXd(const VectorXd&)>;
@@ -10,7 +10,7 @@ using GHFunction = std::function<MatrixXd(const VectorXd&)>;
 template <typename CostClass>
 __global__ void Sigma_function(double* d_sigmapts, double* d_pts, double* mu,
                                int sigmapts_rows, int sigmapts_cols, int res_rows, int res_cols, int type, 
-                               gvi::NGDFactorizedBaseGH_Cuda<CostClass>* pointer, double* d_data){
+                               gvi::CudaOperation<CostClass>* pointer, double* d_data){
     
     int row = blockIdx.y * blockDim.y + threadIdx.y;
     int col = blockIdx.x * blockDim.x + threadIdx.x;
@@ -54,13 +54,13 @@ __global__ void obtain_res(double* d_pts, double* d_weights, double* d_result, i
 namespace gvi{
 
 template <typename CostClass>
-void NGDFactorizedBaseGH_Cuda<CostClass>::CudaIntegration(const MatrixXd& sigmapts, const MatrixXd& weights, MatrixXd& results, const MatrixXd& mean, int type, MatrixXd& pts)
+void CudaOperation<CostClass>::CudaIntegration(const MatrixXd& sigmapts, const MatrixXd& weights, MatrixXd& results, const MatrixXd& mean, int type, MatrixXd& pts)
 {
     double *sigmapts_gpu, *pts_gpu, *weight_gpu, *result_gpu, *mu_gpu, *data_gpu;
 
-    NGDFactorizedBaseGH_Cuda<CostClass>* class_gpu;
-    cudaMalloc(&class_gpu, sizeof(NGDFactorizedBaseGH_Cuda<CostClass>));
-    cudaMemcpy(class_gpu, this, sizeof(NGDFactorizedBaseGH_Cuda<CostClass>), cudaMemcpyHostToDevice);
+    CudaOperation<CostClass>* class_gpu;
+    cudaMalloc(&class_gpu, sizeof(CudaOperation<CostClass>));
+    cudaMemcpy(class_gpu, this, sizeof(CudaOperation<CostClass>), cudaMemcpyHostToDevice);
 
 
     cudaMalloc(&sigmapts_gpu, sigmapts.size() * sizeof(double));
@@ -104,6 +104,6 @@ void NGDFactorizedBaseGH_Cuda<CostClass>::CudaIntegration(const MatrixXd& sigmap
 }
 
 // template class NGDFactorizedBaseGH_Cuda<NoneType>;
-template class NGDFactorizedBaseGH_Cuda<gpmp2::ObstaclePlanarSDFFactor<gpmp2::PointRobotModel>>;
+template class CudaOperation<gpmp2::ObstaclePlanarSDFFactor<gpmp2::PointRobotModel>>;
 
 }
