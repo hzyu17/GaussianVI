@@ -16,22 +16,19 @@
 #define SPARSEGAUSSHERMITE_H
 
 #include <optional>
-#include <functional>
 #include "quadrature/SparseGHQuadratureWeights.h"
 #include "helpers/CommonDefinitions.h"
-#include "cuda_runtime.h"
 
-
-// #ifdef GVI_SUBDUR_ENV 
-// std::string map_file{source_root+"/GaussianVI/quadrature/SparseGHQuadratureWeights.bin"};
-// #else
-// std::string map_file{source_root+"/quadrature/SparseGHQuadratureWeights.bin"};
-// #endif
+#ifdef GVI_SUBDUR_ENV 
+std::string map_file{source_root+"/GaussianVI/quadrature/SparseGHQuadratureWeights.bin"};
+#else
+std::string map_file{source_root+"/quadrature/SparseGHQuadratureWeights.bin"};
+#endif
 
 namespace gvi{
 template <typename Function>
 class SparseGaussHermite{
-    
+
     using CudaFunction = std::function<void(double*, double*)>;
     using GHFunction = std::function<MatrixXd(const VectorXd&)>;
     // using CostFunction = std::function<double(const VectorXd&, const CostClass &)>;
@@ -47,8 +44,6 @@ public:
      * @param mean mean 
      * @param P covariance matrix
      */
-
-
     SparseGaussHermite(
         const int& deg, 
         const int& dim, 
@@ -60,7 +55,6 @@ public:
             _mean(mean),
             _P(P)
             {  
-                std::string map_file{"/home/zinuo/Git/GaussianVI/quadrature/SparseGHQuadratureWeights.bin"};
                 // If input has a loaded map
                 if (weight_sigpts_map_option.has_value()){
                     _nodes_weights_map = std::make_shared<QuadratureWeightsMap>(weight_sigpts_map_option.value());
@@ -91,7 +85,6 @@ public:
                 
                 computeSigmaPtsWeights();
             }
-
 
     SparseGaussHermite(
         const int& deg, 
@@ -174,7 +167,7 @@ public:
         
         Eigen::MatrixXd res{function(_mean)};
         res.setZero();
-        
+
         #pragma omp parallel
         {
             // Create a private copy of the res matrix for each thread
@@ -183,7 +176,7 @@ public:
 
             #pragma omp for nowait  // The 'nowait' clause can be used if there is no need for synchronization after the loop
             for (int i = 0; i < _sigmapts.rows(); i++) {
-                pt = _sigmapts.row(i); // Row of the matrix
+                pt = _sigmapts.row(i);
                 private_res += function(pt) * _Weights(i);
             }
 
@@ -193,60 +186,8 @@ public:
         }
         
         return res;
+        
     };
-
-    // Eigen::MatrixXd Integrate_cuda(const Function& function, const int& type){
-        
-    //     Eigen::MatrixXd res{function(_mean)};
-    //     res.setZero();
-
-    //     // update_function(function);
-
-    //     // _function = function;
-
-    //     // Calculate the result of functions (Try to integrate it in cuda)
-    //     Eigen::MatrixXd pts(res.rows(), _sigmapts.rows()*res.cols());
-
-    //     #pragma omp parallel
-    //     {
-    //         #pragma omp for nowait  // The 'nowait' clause can be used if there is no need for synchronization after the loop
-           
-    //         for (int i = 0; i < _sigmapts.rows(); i++) {
-    //             pts.block(0, i * res.cols(), res.cols(), res.rows()) = function(_sigmapts.row(i)).transpose();
-    //         }
-
-    //     }
-
-    //     // double* pts_array = new double[pts.size()];
-    
-    //     CudaIntegration(function, _sigmapts, _Weights, res, _mean, _sigmapts.rows(), _sigmapts.cols(), res.rows(), res.cols(), pts.data(), pts_array, type);
-    //     // this -> _cuda -> CudaIntegration1(pts, _Weights, res, _sigmapts.rows(), _sigmapts.cols(), res.rows(), res.cols());
-        
-    //     // Eigen::Map<Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>> pts_cuda(pts_array, pts.rows(), pts.cols());
-    //     // std::cout << "pts:" << std::endl << pts <<std::endl;
-    //     // std::cout << "pts_cuda:" << std::endl << pts_cuda <<std::endl;
-        
-    //     return res;
-    // };
-
-
-    // void CudaIntegration(Function func, const MatrixXd& sigmapts, const MatrixXd& weights, MatrixXd& results, const MatrixXd& mean, int sigma_rows, int sigma_cols, int res_rows, int res_cols, double* d_pts1, double* d_pts2, int type);
-
-    // __host__ __device__ inline double cost_function1(const VectorXd& vec_x){
-    //     double x = vec_x(0);
-    //     double mu_p = 20, f = 400, b = 0.1, sig_r_sq = 0.09;
-    //     double sig_p_sq = 9;
-
-    //     // y should be sampled. for single trial just give it a value.
-    //     double y = f*b/mu_p - 0.8;
-
-    //     return ((x - mu_p)*(x - mu_p) / sig_p_sq / 2 + (y - f*b/x)*(y - f*b/x) / sig_r_sq / 2); 
-    // }
-
-    // __host__ __device__ inline MatrixXd function_wrapper(const VectorXd& vec_x){
-    //     return _function(vec_x);
-    // }
-
 
     /**
      * Update member variables
@@ -303,12 +244,6 @@ public:
     inline Eigen::MatrixXd sigmapts() const { return this->_sigmapts; }
 
     inline Eigen::MatrixXd mean() const { return this->_mean; }
-
-    // The function to use in kernel function
-    // CudaFunction _func_cuda;
-
-    Function _function;
-    // std::shared_ptr<Cuda> _cuda;
 
 protected:
     int _deg;

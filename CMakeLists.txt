@@ -79,20 +79,20 @@ endif()
 include_directories(${EIGEN3_INCLUDE_DIRS})
 include_directories("${CMAKE_CURRENT_BINARY_DIR}/quadrature/libSpGH/for_testing")
 
-# # Add all the source files in src/gvi as a separate executable
-# file(GLOB_RECURSE gvi_SOURCES src/*.cpp)
-# foreach(gvi_source ${gvi_SOURCES})
-#     get_filename_component(gvi_name ${gvi_source} NAME_WE)
-#     add_executable(${gvi_name} ${gvi_source} helpers/CudaOperation.cu)
-#     set_target_properties(${gvi_name} PROPERTIES LINKER_LANGUAGE CXX)
-#     set_target_properties(${gvi_name} PROPERTIES
-#                             RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/src"
-#                             )   
-#     target_link_libraries(${gvi_name} ${EIGEN3_LIBRARIES} ${Matlab_MEX_LIBRARY} ${CUDA_LIBRARIES} OpenMP::OpenMP_CXX 
-#                         #   ${Matlab_MX_LIBRARY} 
-#                           ${libSpGH_LIBRARY} ${MCR_LIBRARY_PATH}/libmwmclmcrrt.so.9.9 Boost::serialization)
-#     target_include_directories(${gvi_name} PRIVATE ${Matlab_INCLUDE_DIRS})
-# endforeach()
+# Add all the source files in src/gvi as a separate executable
+file(GLOB_RECURSE gvi_SOURCES src/*.cpp)
+foreach(gvi_source ${gvi_SOURCES})
+    get_filename_component(gvi_name ${gvi_source} NAME_WE)
+    add_executable(${gvi_name} ${gvi_source})
+    set_target_properties(${gvi_name} PROPERTIES LINKER_LANGUAGE CXX)
+    set_target_properties(${gvi_name} PROPERTIES
+                            RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/src"
+                            )   
+    target_link_libraries(${gvi_name} ${EIGEN3_LIBRARIES} ${Matlab_MEX_LIBRARY} ${CUDA_LIBRARIES} OpenMP::OpenMP_CXX 
+                        #   ${Matlab_MX_LIBRARY} 
+                          ${libSpGH_LIBRARY} ${MCR_LIBRARY_PATH}/libmwmclmcrrt.so.9.9 Boost::serialization)
+    target_include_directories(${gvi_name} PRIVATE ${Matlab_INCLUDE_DIRS})
+endforeach()
 
 # include(FetchContent)
 # FetchContent_Declare(

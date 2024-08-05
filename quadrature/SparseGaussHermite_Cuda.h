@@ -48,52 +48,6 @@ public:
      * @param P covariance matrix
      */
 
-
-    // SparseGaussHermite(
-    //     const int& deg, 
-    //     const int& dim, 
-    //     const Eigen::VectorXd& mean, 
-    //     const Eigen::MatrixXd& P,
-    //     std::optional<QuadratureWeightsMap> weight_sigpts_map_option=std::nullopt): 
-    //         _deg(deg),
-    //         _dim(dim),
-    //         _mean(mean),
-    //         _P(P)
-    //         {  
-    //             std::string map_file{"/home/zinuo/Git/GaussianVI/quadrature/SparseGHQuadratureWeights.bin"};
-    //             // If input has a loaded map
-    //             if (weight_sigpts_map_option.has_value()){
-    //                 _nodes_weights_map = std::make_shared<QuadratureWeightsMap>(weight_sigpts_map_option.value());
-    //             }
-    //             // Read map from file
-    //             else{
-    //                 QuadratureWeightsMap nodes_weights_map;
-    //                 try {
-    //                     std::ifstream ifs(map_file, std::ios::binary);
-    //                     if (!ifs.is_open()) {
-    //                         std::string error_msg = "Failed to open file for GH weights reading in file: " + map_file;
-    //                         throw std::runtime_error(error_msg);
-    //                     }
-
-    //                     std::cout << "Opening file for GH weights reading in file: " << map_file << std::endl;
-    //                     boost::archive::binary_iarchive ia(ifs);
-    //                     ia >> nodes_weights_map;
-
-    //                 } catch (const boost::archive::archive_exception& e) {
-    //                     std::cerr << "Boost archive exception: " << e.what() << std::endl;
-    //                 } catch (const std::exception& e) {
-    //                     std::cerr << "Standard exception: " << e.what() << std::endl;
-    //                 }
-
-    //                 _nodes_weights_map = std::make_shared<QuadratureWeightsMap>(nodes_weights_map);
-
-    //             }
-                
-    //             computeSigmaPtsWeights();
-    //         }
-
-
-
     SparseGaussHermite_Cuda(
         const int& deg, 
         const int& dim, 
@@ -104,7 +58,7 @@ public:
             _mean(mean),
             _P(P)
             {  
-                std::string map_file_local{"/home/zinuo/Git/GaussianVI/quadrature/SparseGHQuadratureWeights.bin"};
+                std::string map_file_local{source_root+"/GaussianVI/quadrature/SparseGHQuadratureWeights.bin"};
                 // Read map from file
                 QuadratureWeightsMap nodes_weights_map;
                 try {
@@ -141,7 +95,6 @@ public:
             _mean(mean),
             _P(P)
             {  
-                std::string map_file{"/home/zinuo/Git/GaussianVI/quadrature/SparseGHQuadratureWeights.bin"};
                 _nodes_weights_map = std::make_shared<QuadratureWeightsMap>(weights_map);
                 computeSigmaPtsWeights();
             }
@@ -161,6 +114,7 @@ public:
 
             _zeromeanpts = std::get<0>(pts_weights);
             _Weights = std::get<1>(pts_weights);
+            // std::cout << "Weight: "<< _Weights(0) << std::endl;
             
             // Eigenvalue decomposition
             Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> eigensolver(_P);
@@ -176,7 +130,6 @@ public:
              "key does not exist in the GH weight map." << std::endl;
         }
         
-
         return ;
     }
 
@@ -202,7 +155,7 @@ public:
             std::cout << "(dimension, degree) " << "(" << _dim << ", " << _deg << ") " <<
              "key does not exist in the GH weight map." << std::endl;
         }
-        
+        // std::cout << "Sigma Points:" << std::endl << _sigmapts << std::endl;
         return ;
     }
 
@@ -213,7 +166,7 @@ public:
         
         Eigen::MatrixXd res{function(_mean)};
         res.setZero();
-        
+
         #pragma omp parallel
         {
             // Create a private copy of the res matrix for each thread
@@ -230,7 +183,7 @@ public:
             #pragma omp critical
             res += private_res;
         }
-        
+        // std::cout << "result:" << res <<std::endl;
         return res;
     };
 
@@ -239,10 +192,7 @@ public:
         
         Eigen::MatrixXd res{function(_mean)};
         res.setZero();
-
-        // update_function(function);
-
-        // _function = function;
+        // std::cerr << "res Rows and Cols: " << res.rows() << ", " << res.cols() << std::endl;
 
         // Calculate the result of functions (Try to integrate it in cuda)
         Eigen::MatrixXd pts(res.rows(), _sigmapts.rows()*res.cols());
@@ -252,7 +202,8 @@ public:
             #pragma omp for nowait  // The 'nowait' clause can be used if there is no need for synchronization after the loop
            
             for (int i = 0; i < _sigmapts.rows(); i++) {
-                pts.block(0, i * res.cols(), res.cols(), res.rows()) = function(_sigmapts.row(i)).transpose();
+                // std::cerr << "Function Result Rows and Cols: " << function(_sigmapts.row(i)).rows() << ", " << function(_sigmapts.row(i)).cols() << std::endl;
+                pts.block(0, i * res.cols(), res.rows(), res.cols()) = function(_sigmapts.row(i));
             }
 
         }
@@ -308,6 +259,9 @@ public:
         }
 
         _sigmapts = (_zeromeanpts*_sqrtP.transpose()).rowwise() + _mean.transpose(); 
+        // std::cerr << "Sigma0: " << _sigmapts.row(0)<< std::endl;
+        // std::cerr << "Sigma1: " << _sigmapts.row(1)<< std::endl;
+        // std::cerr << "Sigma2: " << _sigmapts.row(2)<< std::endl<< std::endl;
     }
 
     inline void update_P(const Eigen::MatrixXd& P){ 

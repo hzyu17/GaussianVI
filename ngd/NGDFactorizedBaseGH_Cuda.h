@@ -98,7 +98,6 @@ public:
     const double col = (point.x() - origin_.x()) / cell_size_;
     const double row = (point.y() - origin_.y()) / cell_size_;
     return Vector2d{row, col};
-    // return std::make_tuple(row, col);
   }
 
   __host__ __device__ inline Eigen::Vector2d convertCelltoPoint2(const float_index& cell) const {
@@ -178,7 +177,6 @@ public:
                         int num_states, int start_index, 
                         double temperature, double high_temperature,
                         QuadratureWeightsMap weight_sigpts_map_option):
-                _cost_class{cost_class}, 
                 GVIBase(dimension, state_dim, num_states, start_index, 
                         temperature, high_temperature, weight_sigpts_map_option)
             {
@@ -187,6 +185,18 @@ public:
                 GVIBase::_func_Vmu = [this, function, cost_class](const VectorXd& x){return (x-GVIBase::_mu) * function(x, cost_class);};
                 GVIBase::_func_Vmumu = [this, function, cost_class](const VectorXd& x){return MatrixXd{(x-GVIBase::_mu) * (x-GVIBase::_mu).transpose().eval() * function(x, cost_class)};};
                 GVIBase::_gh = std::make_shared<GH>(GH{gh_degree, GVIBase::_dim, GVIBase::_mu, GVIBase::_covariance, weight_sigpts_map_option});
+
+                MatrixIO _m_io;
+                std::string field_file = source_root + "/maps/2dpR/map2/field_multiobs_map2.csv";
+                MatrixXd field = _m_io.load_csv(field_file);      
+
+                Vector2d origin;
+                origin.setZero();
+                origin << -20.0, -10.0;
+
+                double cell_size = 0.1;
+                _sdf = PlanarSDF{origin, cell_size, field};
+                // _sdf = std::make_shared<PlanarSDF>(PlanarSDF{origin, cell_size, field});
 
             }
 public:
@@ -199,18 +209,23 @@ void calculate_partial_V() override{
         this->_Vddmu.setZero();
 
         /// Integrate for E_q{_Vdmu} 
-        // this->_Vdmu = Integrate_cuda(1);
-        this->_Vdmu = this->_gh->Integrate(this->_func_Vmu);
+        this->_Vdmu = Integrate_cuda(1);
+        VectorXd Vdmu_cpu = this->_gh->Integrate(this->_func_Vmu);
+        std::cerr << "Vdmu Error: " << (_Vdmu - Vdmu_cpu).cwiseAbs().maxCoeff() << std::endl;
         this->_Vdmu = this->_precision * this->_Vdmu;
         this->_Vdmu = this->_Vdmu / this->temperature();
+        
 
         /// Integrate for E_q{phi(x)}
-        // double E_phi = Integrate_cuda(0)(0, 0);
-        double E_phi = this->_gh->Integrate(this->_func_phi)(0, 0);
+        double E_phi = Integrate_cuda(0)(0, 0);
+        // double E_phi = this->_gh->Integrate(this->_func_phi)(0, 0);
+        double E_phi_cpu = this->_gh->Integrate(this->_func_phi)(0, 0);
+        std::cerr << "Ephi Error" << E_phi - E_phi_cpu << std::endl;
         
         /// Integrate for partial V^2 / ddmu_ 
-        // MatrixXd E_xxphi{Integrate_cuda(2)};
-        MatrixXd E_xxphi{this->_gh->Integrate(this->_func_Vmumu)};
+        MatrixXd E_xxphi{Integrate_cuda(2)};
+        MatrixXd E_xxphi_cpu{this->_gh->Integrate(this->_func_Vmumu)};
+        std::cerr << "E_xxphi Error: " << (E_xxphi - E_xxphi_cpu).cwiseAbs().maxCoeff() << std::endl << std::endl;
 
         this->_Vddmu.triangularView<Upper>() = (this->_precision * E_xxphi * this->_precision - this->_precision * E_phi).triangularView<Upper>();
         this->_Vddmu.triangularView<StrictlyLower>() = this->_Vddmu.triangularView<StrictlyUpper>().transpose();
@@ -229,38 +244,22 @@ void calculate_partial_V() override{
         else
           result = MatrixXd::Zero(sigmapts_gh.cols(),sigmapts_gh.cols());
 
-
-        // MatrixIO _m_io;
-        // std::string field_file = source_root + "/maps/2dpR/map2/field_multiobs_map2.csv";
-        // MatrixXd field = _m_io.load_csv(field_file); 
-
-        // Vector2d origin;
-        // origin.setZero();
-        // origin << -20.0, -10.0;
-
-        // double cell_size = 0.1;
-
-        // PlanarSDF sdf(origin, cell_size, field);
-
-
-        MatrixXd function_value = this -> _gh -> Obtain_function_value(this->_func_phi);
+        // MatrixXd function_value = this -> _gh -> Obtain_function_value(this->_func_Vmumu);
         // std::cerr << "Function Value:" << std::endl << function_value << std::endl << std::endl;
 
         // MatrixXd pts_cpu(result.rows(), sigmapts_gh.rows()*result.cols());
         // for (int i = 0; i < sigmapts_gh.rows(); i++) {
         //   // std::cout << "i = " << i << ", sigma.row = " << sigmapts_gh.row(i) << std::endl;
-        //   pts_cpu(i) = cost_obstacle_planar(sigmapts_gh.row(i), sdf);
+        //   pts_cpu(i) = cost_obstacle_planar(sigmapts_gh.row(i), _sdf);
         //   // std::cout << "i = " << i << ", value = " << pts_cpu(i) << std::endl;
         // }
         
         // std::cout << "Function Value CPU:" << std::endl << pts_cpu << std::endl << std::endl;
-
         // std::cout << "Function Value Error:" << std::endl << function_value - pts_cpu << std::endl << std::endl;
 
         
         MatrixXd pts(result.rows(), sigmapts_gh.rows()*result.cols());
         CudaIntegration(sigmapts_gh, weights_gh, result, mean_gh, type, pts);
-        // // std::cout << "Sigma Points:" << std::endl << sigmapts_gh << std::endl;
         
         // std::cout << "Function Value Cuda Error:" << std::endl << function_value - pts << std::endl << std::endl;
 
@@ -276,8 +275,6 @@ void calculate_partial_V() override{
       double total_eps = radius + epsilon;
       double err;
 
-      // printf("Pose = %lf, %lf\n", pose(0), pose(1));
-
       double signed_distance = sdf.getSignedDistance(pose);
 
       if (signed_distance > total_eps)
@@ -288,10 +285,6 @@ void calculate_partial_V() override{
       // printf("x = %lf, %lf, signed distance = %lf, err = %lf\n", pose(0), pose(1), signed_distance, err);
       
       return err * err * sigma;
-
-      // precision_obs = precision_obs * 15.5;
-
-      // return signed_distance;
     }
 
 
@@ -330,11 +323,11 @@ void calculate_partial_V() override{
 
         updateGH(mean_k, Cov_k);
 
-        return this->_gh->Integrate(this->_func_phi)(0, 0) / this->temperature();
+        return Integrate_cuda(0)(0, 0) / this->temperature();
+        // return this->_gh->Integrate(this->_func_phi)(0, 0) / this->temperature();
     }
-
-    CostClass _cost_class;
     
+    PlanarSDF _sdf;
 
 };
 

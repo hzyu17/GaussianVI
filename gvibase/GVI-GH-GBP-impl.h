@@ -60,7 +60,7 @@ void GVIGH<Factor>::optimize(std::optional<bool> verbose)
 
         // ============= Collect factor costs =============
         VectorXd fact_costs_iter = this->factor_cost_vector();
-        std::cout << "Factor Costs:" << fact_costs_iter.transpose() << std::endl;
+        // std::cout << "Factor Costs:" << fact_costs_iter.transpose() << std::endl;
 
         _res_recorder.update_data(_mu, _covariance, _precision, cost_iter, fact_costs_iter);
 
