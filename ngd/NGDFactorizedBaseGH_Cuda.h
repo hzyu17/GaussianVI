@@ -66,9 +66,7 @@ public:
   /// give a point, search for signed distance field and (optional) gradient
   /// return signed distance
   __host__ __device__ inline double getSignedDistance(const Eigen::Vector2d& point) const {
-    // printf("point %d = %lf, %lf\n", index, point(0), point(1));
     const float_index pidx = convertPoint2toCell(point);
-    // printf("row = %lf, col = %lf\n", pidx(0), pidx(1));
     return signed_distance(pidx);
   }
 
@@ -210,8 +208,8 @@ void calculate_partial_V() override{
 
         /// Integrate for E_q{_Vdmu} 
         this->_Vdmu = Integrate_cuda(1);
-        VectorXd Vdmu_cpu = this->_gh->Integrate(this->_func_Vmu);
-        std::cerr << "Vdmu Error: " << (_Vdmu - Vdmu_cpu).cwiseAbs().maxCoeff() << std::endl;
+        // VectorXd Vdmu_cpu = this->_gh->Integrate(this->_func_Vmu);
+        // std::cerr << "Vdmu Error: " << (_Vdmu - Vdmu_cpu).cwiseAbs().maxCoeff() << std::endl;
         this->_Vdmu = this->_precision * this->_Vdmu;
         this->_Vdmu = this->_Vdmu / this->temperature();
         
@@ -219,13 +217,13 @@ void calculate_partial_V() override{
         /// Integrate for E_q{phi(x)}
         double E_phi = Integrate_cuda(0)(0, 0);
         // double E_phi = this->_gh->Integrate(this->_func_phi)(0, 0);
-        double E_phi_cpu = this->_gh->Integrate(this->_func_phi)(0, 0);
-        std::cerr << "Ephi Error" << E_phi - E_phi_cpu << std::endl;
+        // double E_phi_cpu = this->_gh->Integrate(this->_func_phi)(0, 0);
+        // std::cerr << "Ephi Error: " << E_phi - E_phi_cpu << std::endl;
         
         /// Integrate for partial V^2 / ddmu_ 
         MatrixXd E_xxphi{Integrate_cuda(2)};
-        MatrixXd E_xxphi_cpu{this->_gh->Integrate(this->_func_Vmumu)};
-        std::cerr << "E_xxphi Error: " << (E_xxphi - E_xxphi_cpu).cwiseAbs().maxCoeff() << std::endl << std::endl;
+        // MatrixXd E_xxphi_cpu{this->_gh->Integrate(this->_func_Vmumu)};
+        // std::cerr << "E_xxphi Error: " << (E_xxphi - E_xxphi_cpu).cwiseAbs().maxCoeff() << std::endl << std::endl;
 
         this->_Vddmu.triangularView<Upper>() = (this->_precision * E_xxphi * this->_precision - this->_precision * E_phi).triangularView<Upper>();
         this->_Vddmu.triangularView<StrictlyLower>() = this->_Vddmu.triangularView<StrictlyUpper>().transpose();
@@ -281,8 +279,6 @@ void calculate_partial_V() override{
         err =  0.0;
       else
         err =  total_eps - signed_distance;
-      
-      // printf("x = %lf, %lf, signed distance = %lf, err = %lf\n", pose(0), pose(1), signed_distance, err);
       
       return err * err * sigma;
     }

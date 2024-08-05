@@ -10,39 +10,30 @@ using GHFunction = std::function<MatrixXd(const VectorXd&)>;
 template <typename CostClass>
 __global__ void Sigma_function(double* d_sigmapts, double* d_pts, double* mu,
                                int sigmapts_rows, int sigmapts_cols, int res_rows, int res_cols, int type, 
-                               gvi::NGDFactorizedBaseGH_Cuda<CostClass>* pointer, gvi::PlanarSDF* sdf, double* d_data){
+                               gvi::NGDFactorizedBaseGH_Cuda<CostClass>* pointer, double* d_data){
     
-    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    int row = blockIdx.y * blockDim.y + threadIdx.y;
+    int col = blockIdx.x * blockDim.x + threadIdx.x;
 
-    if (idx < sigmapts_rows){
+    if (row < res_rows && col < res_cols*sigmapts_rows){
+        int idx = col / res_cols;
+
         Eigen::Map<MatrixXd> sigmapts(d_sigmapts, sigmapts_rows, sigmapts_cols);
-        Eigen::Map<MatrixXd> pts(d_sigmapts, res_rows, sigmapts_rows*res_cols);
-        Eigen::Map<MatrixXd> data_map(d_data, sdf->field_rows_, sdf->field_cols_);
-        Eigen::Map<VectorXd> mean(mu, sigmapts_cols);
-        // printf("idx = %d(%lf, %lf)\n", idx, sigmapts.row(idx)(0), sigmapts.row(idx)(1));
-        // sdf -> origin_ = origin;
-        // sdf -> data_ = data;
-        // printf("Origin = (%lf, %lf)\n", sdf->origin_(0), sdf->origin_(1));
-        sdf -> data_array = d_data;
+        // Eigen::Map<MatrixXd> pts(d_sigmapts, res_rows, sigmapts_rows*res_cols);
+        // Eigen::Map<MatrixXd> data_map(d_data, pointer->_sdf.field_rows_, pointer->_sdf.field_cols_);
+        // Eigen::Map<VectorXd> mean(mu, sigmapts_cols);
 
-        // printf("data[%d] = %lf\n", idx, sdf -> data_array[idx]);
-        double function_value = pointer -> cost_obstacle_planar(sigmapts.row(idx), *sdf);
+        (pointer->_sdf).data_array = d_data;
 
-        // printf("idx = %d, function value: %lf\n", idx, function_value);
-        // double function_value = 1;
-        // double function_value = pointer -> _function(sigmapts.row(idx), pointer -> _cost_class);
+        double function_value = pointer -> cost_obstacle_planar(sigmapts.row(idx), pointer->_sdf);
 
         if (type == 0)
-            d_pts[idx] = function_value;
-        else if (type == 1){
-            for (int i=0; i<sigmapts_cols; i++)
-                d_pts[idx*sigmapts_cols + i] = (d_sigmapts[idx + sigmapts_rows * i] - mu[i]) * function_value;
-        }
+            d_pts[idx*res_rows + row] = function_value;
+        else if (type == 1)
+            d_pts[idx*res_rows + row] = (d_sigmapts[idx + sigmapts_rows * row] - mu[row]) * function_value;
         else{
-            for (int i=0; i<sigmapts_cols; i++)
-                for (int j=0; j<sigmapts_cols; j++)
-                    d_pts[idx*sigmapts_cols *sigmapts_cols+ j*sigmapts_cols + i] = (d_sigmapts[idx + sigmapts_rows * i] - mu[i]) * (d_sigmapts[idx + sigmapts_rows * j] - mu[j]) * function_value;
-
+            int r = col % res_cols;
+            d_pts[idx*sigmapts_cols*sigmapts_cols+ r*sigmapts_cols + row] = (d_sigmapts[idx + sigmapts_rows * row] - mu[row]) * (d_sigmapts[idx + sigmapts_rows * r] - mu[r]) * function_value;
         }
     }
 }
@@ -66,22 +57,6 @@ template <typename CostClass>
 void NGDFactorizedBaseGH_Cuda<CostClass>::CudaIntegration(const MatrixXd& sigmapts, const MatrixXd& weights, MatrixXd& results, const MatrixXd& mean, int type, MatrixXd& pts)
 {
     double *sigmapts_gpu, *pts_gpu, *weight_gpu, *result_gpu, *mu_gpu, *data_gpu;
-    // std::cout << "Using cuda" << std::endl;
-    // MatrixIO _m_io;
-    // std::string field_file = source_root + "/maps/2dpR/map2/field_multiobs_map2.csv";
-    // MatrixXd field = _m_io.load_csv(field_file);      
-
-    // Vector2d origin;
-    // origin.setZero();
-    // origin << -20.0, -10.0;
-
-    // double cell_size = 0.1;
-
-    // PlanarSDF sdf(origin, cell_size, field);
-
-    PlanarSDF* sdf_gpu;
-    cudaMalloc(&sdf_gpu, sizeof(PlanarSDF));
-    cudaMemcpy(sdf_gpu, &_sdf, sizeof(PlanarSDF), cudaMemcpyHostToDevice);
 
     NGDFactorizedBaseGH_Cuda<CostClass>* class_gpu;
     cudaMalloc(&class_gpu, sizeof(NGDFactorizedBaseGH_Cuda<CostClass>));
@@ -102,18 +77,17 @@ void NGDFactorizedBaseGH_Cuda<CostClass>::CudaIntegration(const MatrixXd& sigmap
     cudaMemcpy(data_gpu, _sdf.data_.data(), _sdf.data_.size() * sizeof(double), cudaMemcpyHostToDevice);
 
     // Dimension for the first kernel function
-    dim3 blockSize1(3);
-    dim3 threadperblock1((sigmapts.rows() + blockSize1.x - 1) / blockSize1.x);
+    dim3 blockSize1(16, 4);
+    dim3 threadperblock1((results.cols()*sigmapts.rows() + blockSize1.x - 1) / blockSize1.x, (results.rows() + blockSize1.y - 1) / blockSize1.y);
 
     // Kernel 1: Obtain the result of function 
-    Sigma_function<<<blockSize1, threadperblock1>>>(sigmapts_gpu, pts_gpu, mu_gpu, sigmapts.rows(), sigmapts.cols(), results.rows(), results.cols(), type, class_gpu, sdf_gpu, data_gpu);
+    Sigma_function<<<blockSize1, threadperblock1>>>(sigmapts_gpu, pts_gpu, mu_gpu, sigmapts.rows(), sigmapts.cols(), results.rows(), results.cols(), type, class_gpu, data_gpu);
     cudaDeviceSynchronize();
 
     cudaMemcpy(pts.data(), pts_gpu, sigmapts.rows() * results.size() * sizeof(double), cudaMemcpyDeviceToHost);
-    // cudaMemcpy(pts_gpu, d_pts1, sigma_rows * res_rows * res_cols * sizeof(double), cudaMemcpyHostToDevice);
     
     // Dimension for the second kernel function
-    dim3 blockSize2(3, 3);
+    dim3 blockSize2(4, 4);
     dim3 threadperblock2((results.cols() + blockSize2.x - 1) / blockSize2.x, (results.rows() + blockSize2.y - 1) / blockSize2.y);
 
     // Kernel 2: Obtain the result by multiplying the pts and the weights

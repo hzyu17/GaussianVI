@@ -114,7 +114,6 @@ public:
 
             _zeromeanpts = std::get<0>(pts_weights);
             _Weights = std::get<1>(pts_weights);
-            // std::cout << "Weight: "<< _Weights(0) << std::endl;
             
             // Eigenvalue decomposition
             Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> eigensolver(_P);
@@ -129,6 +128,7 @@ public:
             std::cout << "(dimension, degree) " << "(" << _dim << ", " << _deg << ") " <<
              "key does not exist in the GH weight map." << std::endl;
         }
+
         
         return ;
     }
@@ -155,7 +155,7 @@ public:
             std::cout << "(dimension, degree) " << "(" << _dim << ", " << _deg << ") " <<
              "key does not exist in the GH weight map." << std::endl;
         }
-        // std::cout << "Sigma Points:" << std::endl << _sigmapts << std::endl;
+        
         return ;
     }
 
@@ -192,7 +192,6 @@ public:
         
         Eigen::MatrixXd res{function(_mean)};
         res.setZero();
-        // std::cerr << "res Rows and Cols: " << res.rows() << ", " << res.cols() << std::endl;
 
         // Calculate the result of functions (Try to integrate it in cuda)
         Eigen::MatrixXd pts(res.rows(), _sigmapts.rows()*res.cols());
@@ -202,7 +201,6 @@ public:
             #pragma omp for nowait  // The 'nowait' clause can be used if there is no need for synchronization after the loop
            
             for (int i = 0; i < _sigmapts.rows(); i++) {
-                // std::cerr << "Function Result Rows and Cols: " << function(_sigmapts.row(i)).rows() << ", " << function(_sigmapts.row(i)).cols() << std::endl;
                 pts.block(0, i * res.cols(), res.rows(), res.cols()) = function(_sigmapts.row(i));
             }
 
@@ -259,9 +257,6 @@ public:
         }
 
         _sigmapts = (_zeromeanpts*_sqrtP.transpose()).rowwise() + _mean.transpose(); 
-        // std::cerr << "Sigma0: " << _sigmapts.row(0)<< std::endl;
-        // std::cerr << "Sigma1: " << _sigmapts.row(1)<< std::endl;
-        // std::cerr << "Sigma2: " << _sigmapts.row(2)<< std::endl<< std::endl;
     }
 
     inline void update_P(const Eigen::MatrixXd& P){ 
