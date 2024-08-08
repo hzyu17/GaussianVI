@@ -135,13 +135,13 @@ public:
 };
 
 
-
-
 template <typename CostClass>
 class CudaOperation{
 
 public:
-    CudaOperation(){
+    CudaOperation(double cost_sigma = 15.5, double epsilon = 1.5):
+    _sigma(cost_sigma), _epsilon(epsilon)
+    {
         MatrixIO _m_io;
         std::string field_file = source_root + "/maps/2dpR/map2/field_multiobs_map2.csv";
         MatrixXd field = _m_io.load_csv(field_file);      
@@ -157,23 +157,18 @@ public:
     void CudaIntegration(const MatrixXd& sigmapts, const MatrixXd& weights, MatrixXd& results, const MatrixXd& mean, int type, MatrixXd& pts);
 
     __host__ __device__ double cost_obstacle_planar(const VectorXd& pose, const PlanarSDF& sdf){
-      double radius = 1;
-      double epsilon = 0.5;
-      double sigma = 15.5;
-      double total_eps = radius + epsilon;
       double err;
-
       double signed_distance = sdf.getSignedDistance(pose);
 
-      if (signed_distance > total_eps)
+      if (signed_distance > _epsilon)
         err =  0.0;
       else
-        err =  total_eps - signed_distance;
-      
-      return err * err * sigma;
+        err =  _epsilon - signed_distance;
+
+      return err * err * _sigma;
     }
 
-
+    double _sigma, _epsilon;
     PlanarSDF _sdf;
 
 };

@@ -77,7 +77,7 @@ void CudaOperation<CostClass>::CudaIntegration(const MatrixXd& sigmapts, const M
     cudaMemcpy(data_gpu, _sdf.data_.data(), _sdf.data_.size() * sizeof(double), cudaMemcpyHostToDevice);
 
     // Dimension for the first kernel function
-    dim3 blockSize1(16, 4);
+    dim3 blockSize1(16, 16);
     dim3 threadperblock1((results.cols()*sigmapts.rows() + blockSize1.x - 1) / blockSize1.x, (results.rows() + blockSize1.y - 1) / blockSize1.y);
 
     // Kernel 1: Obtain the result of function 
@@ -87,7 +87,7 @@ void CudaOperation<CostClass>::CudaIntegration(const MatrixXd& sigmapts, const M
     cudaMemcpy(pts.data(), pts_gpu, sigmapts.rows() * results.size() * sizeof(double), cudaMemcpyDeviceToHost);
     
     // Dimension for the second kernel function
-    dim3 blockSize2(4, 4);
+    dim3 blockSize2(16, 16);
     dim3 threadperblock2((results.cols() + blockSize2.x - 1) / blockSize2.x, (results.rows() + blockSize2.y - 1) / blockSize2.y);
 
     // Kernel 2: Obtain the result by multiplying the pts and the weights
@@ -100,7 +100,9 @@ void CudaOperation<CostClass>::CudaIntegration(const MatrixXd& sigmapts, const M
     cudaFree(pts_gpu);
     cudaFree(weight_gpu);
     cudaFree(result_gpu);
-    
+    cudaFree(mu_gpu);
+    cudaFree(data_gpu);
+    cudaFree(class_gpu);
 }
 
 // template class NGDFactorizedBaseGH_Cuda<NoneType>;
