@@ -13,6 +13,8 @@ using namespace Eigen;
 
 namespace gvi{
 
+__host__ __device__ void invert_matrix(double* A, double* A_inv, int dim); 
+
 class PlanarSDF {
 
 public:
@@ -173,6 +175,14 @@ public:
 
 };
 
+
+
+class GBP_Cuda{
+public:
+    GBP_Cuda(){};
+
+    MatrixXd obtain_cov(std::vector<MatrixXd> joint_factor, std::vector<MatrixXd> factor_message, std::vector<MatrixXd> factor_message1);
+};
 
 }
 

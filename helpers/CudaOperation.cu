@@ -3,9 +3,39 @@
 // #include "ngd/NGDFactorizedBaseGH_Cuda.h"
 // #include <gpmp2/obstacle/ObstaclePlanarSDFFactor.h>
 #include "helpers/CudaOperation.h"
+#include <cusolverDn.h>
 
 using namespace Eigen;
 using GHFunction = std::function<MatrixXd(const VectorXd&)>;
+
+__host__ __device__ void gvi::invert_matrix(double* A, double* A_inv, int dim) {
+    for (int i = 0; i < dim; i++) {
+        for (int j = 0; j < dim; j++) {
+            A_inv[i + j * dim] = (i == j) ? 1 : 0;
+        }
+    }
+
+    // Gaussian Elimination
+    for (int i = 0; i < dim; i++) {
+        double pivot = A[i + i * dim];
+        for (int j = 0; j < dim; j++) {
+            A[i + j * dim] /= pivot;
+            A_inv[i + j * dim] /= pivot;
+        }
+
+        for (int j = 0; j < dim; j++) {
+            if (j != i) {
+                double factor = A[i + j * dim];
+                for (int k = 0; k < dim; k++) {
+                    A[k + j * dim] -= factor * A[k + i * dim];
+                    A_inv[k + j * dim] -= factor * A_inv[k + i * dim];
+                }
+            }
+        }
+    }
+}
+
+
 
 template <typename CostClass>
 __global__ void Sigma_function(double* d_sigmapts, double* d_pts, double* mu,
@@ -50,6 +80,35 @@ __global__ void obtain_res(double* d_pts, double* d_weights, double* d_result, i
     }
 }
 
+__global__ void belief_update(double* d_joint_factor, double* d_message, double* d_message1, double* d_sigma, int dim_state, int num_state, int joint_cols, int message_cols){
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if(idx < num_state - 1){
+        Eigen::Map<MatrixXd> joint_factor(d_joint_factor, 2*dim_state, joint_cols);
+        Eigen::Map<MatrixXd> message(d_message, dim_state, message_cols);
+        Eigen::Map<MatrixXd> message1(d_message1, dim_state, message_cols);
+
+        MatrixXd lam_joint = joint_factor.block(0, idx*2*dim_state, 2*dim_state, 2*dim_state);
+        MatrixXd factor_message = message.block(0, idx*dim_state, dim_state, dim_state);
+        MatrixXd factor_message1 = message1.block(0, idx*dim_state, dim_state, dim_state);
+
+        lam_joint.block(0, 0, dim_state, dim_state) += factor_message;
+        lam_joint.block(dim_state, dim_state, dim_state, dim_state) += factor_message1;
+        // MatrixXd variance_joint = lam_joint.inverse();
+        MatrixXd variance_joint = MatrixXd::Identity(lam_joint.rows(), lam_joint.cols());
+        gvi::invert_matrix(lam_joint.data(), variance_joint.data(), lam_joint.rows());
+
+        // printf("idx = %d, norm of invert is %.10lf\n", idx, variance_joint.norm());
+
+        for (int i = 0; i < variance_joint.rows(); i++){
+            for (int j = 0; j < variance_joint.cols(); j++){
+                int row = idx*dim_state + i;
+                int col = idx*dim_state + j;
+                d_sigma[row + col * dim_state * num_state] = variance_joint(i, j);
+            }
+        }
+
+    }
+}
 
 namespace gvi{
 
@@ -57,11 +116,7 @@ template <typename CostClass>
 void CudaOperation<CostClass>::CudaIntegration(const MatrixXd& sigmapts, const MatrixXd& weights, MatrixXd& results, const MatrixXd& mean, int type, MatrixXd& pts)
 {
     double *sigmapts_gpu, *pts_gpu, *weight_gpu, *result_gpu, *mu_gpu, *data_gpu;
-
     CudaOperation<CostClass>* class_gpu;
-    cudaMalloc(&class_gpu, sizeof(CudaOperation<CostClass>));
-    cudaMemcpy(class_gpu, this, sizeof(CudaOperation<CostClass>), cudaMemcpyHostToDevice);
-
 
     cudaMalloc(&sigmapts_gpu, sigmapts.size() * sizeof(double));
     cudaMalloc(&pts_gpu, sigmapts.rows() * results.size() * sizeof(double));
@@ -69,12 +124,13 @@ void CudaOperation<CostClass>::CudaIntegration(const MatrixXd& sigmapts, const M
     cudaMalloc(&result_gpu, results.size() * sizeof(double));
     cudaMalloc(&mu_gpu, sigmapts.cols() * sizeof(double));
     cudaMalloc(&data_gpu, _sdf.data_.size() * sizeof(double));
-
+    cudaMalloc(&class_gpu, sizeof(CudaOperation<CostClass>));
 
     cudaMemcpy(sigmapts_gpu, sigmapts.data(), sigmapts.size() * sizeof(double), cudaMemcpyHostToDevice);
     cudaMemcpy(weight_gpu, weights.data(), sigmapts.rows() * sizeof(double), cudaMemcpyHostToDevice);
     cudaMemcpy(mu_gpu, mean.data(), sigmapts.cols() * sizeof(double), cudaMemcpyHostToDevice);
     cudaMemcpy(data_gpu, _sdf.data_.data(), _sdf.data_.size() * sizeof(double), cudaMemcpyHostToDevice);
+    cudaMemcpy(class_gpu, this, sizeof(CudaOperation<CostClass>), cudaMemcpyHostToDevice);
 
     // Dimension for the first kernel function
     dim3 blockSize1(16, 16);
@@ -107,5 +163,56 @@ void CudaOperation<CostClass>::CudaIntegration(const MatrixXd& sigmapts, const M
 
 // template class NGDFactorizedBaseGH_Cuda<NoneType>;
 template class CudaOperation<gpmp2::ObstaclePlanarSDFFactor<gpmp2::PointRobotModel>>;
+
+
+MatrixXd GBP_Cuda::obtain_cov(std::vector<MatrixXd> joint_factor, std::vector<MatrixXd> factor_message, std::vector<MatrixXd> factor_message1){
+    int dim_state = factor_message[0].rows();
+    int num_state = factor_message.size();
+    int dim = dim_state * num_state;
+
+    MatrixXd joint_factor_matrix(2*dim_state, (num_state-1)*2*dim_state);
+    MatrixXd factor_message_matrix(dim_state, dim);
+    MatrixXd factor_message1_matrix(dim_state, dim);
+    MatrixXd Sigma(dim, dim);
+    Sigma.setZero();
+     
+    for (int i = 0; i < num_state-1; i++) {
+        joint_factor_matrix.block(0, i * 2*dim_state, 2*dim_state, 2*dim_state) = joint_factor[i];
+    }
+
+    for (int i = 0; i < num_state; i++) {
+        factor_message_matrix.block(0, i * dim_state, dim_state, dim_state) = factor_message[i];
+        factor_message1_matrix.block(0, i * dim_state, dim_state, dim_state) = factor_message1[i];
+    }
+
+    double *joint_factor_gpu, *factor_message_gpu, *factor_message1_gpu, *sigma_gpu;
+
+    cudaMalloc(&joint_factor_gpu, joint_factor_matrix.size() * sizeof(double));
+    cudaMalloc(&factor_message_gpu, factor_message_matrix.size() * sizeof(double));
+    cudaMalloc(&factor_message1_gpu, factor_message1.size() * sizeof(double));
+    cudaMalloc(&sigma_gpu, Sigma.size() * sizeof(double));
+
+    cudaMemcpy(joint_factor_gpu, joint_factor_matrix.data(), joint_factor_matrix.size() * sizeof(double), cudaMemcpyHostToDevice);
+    cudaMemcpy(factor_message_gpu, factor_message_matrix.data(), factor_message_matrix.size() * sizeof(double), cudaMemcpyHostToDevice);
+    cudaMemcpy(factor_message1_gpu, factor_message1_matrix.data(), factor_message1_matrix.size() * sizeof(double), cudaMemcpyHostToDevice);
+
+    dim3 blockSize(4);
+    dim3 threadperblock((num_state - 1 + blockSize.x - 1) / blockSize.x);
+
+    belief_update<<<blockSize, threadperblock>>>(joint_factor_gpu, factor_message_gpu, factor_message1_gpu, sigma_gpu, dim_state, num_state, joint_factor_matrix.cols(), factor_message_matrix.cols());
+
+    cudaMemcpy(Sigma.data(), sigma_gpu, Sigma.size() * sizeof(double), cudaMemcpyDeviceToHost);
+
+    cudaFree(joint_factor_gpu);
+    cudaFree(factor_message_gpu);
+    cudaFree(factor_message1_gpu);
+    cudaFree(sigma_gpu);
+
+    return Sigma;
+}
+
+
+
+
 
 }
