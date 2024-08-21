@@ -68,8 +68,8 @@ void GVIGH<Factor>::optimize(std::optional<bool> verbose)
         // gradients
         std::tuple<VectorXd, SpMat> gradients = compute_gradients();
 
-        VectorXd dmu = std::get<0>(gradients);
-        SpMat dprecision = std::get<1>(gradients);
+        VectorXd dmu = std::move(std::get<0>(gradients));
+        SpMat dprecision = std::move(std::get<1>(gradients));
         
         int cnt = 0;
         int B = 1;
@@ -84,9 +84,9 @@ void GVIGH<Factor>::optimize(std::optional<bool> verbose)
 
             auto onestep_res = onestep_linesearch(step_size, dmu, dprecision);
 
-            double new_cost = std::get<0>(onestep_res);
-            VectorXd new_mu = std::get<1>(onestep_res);
-            auto new_precision = std::get<2>(onestep_res);
+            double new_cost = std::move(std::get<0>(onestep_res));
+            VectorXd new_mu = std::move(std::get<1>(onestep_res));
+            auto new_precision = std::move(std::get<2>(onestep_res));
 
             // accept new cost and update mu and precision matrix
             if (new_cost < cost_iter){

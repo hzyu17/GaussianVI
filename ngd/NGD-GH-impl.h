@@ -22,8 +22,8 @@ std::tuple<VectorXd, SpMat> NGDGH<Factor>::compute_gradients(std::optional<doubl
     _Vdmu.setZero();
     _Vddmu.setZero();
 
-    VectorXd Vdmu_sum = VectorXd::Zero(_Vdmu.size());
-    SpMat Vddmu_sum = SpMat(_Vddmu.rows(), _Vddmu.cols());
+    VectorXd Vdmu_sum = std::move(VectorXd::Zero(_Vdmu.size()));
+    SpMat Vddmu_sum = std::move(SpMat(_Vddmu.rows(), _Vddmu.cols()));
 
     /**
      * @brief OMP parallel on cpu.
@@ -33,8 +33,8 @@ std::tuple<VectorXd, SpMat> NGDGH<Factor>::compute_gradients(std::optional<doubl
     #pragma omp parallel
     {
         // Thread-local storage to avoid race conditions
-        VectorXd Vdmu_private = VectorXd::Zero(_Vdmu.size());
-        SpMat Vddmu_private = SpMat(_Vddmu.rows(), _Vddmu.cols());
+        VectorXd Vdmu_private = std::move(VectorXd::Zero(_Vdmu.size()));
+        SpMat Vddmu_private = std::move(SpMat(_Vddmu.rows(), _Vddmu.cols()));
 
         #pragma omp for nowait // Nowait allows threads to continue without waiting at the end of the loop
         for (auto &opt_k : Base::_vec_factors) {
@@ -51,13 +51,13 @@ std::tuple<VectorXd, SpMat> NGDGH<Factor>::compute_gradients(std::optional<doubl
     }
 
     // Update the member variables 
-    _Vdmu = Vdmu_sum;
-    _Vddmu = Vddmu_sum;
+    _Vdmu = std::move(Vdmu_sum);
+    _Vddmu = std::move(Vddmu_sum);
 
-    SpMat dprecision = _Vddmu - Base::_precision;
+    SpMat dprecision = std::move(_Vddmu - Base::_precision);
 
     Eigen::ConjugateGradient<SpMat, Eigen::Upper> solver;
-    VectorXd dmu =  solver.compute(_Vddmu).solve(-_Vdmu);
+    VectorXd dmu = std::move(solver.compute(_Vddmu).solve(-_Vdmu));
 
     return std::make_tuple(dmu, dprecision);
 }
@@ -74,11 +74,11 @@ std::tuple<double, VectorXd, SpMat> NGDGH<Factor>::onestep_linesearch(const doub
     new_mu.setZero(); new_precision.setZero();
 
     // update mu and precision matrix
-    new_mu = this->_mu + step_size * dmu;
-    new_precision = this->_precision + step_size * dprecision;
+    new_mu = std::move(this->_mu + step_size * dmu);
+    new_precision = std::move(this->_precision + step_size * dprecision);
 
     // new cost
-    double new_cost = Base::cost_value(new_mu, new_precision);
+    double new_cost = std::move(Base::cost_value(new_mu, new_precision));
     return std::make_tuple(new_cost, new_mu, new_precision);
 
 }
