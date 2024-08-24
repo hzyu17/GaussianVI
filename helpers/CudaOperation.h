@@ -13,7 +13,7 @@ using namespace Eigen;
 
 namespace gvi{
 
-__host__ __device__ void invert_matrix(double* A, double* A_inv, int dim); 
+// __host__ __device__ void invert_matrix(double* A, double* A_inv, int dim); 
 
 class PlanarSDF {
 
@@ -49,34 +49,18 @@ public:
 
   /// give a point, search for signed distance field and (optional) gradient
   /// return signed distance
-  __host__ __device__ inline double getSignedDistance(const Eigen::Vector2d& point) const {
-    const float_index pidx = convertPoint2toCell(point);
-    return signed_distance(pidx);
+  __host__ __device__ inline VectorXd getSignedDistance(const Eigen::MatrixXd& point) const {
+    int n_balls = point.rows();
+    VectorXd signed_dis(n_balls);
+    for (int i = 0; i < n_balls; i++){
+      const float_index pidx = convertPoint2toCell(point.row(i));
+      signed_dis(i) = signed_distance(pidx);
+    }
+    return signed_dis;
   }
-
-  __host__ __device__ inline Eigen::Vector2d getGradient(const Eigen::Vector2d& point) const {
-    const float_index pidx = convertPoint2toCell(point);
-    const Eigen::Vector2d g_idx = gradient(pidx);
-    // convert gradient of index to gradient of metric unit
-    return Eigen::Vector2d(g_idx(1), g_idx(0)) / cell_size_;
-  }
-
 
   /// convert between point and cell corrdinate
   __host__ __device__ inline float_index convertPoint2toCell(const Eigen::Vector2d& point) const {
-    // // check point range
-    // if (point.x() < origin_.x() || point.x() > (origin_.x() + (field_cols_-1.0)*cell_size_) ||
-    //     point.y() < origin_.y() || point.y() > (origin_.y() + (field_rows_-1.0)*cell_size_)) {
-        
-    //   // Convert the number to a string using std::to_string
-    //   std::string origin_x_Str = std::to_string(point.x());
-    //   std::string origin_y_Str = std::to_string(point.y());
-
-    //   // Concatenate the string and the number
-    //   std::string err_msg = "Index out of range. point.x: " + origin_x_Str + "; " + "point.y: " + origin_y_Str;
-    //   throw std::out_of_range(err_msg);
-    // }
-
     const double col = (point.x() - origin_.x()) / cell_size_;
     const double row = (point.y() - origin_.y()) / cell_size_;
     return Vector2d{row, col};
@@ -95,7 +79,6 @@ public:
     const double hr = lr + 1.0, hc = lc + 1.0;
     const size_t lri = static_cast<size_t>(lr), lci = static_cast<size_t>(lc),
                  hri = static_cast<size_t>(hr), hci = static_cast<size_t>(hc);
-    // printf("lr = %lf, lc = %lf, hr = %lf, hc = %lf, lri = %d, lci = %d, hri = %d, hci = %d\n", lr, lc, hr, hc, lri, lci, hri, hci);
     return
         (hr-idx(0))*(hc-idx(1))*signed_distance(lri, lci) +
         (idx(0)-lr)*(hc-idx(1))*signed_distance(hri, lci) +
@@ -121,10 +104,7 @@ public:
 
   // access
   __host__ __device__ inline double signed_distance(size_t r, size_t c) const {
-    // printf("data_array = %lf\n", data_array[r + c * field_rows_]);
-    // printf("distance(%d, %d) = %lf\n", r, c, data_(r,c));
     return data_array[r + c * field_rows_];
-    // return data_(r,c);
   }
 
   const Eigen::Vector2d& origin() const { return origin_; }
@@ -141,8 +121,8 @@ template <typename CostClass>
 class CudaOperation{
 
 public:
-    CudaOperation(double cost_sigma = 15.5, double epsilon = 1.5):
-    _sigma(cost_sigma), _epsilon(epsilon)
+    CudaOperation(double cost_sigma = 15.5, double epsilon = 0.5, double radius = 1):
+    _sigma(cost_sigma), _epsilon(epsilon), _radius(radius)
     {
         MatrixIO _m_io;
         std::string field_file = source_root + "/maps/2dpR/map2/field_multiobs_map2.csv";
@@ -159,30 +139,64 @@ public:
     void CudaIntegration(const MatrixXd& sigmapts, const MatrixXd& weights, MatrixXd& results, const MatrixXd& mean, int type, MatrixXd& pts);
 
     __host__ __device__ double cost_obstacle_planar(const VectorXd& pose, const PlanarSDF& sdf){
-      double err;
-      double signed_distance = sdf.getSignedDistance(pose);
+      MatrixXd checkpoints = vec_balls(pose, 1);
+      VectorXd signed_distance = sdf.getSignedDistance(checkpoints);
+      VectorXd err(signed_distance.size());
+      // printf("dim of err = %d\n", err.size());
+      MatrixXd sigma_matrix(err.size(), err.size());
+      double cost = 0;
+      sigma_matrix = _sigma * MatrixXd::Identity(err.size(), err.size());
 
-      if (signed_distance > _epsilon)
-        err =  0.0;
-      else
-        err =  _epsilon - signed_distance;
-
-      return err * err * _sigma;
+      for (int i = 0; i < signed_distance.size(); i++){
+        if (signed_distance(i) > _epsilon + _radius)
+          err(i) =  0.0;
+        else
+          err(i) =  _epsilon + _radius - signed_distance(i);
+        cost =+ err(i) * err(i) * _sigma;
+      }
+      
+      // return err.transpose() * sigma_matrix * err;
+      return cost;
     }
 
-    double _sigma, _epsilon;
-    PlanarSDF _sdf;
+    __host__ __device__ Eigen::MatrixXd vec_balls(const Eigen::VectorXd& x, int n_balls) {
+      Eigen::MatrixXd v_pts = Eigen::MatrixXd::Zero(n_balls, 2);
+
+      double pos_x = x(0);
+      double pos_z = x(1);
+      // double phi = x(2);
+
+      // double l_pt_x = pos_x - (L - _radius * 1.5) * std::cos(phi) / 2.0;
+      // double l_pt_z = pos_z - (L - _radius * 1.5) * std::sin(phi) / 2.0;
+
+      // for (int i = 0; i < n_balls; ++i) {
+      //     double pt_xi = l_pt_x + L * std::cos(phi) / n_balls * i;
+      //     double pt_zi = l_pt_z + L * std::sin(phi) / n_balls * i;
+      //     v_pts(i, 0) = pt_xi;
+      //     v_pts(i, 1) = pt_zi;
+      // }
+
+      for (int i = 0; i < n_balls; ++i) {
+          v_pts(i, 0) = pos_x;
+          v_pts(i, 1) = pos_z;
+      }
+
+      return v_pts;
+    }
+
+  double _epsilon, _radius, _sigma;
+  PlanarSDF _sdf;
 
 };
 
 
 
-class GBP_Cuda{
-public:
-    GBP_Cuda(){};
+// class GBP_Cuda{
+// public:
+//     GBP_Cuda(){};
 
-    MatrixXd obtain_cov(std::vector<MatrixXd> joint_factor, std::vector<MatrixXd> factor_message, std::vector<MatrixXd> factor_message1);
-};
+//     MatrixXd obtain_cov(std::vector<MatrixXd> joint_factor, std::vector<MatrixXd> factor_message, std::vector<MatrixXd> factor_message1);
+// };
 
 }
 

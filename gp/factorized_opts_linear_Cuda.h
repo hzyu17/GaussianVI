@@ -3,13 +3,13 @@
 #include "ngd/NGDFactorizedLinear_Cuda.h"
 #include "ngd/NGDFactorizedLinearGH_Cuda.h"
 #include "gp/fixed_prior.h"
-#include "gp/minimum_acc_prior.h"
+#include "gp/minimum_acc_prior_integral.h"
 
 namespace gvi{
     using FixedGpPrior = NGDFactorizedLinear_Cuda<FixedPriorGP>;
-    using LinearGpPrior = NGDFactorizedLinear_Cuda<MinimumAccGP>;
+    using LinearGpPrior = NGDFactorizedLinear_Cuda<MinimumAccGP_integral>;
 
     // For comparison
     using FixedGpPriorGH = NGDFactorizedLinearGH_Cuda<FixedPriorGP>;
-    using LinearGpPriorGH = NGDFactorizedLinearGH_Cuda<MinimumAccGP>;
+    using LinearGpPriorGH = NGDFactorizedLinearGH_Cuda<MinimumAccGP_integral>;
 }

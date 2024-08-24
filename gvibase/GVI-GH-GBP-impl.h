@@ -274,7 +274,7 @@ SpMat GVIGH<Factor>::inverse_GBP_cuda(const SpMat &Precision)
     std::vector<Message> factor(2*_num_states-1);
     std::vector<MatrixXd> joint_factor(_num_states-1);
     MatrixXd variable_message;
-    std::shared_ptr<GBP_Cuda> _cuda = std::make_shared<GBP_Cuda>(GBP_Cuda{});
+    // std::shared_ptr<GBP_Cuda> _cuda = std::make_shared<GBP_Cuda>(GBP_Cuda{});
 
     // Extract the factors from the precision matrix
     // The variable in factor is 0, {0,1}, 1, {1,2}, 2, ..., {_num_states-1,_num_states},_num_states
@@ -312,7 +312,6 @@ SpMat GVIGH<Factor>::inverse_GBP_cuda(const SpMat &Precision)
     }
 
     MatrixXd sigma(_dim, _dim);
-    MatrixXd sigma1(_dim, _dim);
 
     if (_num_states == 1){
         MatrixXd lam = factor_message[0] + factor_message1[0] + factor[0].second;
@@ -326,25 +325,10 @@ SpMat GVIGH<Factor>::inverse_GBP_cuda(const SpMat &Precision)
         MatrixXd lam_joint = joint_factor[i];
         lam_joint.block(0, 0, _dim_state, _dim_state) += factor_message[i];
         lam_joint.block(_dim_state, _dim_state, _dim_state, _dim_state) += factor_message1[i + 1];
-        // MatrixXd lam_joint1 = lam_joint;
 
         MatrixXd variance_joint = lam_joint.inverse();
-        // MatrixXd variance_joint1 = MatrixXd::Identity(lam_joint.rows(), lam_joint.cols());
-        // invert_matrix(lam_joint1.data(), variance_joint1.data(), lam_joint.rows());
         sigma.block(i*_dim_state, i*_dim_state, 2*_dim_state, 2*_dim_state) = variance_joint;
-        // sigma1.block(i*_dim_state, i*_dim_state, 2*_dim_state, 2*_dim_state) = variance_joint1;
-
-        // std::cout << "Norm of error is: " << (variance_joint - variance_joint1).norm() << std::endl << std::endl;
-
     }
-
-    // sigma1 = _cuda -> obtain_cov(joint_factor, factor_message, factor_message1);
-
-    MatrixXd Error = sigma - sigma1;
-    // double error = Error.norm();
-    // std::cout << "Norm of sigma is: " << sigma.norm() << std::endl;
-    // std::cout << "Norm of cuda is: " << sigma1.norm() << std::endl;
-    // std::cout << "norm of Error of cuda is: " << error << std::endl << std::endl;
 
     return sigma.sparseView();
 

@@ -43,7 +43,8 @@ public:
     
     NGDFactorizedBaseGH_Cuda(int dimension, int state_dim, int gh_degree, 
                         const Function& function, const CostClass& cost_class,
-                        int num_states, int start_index, double cost_sigma, double epsilon,
+                        int num_states, int start_index, double cost_sigma, 
+                        double epsilon, double radius, 
                         double temperature, double high_temperature,
                         QuadratureWeightsMap weight_sigpts_map_option):
                 GVIBase(dimension, state_dim, num_states, start_index, 
@@ -54,7 +55,7 @@ public:
                 GVIBase::_func_Vmu = [this, function, cost_class](const VectorXd& x){return (x-GVIBase::_mu) * function(x, cost_class);};
                 GVIBase::_func_Vmumu = [this, function, cost_class](const VectorXd& x){return MatrixXd{(x-GVIBase::_mu) * (x-GVIBase::_mu).transpose().eval() * function(x, cost_class)};};
                 GVIBase::_gh = std::make_shared<GH>(GH{gh_degree, GVIBase::_dim, GVIBase::_mu, GVIBase::_covariance, weight_sigpts_map_option});
-                _cuda = std::make_shared<CUDA>(CUDA{cost_sigma, epsilon});
+                _cuda = std::make_shared<CUDA>(CUDA{cost_sigma, epsilon, radius});
 
             }
 public:
@@ -72,20 +73,9 @@ void calculate_partial_V() override{
         this->_Vdmu = this->_precision * this->_Vdmu;
         this->_Vdmu = this->_Vdmu / this->temperature();
 
-        // VectorXd Vdmu_cpu = this->_gh->Integrate(this->_func_Vmu);
-        // Vdmu_cpu = this->_precision * Vdmu_cpu;
-        // Vdmu_cpu = Vdmu_cpu / this->temperature();
-
-        // std::cerr << "Vdmu Norm: " << this->_Vdmu.norm()  << std::endl;
-        // std::cerr << "Vdmu CPU Norm: " << Vdmu_cpu.norm()  << std::endl << std::endl;
-        
-
         /// Integrate for E_q{phi(x)}
         double E_phi = Integrate_cuda(0)(0, 0);
         // double E_phi = this->_gh->Integrate(this->_func_phi)(0, 0);
-
-        // double E_phi_cpu = this->_gh->Integrate(this->_func_phi)(0, 0);
-        // std::cerr << "PPPPPPPPhi: " << E_phi << std::endl;
         
         /// Integrate for partial V^2 / ddmu_ 
         MatrixXd E_xxphi{Integrate_cuda(2)};
@@ -108,26 +98,9 @@ void calculate_partial_V() override{
           result = MatrixXd::Zero(sigmapts_gh.cols(),1);
         else
           result = MatrixXd::Zero(sigmapts_gh.cols(),sigmapts_gh.cols());
-
-        // MatrixXd function_value = this -> _gh -> Obtain_function_value(this->_func_phi);
-        // std::cerr << "Function Value:" << std::endl << function_value << std::endl << std::endl;
-
-        // MatrixXd pts_cpu(result.rows(), sigmapts_gh.rows()*result.cols());
-        // for (int i = 0; i < sigmapts_gh.rows(); i++) {
-        //   // std::cout << "i = " << i << ", sigma.row = " << sigmapts_gh.row(i) << std::endl;
-        //   pts_cpu(i) = cost_obstacle_planar(sigmapts_gh.row(i), _sdf);
-        //   // std::cout << "i = " << i << ", value = " << pts_cpu(i) << std::endl;
-        // }
-        
-        // std::cout << "Function Value CPU:" << std::endl << pts_cpu << std::endl << std::endl;
-        // std::cout << "Function Value Error:" << std::endl << function_value - pts_cpu << std::endl << std::endl;
-
         
         MatrixXd pts(result.rows(), sigmapts_gh.rows()*result.cols());
         _cuda -> CudaIntegration(sigmapts_gh, weights_gh, result, mean_gh, type, pts);
-        // std::cerr << "Cuda Pts Norm:" << std::endl << pts.norm() << std::endl << std::endl;
-        
-        // std::cout << "Function Value Cuda Error:" << std::endl << function_value - pts << std::endl << std::endl;
 
         return result;
     }
