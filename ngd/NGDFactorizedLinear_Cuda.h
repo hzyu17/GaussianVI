@@ -113,6 +113,7 @@ public:
         return _E_Phi / this->temperature();
     }
 
+    inline void update_cuda() override{}
 };
 
 } //namespace

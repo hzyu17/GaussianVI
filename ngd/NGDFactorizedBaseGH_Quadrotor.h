@@ -25,11 +25,9 @@ using namespace Eigen;
 
 namespace gvi{
 
-template <typename CostClass>
-class NGDFactorizedBaseGH_Cuda: public GVIFactorizedBaseGH_Cuda{
+class NGDFactorizedBaseGH_Quadrotor: public GVIFactorizedBaseGH_Cuda{
 
     using GVIBase = GVIFactorizedBaseGH_Cuda;
-    using Function = std::function<double(const VectorXd&, const CostClass &)>;
 
     // Robot = gpmp2::PointRobotModel
     // CostClass = gpmp2::ObstaclePlanarSDFFactor<gpmp2::PointRobotModel>
@@ -40,8 +38,7 @@ public:
     ///@param function Template function class which calculate the cost
     // NGDFactorizedBaseGH(const int& dimension, const Function& function, const CostClass& cost_class_, const MatrixXd& Pk_):
     
-    NGDFactorizedBaseGH_Cuda(int dimension, int state_dim, int gh_degree, 
-                        const Function& function, const CostClass& cost_class,
+    NGDFactorizedBaseGH_Quadrotor(int dimension, int state_dim, int gh_degree, 
                         int num_states, int start_index, double cost_sigma, 
                         double epsilon, double radius, 
                         double temperature, double high_temperature,
@@ -53,9 +50,6 @@ public:
                 _radius(radius)
             {
                 /// Override of the GVIBase classes. _func_phi-> Scalar, _func_Vmu -> Vector, _func_Vmumu -> Matrix
-                GVIBase::_func_phi = [this, function, cost_class](const VectorXd& x){return MatrixXd::Constant(1, 1, function(x, cost_class));};
-                GVIBase::_func_Vmu = [this, function, cost_class](const VectorXd& x){return (x-GVIBase::_mu) * function(x, cost_class);};
-                GVIBase::_func_Vmumu = [this, function, cost_class](const VectorXd& x){return MatrixXd{(x-GVIBase::_mu) * (x-GVIBase::_mu).transpose().eval() * function(x, cost_class)};};
                 GVIBase::_gh = std::make_shared<GH>(GH{gh_degree, GVIBase::_dim, GVIBase::_mu, GVIBase::_covariance, weight_sigpts_map_option});
                 _cuda = std::make_shared<CudaOperation>(CudaOperation{cost_sigma, epsilon, radius});
 
@@ -94,6 +88,7 @@ void calculate_partial_V() override{
         MatrixXd sigmapts_gh = this -> _gh -> sigmapts();
         MatrixXd weights_gh = this -> _gh -> weights();
         MatrixXd result;
+
         if (type == 0)
             result = MatrixXd::Zero(1,1);
         else if (type ==  1)
@@ -141,6 +136,7 @@ void calculate_partial_V() override{
     }
 
     double fact_cost_value(const VectorXd& fill_joint_mean, const SpMat& joint_cov) override {
+
         VectorXd mean_k = extract_mu_from_joint(fill_joint_mean);
         MatrixXd Cov_k = extract_cov_from_joint(joint_cov);
 

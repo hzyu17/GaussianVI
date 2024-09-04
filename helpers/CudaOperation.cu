@@ -1,12 +1,9 @@
 #include <cuda_runtime.h>
 #include <optional>
-// #include "ngd/NGDFactorizedBaseGH_Cuda.h"
 // #include <gpmp2/obstacle/ObstaclePlanarSDFFactor.h>
 #include "helpers/CudaOperation.h"
-#include <cusolverDn.h>
 
 using namespace Eigen;
-using GHFunction = std::function<MatrixXd(const VectorXd&)>;
 
 // __host__ __device__ void gvi::invert_matrix(double* A, double* A_inv, int dim) {
 //     for (int i = 0; i < dim; i++) {
@@ -37,10 +34,9 @@ using GHFunction = std::function<MatrixXd(const VectorXd&)>;
 
 
 
-template <typename CostClass>
 __global__ void Sigma_function(double* d_sigmapts, double* d_pts, double* mu,
                                int sigmapts_rows, int sigmapts_cols, int res_rows, int res_cols, int type, 
-                               gvi::CudaOperation<CostClass>* pointer, double* d_data){
+                               gvi::CudaOperation* pointer, double* d_data){
     
     int row = blockIdx.y * blockDim.y + threadIdx.y;
     int col = blockIdx.x * blockDim.x + threadIdx.x;
@@ -112,11 +108,10 @@ __global__ void obtain_res(double* d_pts, double* d_weights, double* d_result, i
 
 namespace gvi{
 
-template <typename CostClass>
-void CudaOperation<CostClass>::CudaIntegration(const MatrixXd& sigmapts, const MatrixXd& weights, MatrixXd& results, const MatrixXd& mean, int type, MatrixXd& pts)
+void CudaOperation::CudaIntegration(const MatrixXd& sigmapts, const MatrixXd& weights, MatrixXd& results, const MatrixXd& mean, int type)
 {
     double *sigmapts_gpu, *pts_gpu, *weight_gpu, *result_gpu, *mu_gpu, *data_gpu;
-    CudaOperation<CostClass>* class_gpu;
+    CudaOperation* class_gpu;
 
     cudaMalloc(&sigmapts_gpu, sigmapts.size() * sizeof(double));
     cudaMalloc(&pts_gpu, sigmapts.rows() * results.size() * sizeof(double));
@@ -124,13 +119,13 @@ void CudaOperation<CostClass>::CudaIntegration(const MatrixXd& sigmapts, const M
     cudaMalloc(&result_gpu, results.size() * sizeof(double));
     cudaMalloc(&mu_gpu, sigmapts.cols() * sizeof(double));
     cudaMalloc(&data_gpu, _sdf.data_.size() * sizeof(double));
-    cudaMalloc(&class_gpu, sizeof(CudaOperation<CostClass>));
+    cudaMalloc(&class_gpu, sizeof(CudaOperation));
 
     cudaMemcpy(sigmapts_gpu, sigmapts.data(), sigmapts.size() * sizeof(double), cudaMemcpyHostToDevice);
     cudaMemcpy(weight_gpu, weights.data(), sigmapts.rows() * sizeof(double), cudaMemcpyHostToDevice);
     cudaMemcpy(mu_gpu, mean.data(), sigmapts.cols() * sizeof(double), cudaMemcpyHostToDevice);
     cudaMemcpy(data_gpu, _sdf.data_.data(), _sdf.data_.size() * sizeof(double), cudaMemcpyHostToDevice);
-    cudaMemcpy(class_gpu, this, sizeof(CudaOperation<CostClass>), cudaMemcpyHostToDevice);
+    cudaMemcpy(class_gpu, this, sizeof(CudaOperation), cudaMemcpyHostToDevice);
 
     // Dimension for the first kernel function
     dim3 blockSize1(16, 16);
@@ -140,7 +135,10 @@ void CudaOperation<CostClass>::CudaIntegration(const MatrixXd& sigmapts, const M
     Sigma_function<<<blockSize1, threadperblock1>>>(sigmapts_gpu, pts_gpu, mu_gpu, sigmapts.rows(), sigmapts.cols(), results.rows(), results.cols(), type, class_gpu, data_gpu);
     cudaDeviceSynchronize();
 
-    cudaMemcpy(pts.data(), pts_gpu, sigmapts.rows() * results.size() * sizeof(double), cudaMemcpyDeviceToHost);
+    cudaFree(sigmapts_gpu);
+    cudaFree(mu_gpu);
+
+    // cudaMemcpy(pts.data(), pts_gpu, sigmapts.rows() * results.size() * sizeof(double), cudaMemcpyDeviceToHost);
     
     // Dimension for the second kernel function
     dim3 blockSize2(16, 16);
@@ -152,17 +150,16 @@ void CudaOperation<CostClass>::CudaIntegration(const MatrixXd& sigmapts, const M
     cudaMemcpy(results.data(), result_gpu, results.size() * sizeof(double), cudaMemcpyDeviceToHost);
 
     // Free device memory
-    cudaFree(sigmapts_gpu);
     cudaFree(pts_gpu);
     cudaFree(weight_gpu);
     cudaFree(result_gpu);
-    cudaFree(mu_gpu);
     cudaFree(data_gpu);
     cudaFree(class_gpu);
 }
 
+
 // template class NGDFactorizedBaseGH_Cuda<NoneType>;
-template class CudaOperation<gpmp2::ObstaclePlanarSDFFactor<gpmp2::PointRobotModel>>;
+// template class CudaOperation<gpmp2::ObstaclePlanarSDFFactor<gpmp2::PointRobotModel>>;
 
 
 // MatrixXd GBP_Cuda::obtain_cov(std::vector<MatrixXd> joint_factor, std::vector<MatrixXd> factor_message, std::vector<MatrixXd> factor_message1){

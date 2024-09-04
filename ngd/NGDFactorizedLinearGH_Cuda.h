@@ -114,7 +114,8 @@ public:
 
         return this->_gh->Integrate(this->_func_phi)(0, 0) / this->temperature();
     }
-
+    
+    inline void update_cuda() override{}
 };
 
 } //namespace

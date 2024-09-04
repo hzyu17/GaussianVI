@@ -24,9 +24,9 @@
 
 namespace gvi{
 
-class MinimumAccGP_integral : public LinearFactor{
+class QuadGP : public LinearFactor{
     public: 
-        MinimumAccGP_integral(){};
+        QuadGP(){};
         /**
          * @brief the state is [x; v] where the dimension of x is _dim. 
          * The returned mean is the concatenation of the two consecutive [\mu_i, \mu_{i+1}].
@@ -37,51 +37,8 @@ class MinimumAccGP_integral : public LinearFactor{
          * @param Qc 
          * @param delta_t 
          */
-        MinimumAccGP_integral(const MatrixXd& Qc, double start_index, const double& delta_t, const VectorXd& mu_0): 
-        LinearFactor(),
-        _dim{Qc.cols()},
-        _dim_state{2*_dim},
-        _start_index{start_index},
-        _m0{mu_0},
-        _target_mu{VectorXd::Zero(2*_dim_state)},
-        _delta_t{delta_t}, 
-        _Qc{Qc}, 
-        _invQc{Qc.inverse()}, 
-        _invQ{MatrixXd::Zero(_dim_state, _dim_state)},
-        _Phi{_dim_state, _dim_state}{
-            _Phi.setZero();
-            _Phi << MatrixXd::Identity(_dim, _dim), delta_t*MatrixXd::Identity(_dim, _dim), 
-                        MatrixXd::Zero(_dim, _dim), MatrixXd::Identity(_dim, _dim);
 
-            // compute the concatenation [\mu_i, \mu_{i+1}]
-            MatrixXd Phi_i(_dim_state, _dim_state);
-            Phi_i.setZero();
-            Phi_i << MatrixXd::Identity(_dim, _dim), _start_index*delta_t*MatrixXd::Identity(_dim, _dim), 
-                        MatrixXd::Zero(_dim, _dim), MatrixXd::Identity(_dim, _dim);
-
-            VectorXd mi = Phi_i * _m0;
-            VectorXd mi_next = _Phi * mi;
-
-            // _target_mu.segment(0, _dim_state) = mi;
-            // _target_mu.segment(_dim_state, _dim_state) = mi_next;
-            
-            _Q = MatrixXd::Zero(_dim_state, _dim_state);
-            _Q << _Qc*pow(_delta_t, 3)/3, _Qc*pow(_delta_t, 2)/2, _Qc*pow(_delta_t, 2)/2, Qc*_delta_t;
-            compute_invQ();
-
-            // \Lambda = [-\Phi, I]
-            _Lambda = MatrixXd::Zero(_dim_state, 2*_dim_state);
-            _Lambda.block(0, 0, _dim_state, _dim_state) = -_Phi;
-            _Lambda.block(0, _dim_state, _dim_state, _dim_state) = MatrixXd::Identity(_dim_state, _dim_state);
-
-            // \Psi = [\Phi, -I]. When a(t)=0, this part is eliminated.
-            _Psi = MatrixXd::Zero(_dim_state, 2*_dim_state);
-            // _Psi.block(0, 0, _dim_state, _dim_state) = _Phi;
-            // _Psi.block(0, _dim_state, _dim_state, _dim_state) = -MatrixXd::Identity(_dim_state, _dim_state);
-        }
-
-
-        MinimumAccGP_integral(const MatrixXd& Qc, int start_index, const double& delta_t, const VectorXd& mu_0, int n_states, const std::vector<MatrixXd>& hA, const std::vector<MatrixXd>& hb, const std::vector<MatrixXd>& Phi_vec): 
+        QuadGP(const MatrixXd& Qc, int start_index, const double& delta_t, const VectorXd& mu_0, int n_states, const std::vector<MatrixXd>& hA, const std::vector<MatrixXd>& hb, const std::vector<MatrixXd>& Phi_vec): 
         LinearFactor(),
         _dim{Qc.cols()},
         _dim_state{2*_dim},
@@ -106,11 +63,7 @@ class MinimumAccGP_integral : public LinearFactor{
             VectorXd mi_next = _Phi * mi;
             
             _Q = MatrixXd::Zero(_dim_state, _dim_state);
-            // _Q = compute_Q(hb, n_states);
-            // MatrixXd Q_paper = MatrixXd::Zero(_dim_state, _dim_state);
-            _Q << _Qc*pow(_delta_t, 3)/3, _Qc*pow(_delta_t, 2)/2, _Qc*pow(_delta_t, 2)/2, Qc*_delta_t;
-            // MatrixXd Q_paper << _Qc*pow(_delta_t, 3)/3, _Qc*pow(_delta_t, 2)/2, _Qc*pow(_delta_t, 2)/2, Qc*_delta_t;
-            // std::cout << "Q error is: " << std::endl << Q_paper - _Q << std::endl << std::endl;
+            _Q = compute_Q(hb, n_states);
             compute_invQ();
 
             // \Lambda = [-\Phi, I]
@@ -120,8 +73,8 @@ class MinimumAccGP_integral : public LinearFactor{
 
             // \Psi = [\Phi, -I]. When a(t)=0, this part is eliminated.
             _Psi = MatrixXd::Zero(_dim_state, 2*_dim_state);
-            _Psi.block(0, 0, _dim_state, _dim_state) = _Phi;
-            _Psi.block(0, _dim_state, _dim_state, _dim_state) = -MatrixXd::Identity(_dim_state, _dim_state);
+            // _Psi.block(0, 0, _dim_state, _dim_state) = _Phi;
+            // _Psi.block(0, _dim_state, _dim_state, _dim_state) = -MatrixXd::Identity(_dim_state, _dim_state);
         }
 
         MatrixXd compute_phi_i (std::vector<MatrixXd> hA){
@@ -174,11 +127,8 @@ class MinimumAccGP_integral : public LinearFactor{
 
         inline void compute_invQ() {
             _invQ = MatrixXd::Zero(2*_dim, 2*_dim);
-            // _invQ = _Q.inverse();
-            _invQ.block(0, 0, _dim, _dim) = 12 * _invQc / pow(_delta_t, 3);
-            _invQ.block(0, _dim, _dim, _dim) = -6 * _invQc / pow(_delta_t, 2);
-            _invQ.block(_dim, 0, _dim, _dim) = -6 * _invQc / pow(_delta_t, 2);
-            _invQ.block(_dim, _dim, _dim, _dim) = 4 * _invQc / _delta_t;
+            _invQ = _Q.inverse();
+            
         }
 
         inline VectorXd get_mu() const { return _target_mu; }

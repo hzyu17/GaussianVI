@@ -117,7 +117,8 @@ public:
 };
 
 
-template <typename CostClass>
+
+
 class CudaOperation{
 
 public:
@@ -136,10 +137,12 @@ public:
         _sdf = PlanarSDF{origin, cell_size, field};
     }
 
-    void CudaIntegration(const MatrixXd& sigmapts, const MatrixXd& weights, MatrixXd& results, const MatrixXd& mean, int type, MatrixXd& pts);
+    void CudaIntegration(const MatrixXd& sigmapts, const MatrixXd& weights, MatrixXd& results, const MatrixXd& mean, int type);
 
     __host__ __device__ double cost_obstacle_planar(const VectorXd& pose, const PlanarSDF& sdf){
-      MatrixXd checkpoints = vec_balls(pose, 1);
+      int n_balls = 1;
+      double slope = 1;
+      MatrixXd checkpoints = vec_balls(pose, n_balls);
       VectorXd signed_distance = sdf.getSignedDistance(checkpoints);
       VectorXd err(signed_distance.size());
       // printf("dim of err = %d\n", err.size());
@@ -147,11 +150,11 @@ public:
       double cost = 0;
       sigma_matrix = _sigma * MatrixXd::Identity(err.size(), err.size());
 
-      for (int i = 0; i < signed_distance.size(); i++){
+      for (int i = 0; i < n_balls; i++){
         if (signed_distance(i) > _epsilon + _radius)
           err(i) =  0.0;
         else
-          err(i) =  _epsilon + _radius - signed_distance(i);
+          err(i) =  (_epsilon + _radius - signed_distance(i)) * slope;
         cost =+ err(i) * err(i) * _sigma;
       }
       
@@ -162,25 +165,25 @@ public:
     __host__ __device__ Eigen::MatrixXd vec_balls(const Eigen::VectorXd& x, int n_balls) {
       Eigen::MatrixXd v_pts = Eigen::MatrixXd::Zero(n_balls, 2);
 
+      double L = 5.0;
+
       double pos_x = x(0);
       double pos_z = x(1);
       // double phi = x(2);
-
+      
       // double l_pt_x = pos_x - (L - _radius * 1.5) * std::cos(phi) / 2.0;
       // double l_pt_z = pos_z - (L - _radius * 1.5) * std::sin(phi) / 2.0;
 
-      // for (int i = 0; i < n_balls; ++i) {
-      //     double pt_xi = l_pt_x + L * std::cos(phi) / n_balls * i;
-      //     double pt_zi = l_pt_z + L * std::sin(phi) / n_balls * i;
-      //     v_pts(i, 0) = pt_xi;
-      //     v_pts(i, 1) = pt_zi;
-      // }
-
-      for (int i = 0; i < n_balls; ++i) {
+      for (int i = 0; i < n_balls; i++) {
           v_pts(i, 0) = pos_x;
           v_pts(i, 1) = pos_z;
-      }
 
+          // double pt_xi = l_pt_x + L * std::cos(phi) / n_balls * i;
+          // double pt_zi = l_pt_z + L * std::sin(phi) / n_balls * i;
+          // v_pts(i, 0) = pt_xi;
+          // v_pts(i, 1) = pt_zi;
+      }
+      
       return v_pts;
     }
 

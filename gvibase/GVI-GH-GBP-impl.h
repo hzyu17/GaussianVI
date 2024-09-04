@@ -38,6 +38,13 @@ void GVIGH<Factor>::optimize(std::optional<bool> verbose)
     bool is_verbose = verbose.value_or(true);
     bool is_lowtemp = true;
     bool converged = false;
+
+    #pragma omp parallel for
+    for (int i = 0; i < _vec_factors.size(); i++){
+        auto &opt_k = _vec_factors[i];
+        opt_k-> update_cuda();
+    }
+
     for (int i_iter = 0; i_iter < _niters; i_iter++)
     {   
 
@@ -182,7 +189,7 @@ double GVIGH<Factor>::cost_value(const VectorXd &mean, SpMat &Precision)
     double value = 0.0;
 
     // sum up the factor costs
-    #pragma omp parallel for reduction(+:value)
+    // #pragma omp parallel for reduction(+:value)
     for (int i = 0; i < _vec_factors.size(); ++i)
     {
         // Access the current element - ensure this is safe in a parallel context

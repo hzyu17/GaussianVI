@@ -162,6 +162,8 @@ public:
 
     virtual inline SpMat local2joint_dprecision(Eigen::MatrixXd & dprecision_lcl){}
 
+    virtual inline void update_cuda(){}
+
     inline SpMat fill_joint_cov(){
         SpMat joint_cov(_joint_size, _joint_size);
         joint_cov.setZero();
