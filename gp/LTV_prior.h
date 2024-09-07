@@ -12,21 +12,15 @@
 
 #pragma once
 
-/**
- * @brief The model A(t) = [0 I; 0 0], u(t)=0, F(t)=[0; I], 
- * Phi(t,s)=[I (t-s)I; 0 I], Q_{i,i+1}=[1/3*(dt)^3Qc 1/2*(dt)^2Qc; 1/2*(dt)^2Qc (dt)Qc]
- * x and v share one same Qc.
- */
-
 #include "linear_factor.h"
 #include "helpers/EigenWrapper.h"
 
 
 namespace gvi{
 
-class QuadGP : public LinearFactor{
+class LTV_GP : public LinearFactor{
     public: 
-        QuadGP(){};
+        LTV_GP(){};
         /**
          * @brief the state is [x; v] where the dimension of x is _dim. 
          * The returned mean is the concatenation of the two consecutive [\mu_i, \mu_{i+1}].
@@ -38,7 +32,7 @@ class QuadGP : public LinearFactor{
          * @param delta_t 
          */
 
-        QuadGP(const MatrixXd& Qc, int start_index, const double& delta_t, const VectorXd& mu_0, int n_states, const std::vector<MatrixXd>& hA, const std::vector<MatrixXd>& hb, const std::vector<MatrixXd>& Phi_vec): 
+        LTV_GP(const MatrixXd& Qc, int start_index, const double& delta_t, const VectorXd& mu_0, int n_states, const std::vector<MatrixXd>& hA, const std::vector<MatrixXd>& hb, const std::vector<MatrixXd>& Phi_vec): 
         LinearFactor(),
         _dim{Qc.cols()},
         _dim_state{2*_dim},
@@ -52,6 +46,11 @@ class QuadGP : public LinearFactor{
         _Phi{_dim_state, _dim_state}{
             _Phi.setZero();
             _Phi = MatrixXd::Identity(_dim_state, _dim_state) + _delta_t * hA[_start_index];
+            
+            // std::cout << "Transition Matrix = " << std::endl << _Phi << std::endl;
+            // std::cout << "Matrix A= " << std::endl << hA[0] << std::endl;
+            // std::cout << "Matrix B= " << std::endl << hb[0] << std::endl;
+            // std::cout << "Phi x hb= " << std::endl << _Phi * hb[0] << std::endl;
 
             // compute the concatenation [\mu_i, \mu_{i+1}]
             MatrixXd Phi_i(_dim_state, _dim_state);
@@ -64,7 +63,10 @@ class QuadGP : public LinearFactor{
             
             _Q = MatrixXd::Zero(_dim_state, _dim_state);
             _Q = compute_Q(hb, n_states);
+            
+            std::cout << "Grammian = " << std::endl << _Q << std::endl;
             compute_invQ();
+            
 
             // \Lambda = [-\Phi, I]
             _Lambda = MatrixXd::Zero(_dim_state, 2*_dim_state);
@@ -73,8 +75,8 @@ class QuadGP : public LinearFactor{
 
             // \Psi = [\Phi, -I]. When a(t)=0, this part is eliminated.
             _Psi = MatrixXd::Zero(_dim_state, 2*_dim_state);
-            // _Psi.block(0, 0, _dim_state, _dim_state) = _Phi;
-            // _Psi.block(0, _dim_state, _dim_state, _dim_state) = -MatrixXd::Identity(_dim_state, _dim_state);
+            _Psi.block(0, 0, _dim_state, _dim_state) = _Phi;
+            _Psi.block(0, _dim_state, _dim_state, _dim_state) = -MatrixXd::Identity(_dim_state, _dim_state);
         }
 
         MatrixXd compute_phi_i (std::vector<MatrixXd> hA){
@@ -90,11 +92,11 @@ class QuadGP : public LinearFactor{
         }
 
         MatrixXd compute_Q (std::vector<MatrixXd> hb, int n_states){
-            // if (_start_index < n_states - 1)
-                return (_Phi * hb[_start_index] * _Qc * hb[_start_index].transpose() * _Phi.transpose() +
-                hb[_start_index + 1] * _Qc * hb[_start_index + 1].transpose()) / 2 * _delta_t;
-            // else
-            //     return _Phi * hb[_start_index] * _Qc * hb[_start_index].transpose() * _Phi.transpose() * _delta_t;
+            if (_start_index < n_states - 1)
+                return (_Phi * hb[_start_index] * hb[_start_index].transpose() * _Phi.transpose() +
+                hb[_start_index + 1] * hb[_start_index + 1].transpose()) / 2 * _delta_t;
+            else
+                return _Phi * hb[_start_index] * hb[_start_index].transpose() * _Phi.transpose() * _delta_t;
         }
 
     private:

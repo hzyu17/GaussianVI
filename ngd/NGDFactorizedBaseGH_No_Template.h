@@ -24,7 +24,7 @@ using namespace Eigen;
 
 namespace gvi{
 
-class NGDFactorizedBaseGH_Quadrotor: public GVIFactorizedBaseGH_Cuda{
+class NGDFactorizedBaseGH_No_Template: public GVIFactorizedBaseGH_Cuda{
 
     using GVIBase = GVIFactorizedBaseGH_Cuda;
 
@@ -33,7 +33,7 @@ public:
     ///@param function Template function class which calculate the cost
     // NGDFactorizedBaseGH(const int& dimension, const Function& function, const CostClass& cost_class_, const MatrixXd& Pk_):
     
-    NGDFactorizedBaseGH_Quadrotor(int dimension, int state_dim, int gh_degree, 
+    NGDFactorizedBaseGH_No_Template(int dimension, int state_dim, int gh_degree, 
                         int num_states, int start_index, double cost_sigma, 
                         double epsilon, double radius, 
                         double temperature, double high_temperature,
@@ -46,7 +46,7 @@ public:
             {
                 /// Override of the GVIBase classes. _func_phi-> Scalar, _func_Vmu -> Vector, _func_Vmumu -> Matrix
                 GVIBase::_gh = std::make_shared<GH>(GH{gh_degree, GVIBase::_dim, GVIBase::_mu, GVIBase::_covariance, weight_sigpts_map_option});
-                _cuda = std::make_shared<CudaOperation_Quad>(CudaOperation_Quad{cost_sigma, epsilon, radius});
+                _cuda = std::make_shared<CudaOperation>(CudaOperation{cost_sigma, epsilon, radius});
 
             }
 public:
@@ -84,7 +84,6 @@ void calculate_partial_V() override{
         MatrixXd weights_gh = this -> _gh -> weights();
         MatrixXd result;
 
-
         if (type == 0)
             result = MatrixXd::Zero(1,1);
         else if (type ==  1)
@@ -93,7 +92,6 @@ void calculate_partial_V() override{
            result = MatrixXd::Zero(sigmapts_gh.cols(),sigmapts_gh.cols());
            
         // MatrixXd pts(result.rows(), sigmapts_gh.rows()*result.cols());
-
         _cuda -> CudaIntegration(sigmapts_gh, weights_gh, result, mean_gh, type);                  
 
         return result;
@@ -129,7 +127,7 @@ void calculate_partial_V() override{
     }
 
     inline void update_cuda() override{
-        _cuda = std::make_shared<CudaOperation_Quad>(CudaOperation_Quad{_sigma, _epsilon, _radius});
+        _cuda = std::make_shared<CudaOperation>(CudaOperation{_sigma, _epsilon, _radius});
     }
 
     double fact_cost_value(const VectorXd& fill_joint_mean, const SpMat& joint_cov) override {
@@ -139,11 +137,12 @@ void calculate_partial_V() override{
 
         updateGH(mean_k, Cov_k);
 
+        // Function Value becomes 0 after Exp2
         return Integrate_cuda(0)(0, 0) / this->temperature();
         // return this->_gh->Integrate(this->_func_phi)(0, 0) / this->temperature();
     }
     
-    std::shared_ptr<CudaOperation_Quad> _cuda;
+    std::shared_ptr<CudaOperation> _cuda;
     double _sigma, _epsilon, _radius;
 
 };

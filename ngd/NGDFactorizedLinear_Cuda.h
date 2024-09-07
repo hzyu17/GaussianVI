@@ -110,6 +110,18 @@ public:
 
         _E_Phi = ((_Lambda.transpose()*_target_precision*_Lambda * Cov_k).trace() + 
                     (_Lambda*mean_k-_Psi*_target_mean).transpose() * _target_precision * (_Lambda*mean_k-_Psi*_target_mean)) * constant();
+
+        // double first_part = (_Lambda.transpose()*_target_precision*_Lambda * Cov_k).trace() * constant();
+        // double second_part = ((_Lambda*mean_k-_Psi*_target_mean).transpose() * _target_precision * (_Lambda*mean_k-_Psi*_target_mean)).value() * constant();
+
+        // std::cout << "Lambda = " << std::endl << _Lambda << std::endl;
+        // std::cout << "target_precision = " << std::endl << _target_precision << std::endl;
+        // std::cout << "Cov_k = " << std::endl << Cov_k << std::endl;
+        // std::cout << "mean_k = " << std::endl << mean_k << std::endl;
+        // std::cout << "Psi = " << std::endl << _Psi << std::endl;
+        // std::cout << "target_mean = " << std::endl << _target_mean << std::endl;
+        
+
         return _E_Phi / this->temperature();
     }
 

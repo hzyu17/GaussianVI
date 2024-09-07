@@ -145,20 +145,78 @@ public:
       MatrixXd checkpoints = vec_balls(pose, n_balls);
       VectorXd signed_distance = sdf.getSignedDistance(checkpoints);
       VectorXd err(signed_distance.size());
-      // printf("dim of err = %d\n", err.size());
-      MatrixXd sigma_matrix(err.size(), err.size());
-      double cost = 0;
-      sigma_matrix = _sigma * MatrixXd::Identity(err.size(), err.size());
 
+
+      double cost = 0;
       for (int i = 0; i < n_balls; i++){
         if (signed_distance(i) > _epsilon + _radius)
           err(i) =  0.0;
         else
           err(i) =  (_epsilon + _radius - signed_distance(i)) * slope;
-        cost =+ err(i) * err(i) * _sigma;
+        cost += err(i) * err(i) * _sigma;
       }
       
-      // return err.transpose() * sigma_matrix * err;
+      return cost;
+    }
+
+    __host__ __device__ Eigen::MatrixXd vec_balls(const Eigen::VectorXd& x, int n_balls) {
+      Eigen::MatrixXd v_pts = Eigen::MatrixXd::Zero(n_balls, 2);
+
+      double pos_x = x(0);
+      double pos_z = x(1);
+
+      for (int i = 0; i < n_balls; i++) {
+          v_pts(i, 0) = pos_x;
+          v_pts(i, 1) = pos_z;
+      }
+      return v_pts;
+    }
+
+  double _epsilon, _radius, _sigma;
+  PlanarSDF _sdf;
+
+};
+
+
+class CudaOperation_Quad{
+
+public:
+    CudaOperation_Quad(double cost_sigma = 15.5, double epsilon = 0.5, double radius = 1):
+    _sigma(cost_sigma), _epsilon(epsilon), _radius(radius)
+    {
+        MatrixIO _m_io;
+        std::string field_file = source_root + "/maps/2dQuad/SingleObstacleMap_field.csv";
+        MatrixXd field = _m_io.load_csv(field_file);      
+
+        Vector2d origin;
+        origin.setZero();
+        origin << -20.0, -20.0;
+
+        double cell_size = 0.1;
+        _sdf = PlanarSDF{origin, cell_size, field};
+    }
+
+    void CudaIntegration(const MatrixXd& sigmapts, const MatrixXd& weights, MatrixXd& results, const MatrixXd& mean, int type);
+
+    __host__ __device__ double cost_obstacle_planar(const VectorXd& pose, const PlanarSDF& sdf){
+      int n_balls = 5;
+      double slope = 2.0;
+
+      MatrixXd checkpoints = vec_balls(pose, n_balls);
+      VectorXd signed_distance = sdf.getSignedDistance(checkpoints);
+      VectorXd err(signed_distance.size());
+
+      double cost = 0;
+
+      for (int i = 0; i < n_balls; i++){
+        if (signed_distance(i) > _epsilon + _radius)
+          err(i) =  0.0;
+        else
+          // err(i) =  (_epsilon + _radius - signed_distance(i)) * slope;
+          err(i) = signed_distance(i) * slope;
+        cost += err(i) * err(i) * _sigma;
+      }
+      
       return cost;
     }
 
@@ -166,24 +224,21 @@ public:
       Eigen::MatrixXd v_pts = Eigen::MatrixXd::Zero(n_balls, 2);
 
       double L = 5.0;
+      double H = 0.35;
 
       double pos_x = x(0);
       double pos_z = x(1);
-      // double phi = x(2);
+      double phi = x(2);
       
-      // double l_pt_x = pos_x - (L - _radius * 1.5) * std::cos(phi) / 2.0;
-      // double l_pt_z = pos_z - (L - _radius * 1.5) * std::sin(phi) / 2.0;
+      double l_pt_x = pos_x - (L - _radius * 1.5) * std::cos(phi) / 2.0;
+      double l_pt_z = pos_z - (L - _radius * 1.5) * std::sin(phi) / 2.0;
 
       for (int i = 0; i < n_balls; i++) {
-          v_pts(i, 0) = pos_x;
-          v_pts(i, 1) = pos_z;
-
-          // double pt_xi = l_pt_x + L * std::cos(phi) / n_balls * i;
-          // double pt_zi = l_pt_z + L * std::sin(phi) / n_balls * i;
-          // v_pts(i, 0) = pt_xi;
-          // v_pts(i, 1) = pt_zi;
+        double pt_xi = l_pt_x + L * std::cos(phi) / n_balls * i;
+        double pt_zi = l_pt_z + L * std::sin(phi) / n_balls * i;
+        v_pts(i, 0) = pt_xi;
+        v_pts(i, 1) = pt_zi;
       }
-      
       return v_pts;
     }
 
