@@ -61,8 +61,32 @@ public:
 
   /// convert between point and cell corrdinate
   __host__ __device__ inline float_index convertPoint2toCell(const Eigen::Vector2d& point) const {
-    const double col = (point.x() - origin_.x()) / cell_size_;
-    const double row = (point.y() - origin_.y()) / cell_size_;
+    // // check point range
+
+    double x_inrange;
+    double y_inrange = point.y();
+
+    if (point.x() < origin_.x()){
+      x_inrange = origin_.x();
+    }
+    else if (point.x() > (origin_.x() + (field_cols_-1.0)*cell_size_)){
+      x_inrange = origin_.x() + (field_cols_-1.0)*cell_size_;
+    }
+    else
+      x_inrange = point.x();
+
+    if (point.y() < origin_.y()){
+      y_inrange = origin_.y();
+    }
+    else if (point.y() > (origin_.y() + (field_rows_-1.0)*cell_size_)){
+      y_inrange = origin_.y() + (field_rows_-1.0)*cell_size_;
+    }
+    else
+      y_inrange = point.y();
+
+
+    const double col = (x_inrange - origin_.x()) / cell_size_;
+    const double row = (y_inrange - origin_.y()) / cell_size_;
     return Vector2d{row, col};
   }
 
@@ -120,7 +144,6 @@ public:
 
 
 class CudaOperation{
-
 public:
     CudaOperation(double cost_sigma = 15.5, double epsilon = 0.5, double radius = 1):
     _sigma(cost_sigma), _epsilon(epsilon), _radius(radius)
@@ -145,7 +168,6 @@ public:
       MatrixXd checkpoints = vec_balls(pose, n_balls);
       VectorXd signed_distance = sdf.getSignedDistance(checkpoints);
       VectorXd err(signed_distance.size());
-
 
       double cost = 0;
       for (int i = 0; i < n_balls; i++){
@@ -179,7 +201,6 @@ public:
 
 
 class CudaOperation_Quad{
-
 public:
     CudaOperation_Quad(double cost_sigma = 15.5, double epsilon = 0.5, double radius = 1):
     _sigma(cost_sigma), _epsilon(epsilon), _radius(radius)
@@ -200,7 +221,7 @@ public:
 
     __host__ __device__ double cost_obstacle_planar(const VectorXd& pose, const PlanarSDF& sdf){
       int n_balls = 5;
-      double slope = 2.0;
+      double slope = 5.0;
 
       MatrixXd checkpoints = vec_balls(pose, n_balls);
       VectorXd signed_distance = sdf.getSignedDistance(checkpoints);
@@ -212,8 +233,7 @@ public:
         if (signed_distance(i) > _epsilon + _radius)
           err(i) =  0.0;
         else
-          // err(i) =  (_epsilon + _radius - signed_distance(i)) * slope;
-          err(i) = signed_distance(i) * slope;
+          err(i) =  (_epsilon + _radius - signed_distance(i)) * slope;
         cost += err(i) * err(i) * _sigma;
       }
       
@@ -247,14 +267,6 @@ public:
 
 };
 
-
-
-// class GBP_Cuda{
-// public:
-//     GBP_Cuda(){};
-
-//     MatrixXd obtain_cov(std::vector<MatrixXd> joint_factor, std::vector<MatrixXd> factor_message, std::vector<MatrixXd> factor_message1);
-// };
 
 }
 

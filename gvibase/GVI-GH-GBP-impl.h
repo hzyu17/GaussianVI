@@ -59,7 +59,7 @@ void GVIGH<Factor>::optimize(std::optional<bool> verbose)
         }
 
         // ============= Cost at current iteration =============
-        double cost_iter = this->cost_value();
+        double cost_iter = this->cost_value(); // -> Base::cost_value(this->_mu, this->_precision);
 
         if (is_verbose){
             std::cout << "========= iteration " << i_iter << " ========= " << std::endl;

@@ -31,9 +31,9 @@ double cost_fixed_gp(const VectorXd& x, const gvi::FixedPriorGP& fixed_gp){
  * @param gp_minacc : the linear gp object
  * @return double, the cost (-logporb)
  */
-double cost_linear_gp(const VectorXd& pose_cmb, const gvi::LTV_GP& gp_minacc){
-    int dim = gp_minacc.dim_posvel();
-    return gp_minacc.cost(pose_cmb.segment(0, dim), pose_cmb.segment(dim, dim));
+double cost_linear_gp(const VectorXd& pose_cmb, const gvi::LTV_GP& gp_ltv){
+    int dim = gp_ltv.dim_posvel();
+    return gp_ltv.cost(pose_cmb.segment(0, dim), pose_cmb.segment(dim, dim));
 }
 
 }

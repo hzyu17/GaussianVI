@@ -189,6 +189,10 @@ public:
 
     inline MatrixXd covariance() const {return _covariance; }
 
+    inline MatrixXd Vdmu() const {return _Vdmu; }
+
+    inline MatrixXd Vddmu() const {return _Vddmu; }
+
     /********************************************************/
     /// Function interfaces
 

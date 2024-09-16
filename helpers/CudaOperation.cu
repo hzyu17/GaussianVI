@@ -66,7 +66,7 @@ __global__ void Sigma_function(double* d_sigmapts, double* d_pts, double* mu,
     int row = blockIdx.y * blockDim.y + threadIdx.y;
     int col = blockIdx.x * blockDim.x + threadIdx.x;
 
-    if (row < res_rows && col < 1){
+    if (row < res_rows && col < res_cols*sigmapts_rows){
         int idx = col / res_cols;
         Eigen::Map<MatrixXd> sigmapts(d_sigmapts, sigmapts_rows, sigmapts_cols);
 
@@ -203,18 +203,29 @@ void CudaOperation_Quad::CudaIntegration(const MatrixXd& sigmapts, const MatrixX
 
     // Kernel 1: Obtain the result of function 
     Sigma_function<<<blockSize1, threadperblock1>>>(sigmapts_gpu, pts_gpu, mu_gpu, sigmapts.rows(), sigmapts.cols(), results.rows(), results.cols(), type, class_gpu, data_gpu);
+
+    cudaError_t err = cudaGetLastError();
+    if (err != cudaSuccess) {
+        printf("CUDA kernel error: %s\n", cudaGetErrorString(err));
+    }
+
     cudaDeviceSynchronize();
 
     cudaFree(sigmapts_gpu);
     cudaFree(mu_gpu);
 
-    
     // Dimension for the second kernel function
     dim3 blockSize2(16, 16);
     dim3 threadperblock2((results.cols() + blockSize2.x - 1) / blockSize2.x, (results.rows() + blockSize2.y - 1) / blockSize2.y);
 
     // Kernel 2: Obtain the result by multiplying the pts and the weights
     obtain_res<<<blockSize2, threadperblock2>>>(pts_gpu, weight_gpu, result_gpu, sigmapts.rows(), results.rows(), results.cols());
+
+    err = cudaGetLastError();
+    if (err != cudaSuccess) {
+        printf("CUDA kernel error: %s\n", cudaGetErrorString(err));
+    }
+
     cudaDeviceSynchronize();
     cudaMemcpy(results.data(), result_gpu, results.size() * sizeof(double), cudaMemcpyDeviceToHost);
 

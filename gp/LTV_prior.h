@@ -1,19 +1,8 @@
-/**
- * @file minimum_acc.h
- * @author Hongzhe Yu (hyu419@gatech.edu)
- * @brief minimum acceleration gp model, which is a linear model of the form
- * -log(p(x|z)) = ||A*x - B*\mu_t||_{\Sigma^{-1}}.
- * @version 0.1
- * @date 2022-07-31
- * 
- * @copyright Copyright (c) 2022
- * 
- */
-
 #pragma once
 
 #include "linear_factor.h"
 #include "helpers/EigenWrapper.h"
+#include <unsupported/Eigen/MatrixFunctions>
 
 
 namespace gvi{
@@ -32,7 +21,7 @@ class LTV_GP : public LinearFactor{
          * @param delta_t 
          */
 
-        LTV_GP(const MatrixXd& Qc, int start_index, const double& delta_t, const VectorXd& mu_0, int n_states, const std::vector<MatrixXd>& hA, const std::vector<MatrixXd>& hb, const std::vector<MatrixXd>& Phi_vec): 
+        LTV_GP(const MatrixXd& Qc, int start_index, const double& delta_t, const VectorXd& mu_0, int n_states, const std::vector<MatrixXd>& hA, const std::vector<MatrixXd>& hB, const std::vector<VectorXd>& target_mean): 
         LinearFactor(),
         _dim{Qc.cols()},
         _dim_state{2*_dim},
@@ -45,28 +34,43 @@ class LTV_GP : public LinearFactor{
         _invQ{MatrixXd::Zero(_dim_state, _dim_state)},
         _Phi{_dim_state, _dim_state}{
             _Phi.setZero();
-            _Phi = MatrixXd::Identity(_dim_state, _dim_state) + _delta_t * hA[_start_index];
-            
-            // std::cout << "Transition Matrix = " << std::endl << _Phi << std::endl;
-            // std::cout << "Matrix A= " << std::endl << hA[0] << std::endl;
-            // std::cout << "Matrix B= " << std::endl << hb[0] << std::endl;
-            // std::cout << "Phi x hb= " << std::endl << _Phi * hb[0] << std::endl;
+            _Phi = (hA[4*start_index] * delta_t).exp();
 
-            // compute the concatenation [\mu_i, \mu_{i+1}]
-            MatrixXd Phi_i(_dim_state, _dim_state);
-            Phi_i.setZero();
-            Phi_i = Phi_vec[start_index];
+            _Phi_left_quater = (hA[4*start_index+1] * delta_t * 3 / 4).exp();
+            _Phi_mid = (hA[4*start_index+2] * delta_t / 2).exp();
+            _Phi_right_quater = (hA[4*start_index+3] * delta_t / 4).exp();
+
+            // MatrixXd Phi_pred = MatrixXd::Identity(_dim_state, _dim_state) + _delta_t * hA[_start_index];
+            // _Phi = MatrixXd::Identity(_dim_state, _dim_state) + (hA[_start_index] + hA[_start_index+1] * Phi_pred) / 2 * delta_t;
 
             // Obtain mi and mi_next
-            VectorXd mi = Phi_i * _m0;
-            VectorXd mi_next = _Phi * mi;
+            VectorXd mi = target_mean[start_index];
+            VectorXd mi_next = target_mean[start_index + 1];
+
+            _target_mu.segment(0, _dim_state) = mi;
+            _target_mu.segment(_dim_state, _dim_state) = mi_next;
             
             _Q = MatrixXd::Zero(_dim_state, _dim_state);
-            _Q = compute_Q(hb, n_states);
-            
-            std::cout << "Grammian = " << std::endl << _Q << std::endl;
+            _Q = compute_Q(hA, hB, n_states);
+
             compute_invQ();
-            
+
+            // EigenSolver<MatrixXd> solver(_Q);
+            // VectorXd eigenvalues = solver.eigenvalues().real();
+
+            // EigenSolver<MatrixXd> solver_inv(_invQ);
+            // VectorXd eigenvalues_inv = solver_inv.eigenvalues().real();
+
+            // std::cout << "Matrix A= " << std::endl << hA[start_index] << std::endl;
+            // std::cout << "Matrix B= " << std::endl << hB[start_index] << std::endl;
+            // std::cout << "Transition Matrix = " << std::endl << _Phi << std::endl;
+            // std::cout << "Phi x hB= " << std::endl << _Phi * hB[start_index] << std::endl;
+
+            // std::cout << "Grammian = " << std::endl << _Q << std::endl;
+            // std::cout << "Precision = " << std::endl << _invQ << std::endl << std::endl;
+            // std::cout << "The eigenvalues of the Gramian:\n" << eigenvalues << std::endl;
+            // std::cout << "The eigenvalues of the Precision:\n" << eigenvalues_inv << std::endl;
+
 
             // \Lambda = [-\Phi, I]
             _Lambda = MatrixXd::Zero(_dim_state, 2*_dim_state);
@@ -79,7 +83,7 @@ class LTV_GP : public LinearFactor{
             _Psi.block(0, _dim_state, _dim_state, _dim_state) = -MatrixXd::Identity(_dim_state, _dim_state);
         }
 
-        MatrixXd compute_phi_i (std::vector<MatrixXd> hA){
+        MatrixXd compute_phi_i (const std::vector<MatrixXd>& hA){
             MatrixXd Phi = MatrixXd::Identity(_dim_state, _dim_state);
             MatrixXd Phi_i(_dim_state, _dim_state);
             // In each loop i, add the derivative and get Phi_i+1
@@ -91,12 +95,31 @@ class LTV_GP : public LinearFactor{
             return Phi_i;
         }
 
-        MatrixXd compute_Q (std::vector<MatrixXd> hb, int n_states){
-            if (_start_index < n_states - 1)
-                return (_Phi * hb[_start_index] * hb[_start_index].transpose() * _Phi.transpose() +
-                hb[_start_index + 1] * hb[_start_index + 1].transpose()) / 2 * _delta_t;
-            else
-                return _Phi * hb[_start_index] * hb[_start_index].transpose() * _Phi.transpose() * _delta_t;
+        MatrixXd compute_Q (const std::vector<MatrixXd>& hA, const std::vector<MatrixXd>& hB, int n_states){
+            MatrixXd hA_next, hB_i, hB_mid, hB_next, hB_left_quater, hB_right_quater;
+            hB_i = hB[4 * _start_index];
+            hB_left_quater = hB[4 * _start_index + 1];
+            hB_mid = hB[4 * _start_index + 2];
+            hB_right_quater = hB[4 * _start_index + 3];
+            hB_next = hB[4 * _start_index + 4];
+
+            // Use Boole's Rule to approximate the integration
+            MatrixXd gramian = (7 * _Phi * hB_i * hB_i.transpose() * _Phi.transpose() 
+            + 32 * _Phi_left_quater * hB_left_quater * hB_left_quater.transpose() * _Phi_left_quater.transpose()
+            + 4 * _Phi_mid * hB_mid * hB_mid.transpose() * _Phi_mid.transpose()
+            + 32 * _Phi_right_quater * hB_right_quater * hB_right_quater.transpose() * _Phi_right_quater.transpose()
+            + 7 * hB_next * hB_next.transpose()) / 90 * _delta_t;
+
+            // MatrixXd gramian_pred = (_Phi * hB_i * hB_i.transpose() * _Phi.transpose() + hB_next * hB_next.transpose()) / 2 * _delta_t;
+            // MatrixXd derivative_i = hB_i * hB_i.transpose();
+            // MatrixXd derivative_next = hB_next * hB_next.transpose() + (hA_next + hA_next.transpose()) * gramian_pred;
+            // MatrixXd gramian = gramian_pred - (derivative_next - derivative_i) / 12 * _delta_t * _delta_t;
+
+            return gramian;
+
+            // return (_Phi * hB[_start_index] * hB[_start_index].transpose() * _Phi.transpose() +
+            // hB[_start_index + 1] * hB[_start_index + 1].transpose()) / 2 * _delta_t;
+
         }
 
     private:
@@ -104,13 +127,13 @@ class LTV_GP : public LinearFactor{
         int _dim_state;
         double _delta_t;
         MatrixXd _Qc, _invQc, _Q, _invQ;
-        MatrixXd _Phi, _Lambda, _Psi;
+        MatrixXd _Phi, _Lambda, _Psi, _Phi_mid, _Phi_left_quater, _Phi_right_quater;
         VectorXd _m0, _target_mu;
         EigenWrapper _ei;
         
     public:
         inline MatrixXd Q() const { return _Q; }
-
+        
         inline MatrixXd Qc() const { return _Qc; }
 
         inline MatrixXd Phi() const { return _Phi; }
@@ -128,7 +151,7 @@ class LTV_GP : public LinearFactor{
         inline int dim_posvel() const { return 2*_dim; }
 
         inline void compute_invQ() {
-            _invQ = MatrixXd::Zero(2*_dim, 2*_dim);
+            _invQ = MatrixXd::Zero(_dim_state, _dim_state);
             _invQ = _Q.inverse();
             
         }
@@ -137,7 +160,7 @@ class LTV_GP : public LinearFactor{
 
         inline MatrixXd get_precision() const{ return _invQ; }
 
-        inline MatrixXd get_covariance() const{ return _invQ.inverse(); }
+        inline MatrixXd get_covariance() const{ return _Q; }
 
         inline MatrixXd get_Lambda() const{ return _Lambda; }
 

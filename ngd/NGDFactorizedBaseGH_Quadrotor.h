@@ -15,7 +15,6 @@
 #ifndef NGDFactorizedBaseGH_H
 #define NGDFactorizedBaseGH_H
 
-// #include "ngd/NGDFactorizedBase.h"
 #include "gvibase/GVIFactorizedBaseGH_Cuda.h"
 #include <helpers/CudaOperation.h>
 #include <memory>
@@ -60,17 +59,14 @@ void calculate_partial_V() override{
 
         /// Integrate for E_q{_Vdmu} 
         this->_Vdmu = Integrate_cuda(1);
-        // this->_Vdmu = this->_gh->Integrate(this->_func_Vmu);
         this->_Vdmu = this->_precision * this->_Vdmu;
         this->_Vdmu = this->_Vdmu / this->temperature();
 
         /// Integrate for E_q{phi(x)}
         double E_phi = Integrate_cuda(0)(0, 0);
-        // double E_phi = this->_gh->Integrate(this->_func_phi)(0, 0);
         
         /// Integrate for partial V^2 / ddmu_ 
         MatrixXd E_xxphi{Integrate_cuda(2)};
-        // MatrixXd E_xxphi{this->_gh->Integrate(this->_func_Vmumu)};
 
         this->_Vddmu.triangularView<Upper>() = (this->_precision * E_xxphi * this->_precision - this->_precision * E_phi).triangularView<Upper>();
         this->_Vddmu.triangularView<StrictlyLower>() = this->_Vddmu.triangularView<StrictlyUpper>().transpose();
@@ -84,15 +80,12 @@ void calculate_partial_V() override{
         MatrixXd weights_gh = this -> _gh -> weights();
         MatrixXd result;
 
-
         if (type == 0)
             result = MatrixXd::Zero(1,1);
         else if (type ==  1)
             result = MatrixXd::Zero(sigmapts_gh.cols(),1);
         else
            result = MatrixXd::Zero(sigmapts_gh.cols(),sigmapts_gh.cols());
-           
-        // MatrixXd pts(result.rows(), sigmapts_gh.rows()*result.cols());
 
         _cuda -> CudaIntegration(sigmapts_gh, weights_gh, result, mean_gh, type);                  
 
@@ -113,21 +106,6 @@ void calculate_partial_V() override{
         return res;
     }
 
-
-    /**
-     * @brief returns the (x-mu)*Phi(x) 
-     */
-    inline MatrixXd xMu_negative_log_probability(const VectorXd& x) const{
-        return _func_Vmu(x);
-    }
-
-    /**
-     * @brief returns the (x-mu)(x-mu)^T*Phi(x) 
-     */
-    inline MatrixXd xMuxMuT_negative_log_probability(const VectorXd& x) const{
-        return _func_Vmumu(x);
-    }
-
     inline void update_cuda() override{
         _cuda = std::make_shared<CudaOperation_Quad>(CudaOperation_Quad{_sigma, _epsilon, _radius});
     }
@@ -140,7 +118,6 @@ void calculate_partial_V() override{
         updateGH(mean_k, Cov_k);
 
         return Integrate_cuda(0)(0, 0) / this->temperature();
-        // return this->_gh->Integrate(this->_func_phi)(0, 0) / this->temperature();
     }
     
     std::shared_ptr<CudaOperation_Quad> _cuda;
