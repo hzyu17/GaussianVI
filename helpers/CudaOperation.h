@@ -6,8 +6,6 @@
 #include <iostream>
 #include <Eigen/Dense>
 #include <memory>
-#include <gpmp2/obstacle/ObstaclePlanarSDFFactor.h>
-#include <gpmp2/kinematics/PointRobotModel.h>
 
 using namespace Eigen;
 
