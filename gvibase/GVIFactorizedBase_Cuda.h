@@ -164,6 +164,10 @@ public:
 
     virtual inline void update_cuda(){}
 
+    virtual inline void cuda_init(){}
+
+    virtual inline void cuda_free(){}
+
     inline SpMat fill_joint_cov(){
         SpMat joint_cov(_joint_size, _joint_size);
         joint_cov.setZero();

@@ -110,6 +110,14 @@ void calculate_partial_V() override{
         _cuda = std::make_shared<CudaOperation_Quad>(CudaOperation_Quad{_sigma, _epsilon, _radius});
     }
 
+    inline void cuda_init() override{
+        _cuda -> Cuda_init(this -> _gh -> weights());
+    }
+
+    inline void cuda_free() override{
+        _cuda -> Cuda_free();
+    }
+
     double fact_cost_value(const VectorXd& fill_joint_mean, const SpMat& joint_cov) override {
 
         VectorXd mean_k = extract_mu_from_joint(fill_joint_mean);
@@ -119,7 +127,7 @@ void calculate_partial_V() override{
 
         return Integrate_cuda(0)(0, 0) / this->temperature();
     }
-    
+
     std::shared_ptr<CudaOperation_Quad> _cuda;
     double _sigma, _epsilon, _radius;
 

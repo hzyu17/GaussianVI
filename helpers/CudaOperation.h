@@ -11,8 +11,6 @@ using namespace Eigen;
 
 namespace gvi{
 
-// __host__ __device__ void invert_matrix(double* A, double* A_inv, int dim); 
-
 class PlanarSDF {
 
 public:
@@ -59,29 +57,22 @@ public:
 
   /// convert between point and cell corrdinate
   __host__ __device__ inline float_index convertPoint2toCell(const Eigen::Vector2d& point) const {
-    // // check point range
+    // check point range
+    double x_inrange, y_inrange;
 
-    double x_inrange;
-    double y_inrange = point.y();
-
-    if (point.x() < origin_.x()){
+    if (point.x() < origin_.x())
       x_inrange = origin_.x();
-    }
-    else if (point.x() > (origin_.x() + (field_cols_-1.0)*cell_size_)){
+    else if (point.x() > (origin_.x() + (field_cols_-1.0)*cell_size_))
       x_inrange = origin_.x() + (field_cols_-1.0)*cell_size_;
-    }
     else
       x_inrange = point.x();
 
-    if (point.y() < origin_.y()){
+    if (point.y() < origin_.y())
       y_inrange = origin_.y();
-    }
-    else if (point.y() > (origin_.y() + (field_rows_-1.0)*cell_size_)){
+    else if (point.y() > (origin_.y() + (field_rows_-1.0)*cell_size_))
       y_inrange = origin_.y() + (field_rows_-1.0)*cell_size_;
-    }
     else
       y_inrange = point.y();
-
 
     const double col = (x_inrange - origin_.x()) / cell_size_;
     const double row = (y_inrange - origin_.y()) / cell_size_;
@@ -135,9 +126,7 @@ public:
   double cell_size() const { return cell_size_; }
   const Eigen::MatrixXd& raw_data() const { return data_; }
 
-
 };
-
 
 
 
@@ -157,6 +146,10 @@ public:
         double cell_size = 0.1;
         _sdf = PlanarSDF{origin, cell_size, field};
     }
+
+    void Cuda_init(const MatrixXd& weights);
+
+    void Cuda_free();
 
     void CudaIntegration(const MatrixXd& sigmapts, const MatrixXd& weights, MatrixXd& results, const MatrixXd& mean, int type);
 
@@ -195,6 +188,9 @@ public:
   double _epsilon, _radius, _sigma;
   PlanarSDF _sdf;
 
+  double *_weight_gpu, *_data_gpu;
+  CudaOperation* _class_gpu;
+
 };
 
 
@@ -214,6 +210,10 @@ public:
         double cell_size = 0.1;
         _sdf = PlanarSDF{origin, cell_size, field};
     }
+
+    void Cuda_init(const MatrixXd& weights);
+
+    void Cuda_free();
 
     void CudaIntegration(const MatrixXd& sigmapts, const MatrixXd& weights, MatrixXd& results, const MatrixXd& mean, int type);
 
@@ -262,6 +262,9 @@ public:
 
   double _epsilon, _radius, _sigma;
   PlanarSDF _sdf;
+
+  double *_weight_gpu, *_data_gpu;
+  CudaOperation_Quad* _class_gpu;
 
 };
 

@@ -126,6 +126,10 @@ public:
     }
 
     inline void update_cuda() override{}
+
+    inline void cuda_init() override{}
+
+    inline void cuda_free() override{}
 };
 
 } //namespace

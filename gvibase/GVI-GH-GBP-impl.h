@@ -39,11 +39,11 @@ void GVIGH<Factor>::optimize(std::optional<bool> verbose)
     bool is_lowtemp = true;
     bool converged = false;
 
-    // #pragma omp parallel for
-    // for (int i = 0; i < _vec_factors.size(); i++){
-    //     auto &opt_k = _vec_factors[i];
-    //     opt_k-> update_cuda();
-    // }
+    #pragma omp parallel for
+    for (int i = 0; i < _vec_factors.size(); i++){
+        auto &opt_k = _vec_factors[i];
+        opt_k -> cuda_init();
+    }
 
     for (int i_iter = 0; i_iter < _niters; i_iter++)
     {   
@@ -68,7 +68,7 @@ void GVIGH<Factor>::optimize(std::optional<bool> verbose)
 
         // ============= Collect factor costs =============
         VectorXd fact_costs_iter = this->factor_cost_vector();
-        std::cout << "Factor Costs:" << fact_costs_iter.transpose() << std::endl;
+        // std::cout << "Factor Costs:" << fact_costs_iter.transpose() << std::endl;
 
         _res_recorder.update_data(_mu, _covariance, _precision, cost_iter, fact_costs_iter);
 
@@ -123,6 +123,12 @@ void GVIGH<Factor>::optimize(std::optional<bool> verbose)
                 break;
             }                
         }
+    }
+
+    #pragma omp parallel for
+    for (int i = 0; i < _vec_factors.size(); i++){
+        auto &opt_k = _vec_factors[i];
+        opt_k -> cuda_free();
     }
 
     std::cout << "=========== Saving Data ===========" << std::endl;

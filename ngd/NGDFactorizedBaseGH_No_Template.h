@@ -130,6 +130,14 @@ void calculate_partial_V() override{
         _cuda = std::make_shared<CudaOperation>(CudaOperation{_sigma, _epsilon, _radius});
     }
 
+    inline void cuda_init() override{
+        _cuda -> Cuda_init(this -> _gh -> weights());
+    }
+
+    inline void cuda_free() override{
+        _cuda -> Cuda_free();
+    }
+
     double fact_cost_value(const VectorXd& fill_joint_mean, const SpMat& joint_cov) override {
 
         VectorXd mean_k = extract_mu_from_joint(fill_joint_mean);
