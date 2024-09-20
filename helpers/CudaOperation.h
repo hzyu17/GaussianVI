@@ -242,7 +242,6 @@ public:
       Eigen::MatrixXd v_pts = Eigen::MatrixXd::Zero(n_balls, 2);
 
       double L = 5.0;
-      double H = 0.35;
 
       double pos_x = x(0);
       double pos_z = x(1);

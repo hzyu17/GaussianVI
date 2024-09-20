@@ -39,11 +39,14 @@ void GVIGH<Factor>::optimize(std::optional<bool> verbose)
     bool is_lowtemp = true;
     bool converged = false;
 
-    #pragma omp parallel for
-    for (int i = 0; i < _vec_factors.size(); i++){
-        auto &opt_k = _vec_factors[i];
-        opt_k -> cuda_init();
-    }
+    // #pragma omp parallel for
+    // for (int i = 0; i < _vec_factors.size(); i++){
+    //     auto &opt_k = _vec_factors[i];
+    //     opt_k -> cuda_init();
+    // }
+
+    // All factors use one cuda pointer, so only need to initialize once
+    _vec_factors[2] -> cuda_init();
 
     for (int i_iter = 0; i_iter < _niters; i_iter++)
     {   
@@ -125,11 +128,13 @@ void GVIGH<Factor>::optimize(std::optional<bool> verbose)
         }
     }
 
-    #pragma omp parallel for
-    for (int i = 0; i < _vec_factors.size(); i++){
-        auto &opt_k = _vec_factors[i];
-        opt_k -> cuda_free();
-    }
+    // #pragma omp parallel for
+    // for (int i = 0; i < _vec_factors.size(); i++){
+    //     auto &opt_k = _vec_factors[i];
+    //     opt_k -> cuda_free();
+    // }
+
+    _vec_factors[2] -> cuda_free();
 
     std::cout << "=========== Saving Data ===========" << std::endl;
     save_data(is_verbose);
@@ -162,7 +167,7 @@ VectorXd GVIGH<Factor>::factor_cost_vector(const VectorXd& fill_joint_mean, SpMa
     VectorXd fac_costs(_nfactors);
     fac_costs.setZero();
     int cnt = 0;
-    SpMat joint_cov = inverse_GBP_cuda(joint_precision);
+    SpMat joint_cov = inverse_GBP(joint_precision);
 
     // Use a private counter for each thread to avoid race conditions
     int thread_cnt = 0;
@@ -190,7 +195,7 @@ template <typename Factor>
 double GVIGH<Factor>::cost_value(const VectorXd &mean, SpMat &Precision)
 {
 
-    SpMat Cov = inverse_GBP_cuda(Precision);
+    SpMat Cov = inverse_GBP(Precision);
 
     double value = 0.0;
 
@@ -217,149 +222,77 @@ double GVIGH<Factor>::cost_value(const VectorXd &mean, SpMat &Precision)
 template <typename Factor>
 SpMat GVIGH<Factor>::inverse_GBP(const SpMat &Precision)
 {
-    /*dim->_dim_state, num_states->_num_states, Lambda->Precision*/
-    std::vector<Message> factor(2*_num_states-1);
-    std::vector<Message> joint_factor(_num_states-1);
+    std::vector<Message> factors(2*_num_states-1);
+    std::vector<Message> joint_factors(_num_states-1);
     Message variable_message;
+    MatrixXd covariance(_dim, _dim);
 
     // Extract the factors from the precision matrix
-    for (int i = 0; i < 2*_num_states-1; ++i) {
+    // The variable in factors are 0, {0,1}, 1, {1,2}, 2, ..., {_num_states-1,_num_states}, _num_states
+    for (int i = 0; i < 2*_num_states-1; i++) {
         int var = i / 2;
         if (i % 2 == 0) {
             VectorXd variable(1);
             variable << var;
-            MatrixXd lam = Precision.block(_dim_state * var, _dim_state * var, _dim_state, _dim_state);
-            factor[i] = {variable, lam};
-        } else {
+            MatrixXd lambda = Precision.block(_dim_state * var, _dim_state * var, _dim_state, _dim_state);
+            factors[i] = {variable, lambda};
+        }
+        else {
             VectorXd variable(2);
             variable << var, var + 1;
-            MatrixXd lam = MatrixXd::Zero(2 * _dim_state, 2 * _dim_state);
-            lam.block(0, _dim_state, _dim_state, _dim_state) = Precision.block(_dim_state * var, _dim_state * (var + 1), _dim_state, _dim_state);
-            lam.block(_dim_state, 0, _dim_state, _dim_state) = Precision.block(_dim_state * (var + 1), _dim_state * var, _dim_state, _dim_state);
-            joint_factor[var] = {variable, Precision.block(_dim_state * var, _dim_state * var, 2 * _dim_state, 2 * _dim_state)};
-            factor[i] = {variable, lam};
+            MatrixXd lambda = MatrixXd::Zero(2 * _dim_state, 2 * _dim_state);
+            lambda.block(0, _dim_state, _dim_state, _dim_state) = Precision.block(_dim_state * var, _dim_state * (var + 1), _dim_state, _dim_state);
+            lambda.block(_dim_state, 0, _dim_state, _dim_state) = Precision.block(_dim_state * (var + 1), _dim_state * var, _dim_state, _dim_state);
+            factors[i] = {variable, lambda};
+            joint_factors[var] = {variable, Precision.block(_dim_state * var, _dim_state * var, 2 * _dim_state, 2 * _dim_state)};
         }
     }
-    // The variable in factor is 0, {0,1}, 1, {1,2}, 2, ..., {_num_states-1,_num_states},_num_states
+    
+    // Initialize message
+    std::vector<Message> forward_messages(_num_states);
+    std::vector<Message> backward_messages(_num_states);
+    forward_messages[0] = {VectorXd::Zero(1), MatrixXd::Zero(_dim_state, _dim_state)};
+    backward_messages.back() = {VectorXd::Constant(1, _num_states-1), MatrixXd::Zero(_dim_state, _dim_state)};
 
-    std::vector<Message> factor_message(_num_states);
-    std::vector<Message> factor_message1(_num_states);
-    factor_message[0] = {VectorXd::Zero(1), MatrixXd::Zero(_dim_state, _dim_state)};
-    factor_message1.back() = {VectorXd::Zero(1), MatrixXd::Zero(_dim_state, _dim_state)};
-    factor_message1.back().first(0) = _num_states-1; 
-
-    // Calculate the message from the factors to the variables(cannot calculate in parallel)
+    // Calculate messages between factors and variables
     for (int i = 0; i < _num_states - 1; i++) {
-        variable_message = calculate_variable_message(factor_message[i], factor[2 * i]);
-        factor_message[i + 1] = calculate_factor_message(variable_message, i + 1, factor[2 * i + 1], _dim_state);
+        variable_message = calculate_variable_message(forward_messages[i], factors[2 * i]);
+        forward_messages[i + 1] = calculate_factor_message(variable_message, i + 1, factors[2 * i + 1]);
         int index = _num_states - 1 - i;
-        variable_message = calculate_variable_message(factor_message1[index], factor[2 * index]);
-        factor_message1[index - 1] = calculate_factor_message(variable_message, index - 1, factor[2 * index - 1], _dim_state);
+        variable_message = calculate_variable_message(backward_messages[index], factors[2 * index]);
+        backward_messages[index - 1] = calculate_factor_message(variable_message, index - 1, factors[2 * index - 1]);
     }
-
-    MatrixXd sigma(_dim, _dim);
 
     if (_num_states == 1){
-        MatrixXd lam = factor_message[0].second + factor_message1[0].second + factor[0].second;
-        MatrixXd variance = lam.inverse();
-        sigma.block(0, 0, _dim_state, _dim_state) = variance;
+        MatrixXd lambda = forward_messages[0].second + backward_messages[0].second + factors[0].second;
+        MatrixXd variance = lambda.inverse();
+        covariance.block(0, 0, _dim_state, _dim_state) = variance;
     }
 
+    #pragma omp parallel for
     for (int i = 0; i < _num_states - 1; ++i) {
-        MatrixXd lam_joint = joint_factor[i].second;
-        lam_joint.block(0, 0, _dim_state, _dim_state) += factor_message[i].second;
-        lam_joint.block(_dim_state, _dim_state, _dim_state, _dim_state) += factor_message1[i + 1].second;
-        MatrixXd variance_joint = lam_joint.inverse();
-        sigma.block(i*_dim_state, i*_dim_state, 2*_dim_state, 2*_dim_state) = variance_joint;
+        MatrixXd lambda_joint = joint_factors[i].second;
+        lambda_joint.block(0, 0, _dim_state, _dim_state) += forward_messages[i].second;
+        lambda_joint.block(_dim_state, _dim_state, _dim_state, _dim_state) += backward_messages[i + 1].second;
+        MatrixXd variance_joint = lambda_joint.inverse();
+        covariance.block(i*_dim_state, i*_dim_state, 2*_dim_state, 2*_dim_state) = variance_joint;
     }
 
-
-    return sigma.sparseView();
-
-}
-
-/**
- * @brief Compute the covariances using Gaussian Belief Propagation.
- */
-template <typename Factor>
-SpMat GVIGH<Factor>::inverse_GBP_cuda(const SpMat &Precision)
-{
-    std::vector<Message> factor(2*_num_states-1);
-    std::vector<MatrixXd> joint_factor(_num_states-1);
-    MatrixXd variable_message;
-    // std::shared_ptr<GBP_Cuda> _cuda = std::make_shared<GBP_Cuda>(GBP_Cuda{});
-
-    // Extract the factors from the precision matrix
-    // The variable in factor is 0, {0,1}, 1, {1,2}, 2, ..., {_num_states-1,_num_states},_num_states
-    for (int i = 0; i < 2*_num_states-1; ++i) {
-        int var = i / 2;
-        if (i % 2 == 0) {
-            VectorXd variable(1);
-            variable << var;
-            MatrixXd lam = Precision.block(_dim_state * var, _dim_state * var, _dim_state, _dim_state);
-            factor[i] = {variable, lam};
-        } else {
-            VectorXd variable(2);
-            variable << var, var + 1;
-            MatrixXd lam = MatrixXd::Zero(2 * _dim_state, 2 * _dim_state);
-            lam.block(0, _dim_state, _dim_state, _dim_state) = Precision.block(_dim_state * var, _dim_state * (var + 1), _dim_state, _dim_state);
-            lam.block(_dim_state, 0, _dim_state, _dim_state) = Precision.block(_dim_state * (var + 1), _dim_state * var, _dim_state, _dim_state);
-            joint_factor[var] =Precision.block(_dim_state * var, _dim_state * var, 2 * _dim_state, 2 * _dim_state);
-            factor[i] = {variable, lam};
-        }
-    }
-
-    std::vector<MatrixXd> factor_message(_num_states);
-    std::vector<MatrixXd> factor_message1(_num_states);
-    factor_message[0] = MatrixXd::Zero(_dim_state, _dim_state);
-    factor_message1.back() = MatrixXd::Zero(_dim_state, _dim_state);
-
-    // Calculate the message from the factors to the variables(cannot calculate in parallel)
-    // calculate_factor_message may can calculate parallelly
-    for (int i = 0; i < _num_states - 1; i++) {
-        variable_message = factor_message[i] + factor[2 * i].second;
-        factor_message[i + 1] = calculate_factor_message_cuda(variable_message, i, i + 1, factor[2 * i + 1], _dim_state);
-        int index = _num_states - 1 - i;
-        variable_message = factor_message1[index] + factor[2 * index].second;
-        factor_message1[index - 1] = calculate_factor_message_cuda(variable_message, index, index - 1, factor[2 * index - 1], _dim_state);
-    }
-
-    MatrixXd sigma(_dim, _dim);
-
-    if (_num_states == 1){
-        MatrixXd lam = factor_message[0] + factor_message1[0] + factor[0].second;
-        MatrixXd variance = lam.inverse();
-        sigma.block(0, 0, _dim_state, _dim_state) = variance;
-    }
-
-
-    // This can be calculated in cuda
-    for (int i = 0; i < _num_states - 1; ++i) {
-        MatrixXd lam_joint = joint_factor[i];
-        lam_joint.block(0, 0, _dim_state, _dim_state) += factor_message[i];
-        lam_joint.block(_dim_state, _dim_state, _dim_state, _dim_state) += factor_message1[i + 1];
-
-        MatrixXd variance_joint = lam_joint.inverse();
-        sigma.block(i*_dim_state, i*_dim_state, 2*_dim_state, 2*_dim_state) = variance_joint;
-    }
-
-    return sigma.sparseView();
-
+    return covariance.sparseView();
 }
 
 /**
  * @brief Compute the message of factors in GBP.
  */
 template <typename Factor>
-Message GVIGH<Factor>::calculate_factor_message(const Message &input_message, int target, const Message &factor_potential, int dim) {
+Message GVIGH<Factor>::calculate_factor_message(const Message &input_message, int target, const Message &factor_potential) {
     Message message;
-    VectorXd target_vector(1);
-    target_vector(0) = target;
-    message.first = target_vector;
+    message.first = VectorXd::Constant(1, target);
 
     int index_variable = -1;
     int index_target = -1;
 
+    // Identify indices of the variable and target in the factor potential
     for (int i = 0; i < factor_potential.first.size(); i++) {
         if (factor_potential.first(i) == input_message.first(0)) {
             index_variable = i;
@@ -369,50 +302,20 @@ Message GVIGH<Factor>::calculate_factor_message(const Message &input_message, in
         }
     }
 
-    MatrixXd lam = factor_potential.second;
+    MatrixXd lambda = factor_potential.second;
+    lambda.block(_dim_state * index_variable, _dim_state * index_variable, _dim_state, _dim_state) += input_message.second;
     
-    lam.block(dim * index_variable, dim * index_variable, dim, dim) += input_message.second;
-    
+    // Reorganize the lambda matrix to bring the target to the top
     if (index_target != 0) {
-        lam.block(0, 0, dim, lam.cols()).swap(lam.block(index_target * dim, 0, dim, lam.cols()));
-        lam.block(0, 0, lam.rows(), dim).swap(lam.block(0, index_target * dim, lam.rows(), dim));
+        lambda.block(0, 0, _dim_state, lambda.cols()).swap(lambda.block(index_target * _dim_state, 0, _dim_state, lambda.cols()));
+        lambda.block(0, 0, lambda.rows(), _dim_state).swap(lambda.block(0, index_target * _dim_state, lambda.rows(), _dim_state));
     }
 
-    MatrixXd lam_inverse = lam.block(dim, dim, lam.rows() - dim, lam.cols() - dim).inverse();
-    MatrixXd lam_message = lam.block(0, 0, dim, dim) - lam.block(0, dim, dim, lam.cols() - dim) * lam_inverse * lam.block(dim, 0, lam.rows() - dim, dim);
+    MatrixXd lam_inverse = lambda.bottomRightCorner(lambda.rows() - _dim_state, lambda.cols() - _dim_state).inverse();
+    MatrixXd lam_message = lambda.topLeftCorner(_dim_state, _dim_state) - lambda.topRightCorner(_dim_state, lambda.cols() - _dim_state) * lam_inverse * lambda.bottomLeftCorner(lambda.rows() - _dim_state, _dim_state);
 
     message.second = lam_message;
     return message;
-}
-
-template <typename Factor>
-MatrixXd GVIGH<Factor>::calculate_factor_message_cuda(const MatrixXd &input_message, int variable, int target, const Message &factor_potential, int dim) {
-    int index_variable;
-    int index_target;
-
-    for (int i = 0; i < factor_potential.first.size(); i++) {
-        if (factor_potential.first(i) == variable) {
-            index_variable = i;
-        }
-        if (factor_potential.first(i) == target) {
-            index_target = i;
-        }
-    }
-
-    MatrixXd lam = factor_potential.second;
-    
-    lam.block(dim * index_variable, dim * index_variable, dim, dim) += input_message;
-    
-    if (index_target != 0) {
-        lam.block(0, 0, dim, lam.cols()).swap(lam.block(index_target * dim, 0, dim, lam.cols()));
-        lam.block(0, 0, lam.rows(), dim).swap(lam.block(0, index_target * dim, lam.rows(), dim));
-    }
-
-    MatrixXd lam_inverse = lam.block(dim, dim, lam.rows() - dim, lam.cols() - dim).inverse();
-    MatrixXd lam_message = lam.block(0, 0, dim, dim) - lam.block(0, dim, dim, lam.cols() - dim) * lam_inverse * lam.block(dim, 0, lam.rows() - dim, dim);
-
-    // message.second = lam_message;
-    return lam_message;
 }
 
 }

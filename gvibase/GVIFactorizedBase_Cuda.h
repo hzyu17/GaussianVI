@@ -19,7 +19,6 @@
 #include <memory>
 #include <type_traits>
 
-// #include "quadrature/GaussHermite.h"
 #include "quadrature/SparseGaussHermite_Cuda.h"
 #include "helpers/CommonDefinitions.h"
 #include "helpers/MatrixHelper.h"

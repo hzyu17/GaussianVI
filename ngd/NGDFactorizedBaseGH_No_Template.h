@@ -15,7 +15,6 @@
 #ifndef NGDFactorizedBaseGH_H
 #define NGDFactorizedBaseGH_H
 
-// #include "ngd/NGDFactorizedBase.h"
 #include "gvibase/GVIFactorizedBaseGH_Cuda.h"
 #include <helpers/CudaOperation.h>
 #include <memory>
@@ -37,7 +36,8 @@ public:
                         int num_states, int start_index, double cost_sigma, 
                         double epsilon, double radius, 
                         double temperature, double high_temperature,
-                        QuadratureWeightsMap weight_sigpts_map_option):
+                        QuadratureWeightsMap weight_sigpts_map_option,
+                        std::shared_ptr<CudaOperation> cuda_ptr):
                 GVIBase(dimension, state_dim, num_states, start_index, 
                         temperature, high_temperature, weight_sigpts_map_option),
                 _epsilon(epsilon),
@@ -46,7 +46,8 @@ public:
             {
                 /// Override of the GVIBase classes. _func_phi-> Scalar, _func_Vmu -> Vector, _func_Vmumu -> Matrix
                 GVIBase::_gh = std::make_shared<GH>(GH{gh_degree, GVIBase::_dim, GVIBase::_mu, GVIBase::_covariance, weight_sigpts_map_option});
-                _cuda = std::make_shared<CudaOperation>(CudaOperation{cost_sigma, epsilon, radius});
+                // _cuda = std::make_shared<CudaOperation>(CudaOperation{cost_sigma, epsilon, radius});
+                _cuda = cuda_ptr;
 
             }
 public:

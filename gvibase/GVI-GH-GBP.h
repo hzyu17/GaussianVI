@@ -120,14 +120,10 @@ public:
      */
     SpMat inverse_GBP(const SpMat &Precision);
 
-    SpMat inverse_GBP_cuda(const SpMat &Precision);
-
     /**
      * @brief Compute the message of factors in GBP.
      */
-    Message calculate_factor_message(const Message &input_message, int target, const Message &factor_potential, int dim);
-
-    MatrixXd calculate_factor_message_cuda(const MatrixXd &input_message, int variable, int target, const Message &factor_potential, int dim);
+    Message calculate_factor_message(const Message &input_message, int target, const Message &factor_potential);
 
 // ******** Functions that differs in different algorithms ********
     /**
