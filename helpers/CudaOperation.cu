@@ -85,6 +85,7 @@ void CudaOperation::Cuda_init(const MatrixXd& weights)
 void CudaOperation::CudaIntegration(const MatrixXd& sigmapts, const MatrixXd& weights, MatrixXd& results, const MatrixXd& mean, int type)
 {
     double *sigmapts_gpu, *mu_gpu, *pts_gpu, *result_gpu;
+    int n_balls = 1;
 
     cudaMalloc(&sigmapts_gpu, sigmapts.size() * sizeof(double));
     cudaMalloc(&mu_gpu, sigmapts.cols() * sizeof(double));
@@ -148,6 +149,7 @@ void CudaOperation_Quad::Cuda_init(const MatrixXd& weights)
 void CudaOperation_Quad::CudaIntegration(const MatrixXd& sigmapts, const MatrixXd& weights, MatrixXd& results, const MatrixXd& mean, int type)
 {
     double *sigmapts_gpu, *pts_gpu, *result_gpu, *mu_gpu;
+    int n_balls = 5;
 
     cudaMalloc(&sigmapts_gpu, sigmapts.size() * sizeof(double));
     cudaMalloc(&pts_gpu, sigmapts.rows() * results.size() * sizeof(double));

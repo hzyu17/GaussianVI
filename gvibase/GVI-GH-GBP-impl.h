@@ -39,14 +39,14 @@ void GVIGH<Factor>::optimize(std::optional<bool> verbose)
     bool is_lowtemp = true;
     bool converged = false;
 
-    // #pragma omp parallel for
-    // for (int i = 0; i < _vec_factors.size(); i++){
-    //     auto &opt_k = _vec_factors[i];
-    //     opt_k -> cuda_init();
-    // }
+    #pragma omp parallel for
+    for (int i = 0; i < _vec_factors.size(); i++){
+        auto &opt_k = _vec_factors[i];
+        opt_k -> cuda_init();
+    }
 
     // All factors use one cuda pointer, so only need to initialize once
-    _vec_factors[2] -> cuda_init();
+    // _vec_factors[2] -> cuda_init();
 
     for (int i_iter = 0; i_iter < _niters; i_iter++)
     {   
@@ -128,13 +128,13 @@ void GVIGH<Factor>::optimize(std::optional<bool> verbose)
         }
     }
 
-    // #pragma omp parallel for
-    // for (int i = 0; i < _vec_factors.size(); i++){
-    //     auto &opt_k = _vec_factors[i];
-    //     opt_k -> cuda_free();
-    // }
+    #pragma omp parallel for
+    for (int i = 0; i < _vec_factors.size(); i++){
+        auto &opt_k = _vec_factors[i];
+        opt_k -> cuda_free();
+    }
 
-    _vec_factors[2] -> cuda_free();
+    // _vec_factors[2] -> cuda_free();
 
     std::cout << "=========== Saving Data ===========" << std::endl;
     save_data(is_verbose);

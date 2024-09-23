@@ -44,7 +44,6 @@ public:
                 _sigma(cost_sigma),
                 _radius(radius)
             {
-                /// Override of the GVIBase classes. _func_phi-> Scalar, _func_Vmu -> Vector, _func_Vmumu -> Matrix
                 GVIBase::_gh = std::make_shared<GH>(GH{gh_degree, GVIBase::_dim, GVIBase::_mu, GVIBase::_covariance, weight_sigpts_map_option});
                 // _cuda = std::make_shared<CudaOperation>(CudaOperation{cost_sigma, epsilon, radius});
                 _cuda = cuda_ptr;
