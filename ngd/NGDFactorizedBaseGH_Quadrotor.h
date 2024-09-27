@@ -37,6 +37,7 @@ public:
                         double epsilon, double radius, 
                         double temperature, double high_temperature,
                         QuadratureWeightsMap weight_sigpts_map_option, 
+                        std::shared_ptr<GH> gh_ptr, 
                         std::shared_ptr<CudaOperation_Quad> cuda_ptr):
                 GVIBase(dimension, state_dim, num_states, start_index, 
                         temperature, high_temperature, weight_sigpts_map_option),
@@ -44,8 +45,8 @@ public:
                 _sigma(cost_sigma),
                 _radius(radius)
             {
-                /// Override of the GVIBase classes. _func_phi-> Scalar, _func_Vmu -> Vector, _func_Vmumu -> Matrix
                 GVIBase::_gh = std::make_shared<GH>(GH{gh_degree, GVIBase::_dim, GVIBase::_mu, GVIBase::_covariance, weight_sigpts_map_option});
+                // GVIBase::_gh = gh_ptr;
                 _cuda = std::make_shared<CudaOperation_Quad>(CudaOperation_Quad{cost_sigma, epsilon, radius});
                 // _cuda = cuda_ptr;
 

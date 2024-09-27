@@ -3,9 +3,11 @@
 #include "linear_factor.h"
 #include "helpers/EigenWrapper.h"
 #include <unsupported/Eigen/MatrixFunctions>
-
+#include <boost/numeric/odeint.hpp>
 
 namespace gvi{
+
+using namespace boost::numeric::odeint;  
 
 class LTV_GP : public LinearFactor{
     public: 
@@ -40,8 +42,37 @@ class LTV_GP : public LinearFactor{
             _Phi_mid = (hA[4*start_index+2] * delta_t / 2).exp();
             _Phi_right_quater = (hA[4*start_index+3] * delta_t / 4).exp();
 
+            _A_vec.resize(5); 
+            for (int i = 0; i < 5; i++) {
+                _A_vec[i] = hA[4 * start_index + i];
+            }
+
             // MatrixXd Phi_pred = MatrixXd::Identity(_dim_state, _dim_state) + _delta_t * hA[_start_index];
             // _Phi = MatrixXd::Identity(_dim_state, _dim_state) + (hA[_start_index] + hA[_start_index+1] * Phi_pred) / 2 * delta_t;
+
+            std::vector<double> start_times = {0.0, _delta_t / 4, _delta_t / 2, 3 * _delta_t / 4};
+
+            runge_kutta_dopri5<std::vector<double>> stepper;
+
+            double dt = _delta_t / 20;
+            auto system_ode_bound = std::bind(&gvi::LTV_GP::system_ode, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3);
+
+            for (double start_time : start_times) {
+                MatrixXd Phi0 = MatrixXd::Identity(_dim_state, _dim_state);
+                std::vector<double> Phi_vec(Phi0.data(), Phi0.data() + _dim_state * _dim_state);
+                integrate_adaptive(stepper, system_ode_bound, Phi_vec, start_time, _delta_t, dt);
+                MatrixXd Phi_result = Eigen::Map<const MatrixXd>(Phi_vec.data(), _dim_state, _dim_state);
+                _Phi_results.push_back(Phi_result);
+            }
+
+            // std::cout << "Phi0  "  << std::endl << _Phi<< std::endl;
+            // std::cout << "Error of Phi0 = "  << std::endl << _Phi - _Phi_results[0] << std::endl;
+            // std::cout << "Error = " << (Phi_result - Phi_results[0] * Phi_results[1].inverse()).norm() << std::endl;
+            // std::cout << "Norm of Phi0  " << _Phi.norm() << std::endl;
+            // std::cout << "Norm of Error = "  << std::endl << (_Phi - _Phi_results[0]).norm() << std::endl << std::endl;
+            // std::cout << "Error of Phi1  " << (_Phi_left_quater - Phi_results[1]).norm() << std::endl;
+            // std::cout << "Error of Phi2  " << (_Phi_mid - Phi_results[2]).norm() << std::endl;
+            // std::cout << "Error of Phi3  " << (_Phi_right_quater - Phi_results[3]).norm() << std::endl << std::endl << std::endl;
 
             // Obtain mi and mi_next
             VectorXd mi = target_mean[start_index];
@@ -55,45 +86,16 @@ class LTV_GP : public LinearFactor{
 
             compute_invQ();
 
-            // EigenSolver<MatrixXd> solver(_Q);
-            // VectorXd eigenvalues = solver.eigenvalues().real();
-
-            // EigenSolver<MatrixXd> solver_inv(_invQ);
-            // VectorXd eigenvalues_inv = solver_inv.eigenvalues().real();
-
-            // std::cout << "Matrix A= " << std::endl << hA[start_index] << std::endl;
-            // std::cout << "Matrix B= " << std::endl << hB[start_index] << std::endl;
-            // std::cout << "Transition Matrix = " << std::endl << _Phi << std::endl;
-            // std::cout << "Phi x hB= " << std::endl << _Phi * hB[start_index] << std::endl;
-
-            // std::cout << "Grammian = " << std::endl << _Q << std::endl;
-            // std::cout << "Precision = " << std::endl << _invQ << std::endl << std::endl;
-            // std::cout << "The eigenvalues of the Gramian:\n" << eigenvalues << std::endl;
-            // std::cout << "The eigenvalues of the Precision:\n" << eigenvalues_inv << std::endl;
-
-
             // \Lambda = [-\Phi, I]
             _Lambda = MatrixXd::Zero(_dim_state, 2*_dim_state);
-            _Lambda.block(0, 0, _dim_state, _dim_state) = -_Phi;
+            _Lambda.block(0, 0, _dim_state, _dim_state) = -_Phi_results[0];
             _Lambda.block(0, _dim_state, _dim_state, _dim_state) = MatrixXd::Identity(_dim_state, _dim_state);
 
             // \Psi = [\Phi, -I]. When a(t)=0, this part is eliminated.
             _Psi = MatrixXd::Zero(_dim_state, 2*_dim_state);
-            _Psi.block(0, 0, _dim_state, _dim_state) = _Phi;
+            _Psi.block(0, 0, _dim_state, _dim_state) = _Phi_results[0];
             _Psi.block(0, _dim_state, _dim_state, _dim_state) = -MatrixXd::Identity(_dim_state, _dim_state);
-        }
-
-        MatrixXd compute_phi_i (const std::vector<MatrixXd>& hA){
-            MatrixXd Phi = MatrixXd::Identity(_dim_state, _dim_state);
-            MatrixXd Phi_i(_dim_state, _dim_state);
-            // In each loop i, add the derivative and get Phi_i+1
-            for (int i = 0; i < _start_index; i++){
-                MatrixXd A_i = hA[i];
-                Phi = Phi + A_i * Phi * _delta_t;
-            }
-            Phi_i = Phi;
-            return Phi_i;
-        }
+        } 
 
         MatrixXd compute_Q (const std::vector<MatrixXd>& hA, const std::vector<MatrixXd>& hB, int n_states){
             MatrixXd hA_next, hB_i, hB_mid, hB_next, hB_left_quater, hB_right_quater;
@@ -104,10 +106,10 @@ class LTV_GP : public LinearFactor{
             hB_next = hB[4 * _start_index + 4];
 
             // Use Boole's Rule to approximate the integration
-            MatrixXd gramian = (7 * _Phi * hB_i * hB_i.transpose() * _Phi.transpose() 
-            + 32 * _Phi_left_quater * hB_left_quater * hB_left_quater.transpose() * _Phi_left_quater.transpose()
-            + 4 * _Phi_mid * hB_mid * hB_mid.transpose() * _Phi_mid.transpose()
-            + 32 * _Phi_right_quater * hB_right_quater * hB_right_quater.transpose() * _Phi_right_quater.transpose()
+            MatrixXd gramian = (7 * _Phi_results[0] * hB_i * hB_i.transpose() * _Phi_results[0].transpose() 
+            + 32 * _Phi_results[1] * hB_left_quater * hB_left_quater.transpose() * _Phi_results[1].transpose()
+            + 4 * _Phi_results[2] * hB_mid * hB_mid.transpose() * _Phi_results[2].transpose()
+            + 32 * _Phi_results[3] * hB_right_quater * hB_right_quater.transpose() * _Phi_results[3].transpose()
             + 7 * hB_next * hB_next.transpose()) / 90 * _delta_t;
 
             // MatrixXd gramian_pred = (_Phi * hB_i * hB_i.transpose() * _Phi.transpose() + hB_next * hB_next.transpose()) / 2 * _delta_t;
@@ -122,12 +124,27 @@ class LTV_GP : public LinearFactor{
 
         }
 
+        void system_ode(const std::vector<double>& Phi_vec, std::vector<double>& dPhi_dt, double t) {
+            MatrixXd A = A_function(t);
+            MatrixXd Phi = Eigen::Map<const MatrixXd>(Phi_vec.data(), _dim_state, _dim_state);
+            MatrixXd dPhi = A * Phi;
+            Eigen::Map<MatrixXd>(dPhi_dt.data(), _dim_state, _dim_state) = dPhi;
+        }
+
+        MatrixXd A_function(double t) {
+            int t_idx;
+            t_idx = static_cast<int>(std::floor(4 * t / _delta_t));
+            return _A_vec[t_idx];
+        }
+
     private:
         int _dim, _start_index;
         int _dim_state;
         double _delta_t;
         MatrixXd _Qc, _invQc, _Q, _invQ;
         MatrixXd _Phi, _Lambda, _Psi, _Phi_mid, _Phi_left_quater, _Phi_right_quater;
+        std::vector<MatrixXd> _A_vec;
+        std::vector<MatrixXd> _Phi_results;
         VectorXd _m0, _target_mu;
         EigenWrapper _ei;
         
@@ -171,3 +188,48 @@ class LTV_GP : public LinearFactor{
 };
 
 }
+
+
+// MatrixXd compute_phi_i (const std::vector<MatrixXd>& hA){
+//     MatrixXd Phi = MatrixXd::Identity(_dim_state, _dim_state);
+//     MatrixXd Phi_i(_dim_state, _dim_state);
+//     // In each loop i, add the derivative and get Phi_i+1
+//     for (int i = 0; i < _start_index; i++){
+//         MatrixXd A_i = hA[i];
+//         Phi = Phi + A_i * Phi * _delta_t;
+//     }
+//     Phi_i = Phi;
+//     return Phi_i;
+// }
+
+
+
+// EigenSolver<MatrixXd> solver(_Q);
+// VectorXd eigenvalues = solver.eigenvalues().real();
+
+// EigenSolver<MatrixXd> solver_inv(_invQ);
+// VectorXd eigenvalues_inv = solver_inv.eigenvalues().real();
+
+// std::cout << "Matrix A= " << std::endl << hA[start_index] << std::endl;
+// std::cout << "Matrix B= " << std::endl << hB[start_index] << std::endl;
+// std::cout << "Transition Matrix = " << std::endl << _Phi << std::endl;
+// std::cout << "Phi x hB= " << std::endl << _Phi * hB[start_index] << std::endl;
+
+// std::cout << "Grammian = " << std::endl << _Q << std::endl;
+// std::cout << "Precision = " << std::endl << _invQ << std::endl << std::endl;
+// std::cout << "The eigenvalues of the Gramian:\n" << eigenvalues << std::endl;
+// std::cout << "The eigenvalues of the Precision:\n" << eigenvalues_inv << std::endl;
+
+
+// MatrixXd A_Mat(_dim_state, _dim_state);
+// A_Mat << MatrixXd::Zero(_dim, _dim),  MatrixXd::Identity(_dim, _dim), MatrixXd::Zero(_dim, _dim_state);
+// return A_Mat;
+
+
+// MatrixXd Phi_LTI (_dim_state, _dim_state);
+// Phi_LTI.setZero();
+// Phi_LTI << MatrixXd::Identity(_dim, _dim), delta_t*MatrixXd::Identity(_dim, _dim), 
+//             MatrixXd::Zero(_dim, _dim), MatrixXd::Identity(_dim, _dim);
+
+// MatrixXd Err_LTI = _Phi_results[0] - Phi_LTI;
+// std::cout << "Norm of LTI Error = "  << std::endl << Err_LTI.norm() << std::endl << std::endl;
