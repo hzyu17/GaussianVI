@@ -52,6 +52,8 @@ protected:
 
     double _constant;
 
+    bool _isLinear = true;
+
 public:
     double constant() const { return _constant; }
 
@@ -124,6 +126,8 @@ public:
 
         return _E_Phi / this->temperature();
     }
+
+    inline bool linear_factor() override { return _isLinear; }
 
     inline void update_cuda() override{}
 

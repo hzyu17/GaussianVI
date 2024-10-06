@@ -50,6 +50,7 @@ public:
             _dim{dimension},
             _state_dim{state_dim},
             _num_states{num_states},
+            _start_index{start_index},
             _temperature{temperature},
             _high_temperature{high_temperature},
             _mu(_dim),
@@ -125,6 +126,8 @@ public:
     */
     virtual void calculate_partial_V(){}
 
+    virtual std::tuple<double, VectorXd, MatrixXd> derivatives(){}
+
     /**
      * @brief Compute the cost function. V(x) = E_q(\phi(x))
      */
@@ -140,6 +143,10 @@ public:
      * 
      */
     virtual std::tuple<Eigen::VectorXd, Eigen::MatrixXd> compute_gradients_linesearch(const double & step_size){}
+
+    virtual void cuda_matrices(const VectorXd& fill_joint_mean, const SpMat& joint_cov, std::vector<MatrixXd>& vec_sigmapts, std::vector<VectorXd>& vec_mean) {}
+
+    virtual void cuda_matrices(std::vector<MatrixXd>& vec_sigmapts, std::vector<VectorXd>& vec_mean) {}
 
     // /**
     //  * @brief Compute the cost function. V(x) = E_q(\phi(x)) using the current values.
@@ -166,6 +173,12 @@ public:
     virtual inline void cuda_init(){}
 
     virtual inline void cuda_free(){}
+
+    virtual inline bool linear_factor(){}
+
+    virtual inline void costIntegration(const MatrixXd& sigmapts, VectorXd& results, const int sigmapts_cols){}
+
+    virtual inline void dmuIntegration(const MatrixXd& sigmapts, const MatrixXd& mean, VectorXd& E_phi_mat, VectorXd& dmu_mat, MatrixXd& ddmu_mat, const int sigmapts_cols){}
 
     inline SpMat fill_joint_cov(){
         SpMat joint_cov(_joint_size, _joint_size);
@@ -218,7 +231,7 @@ public:
 public:
 
     /// dimension
-    int _dim, _state_dim, _num_states, _joint_size;
+    int _dim, _state_dim, _num_states, _joint_size, _start_index;
 
     VectorXd _mu;
     

@@ -131,6 +131,20 @@ void calculate_partial_V() override{
         return Integrate_cuda(0)(0, 0) / this->temperature();
     }
 
+    void cuda_matrices(const VectorXd& fill_joint_mean, const SpMat& joint_cov, std::vector<MatrixXd>& vec_sigmapts, std::vector<VectorXd>& vec_mean) override {
+
+        // Extract only displacement without extracting velocity
+        VectorXd mean_k = extract_mu_from_joint(fill_joint_mean);
+        MatrixXd Cov_k = extract_cov_from_joint(joint_cov);
+
+        vec_mean[_start_index] = mean_k;
+
+        updateGH(mean_k, Cov_k);
+
+        vec_sigmapts[_start_index] = this -> _gh -> sigmapts();
+
+    }
+
     std::shared_ptr<CudaOperation_Quad> _cuda;
     double _sigma, _epsilon, _radius;
 

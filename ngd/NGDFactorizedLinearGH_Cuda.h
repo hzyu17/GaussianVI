@@ -60,6 +60,8 @@ protected:
 
     double _constant;
 
+    bool _isLinear = true;
+
 public:
     double constant() const { return _constant; }
 
@@ -114,6 +116,8 @@ public:
 
         return this->_gh->Integrate(this->_func_phi)(0, 0) / this->temperature();
     }
+
+    inline bool linear_factor() override { return _isLinear; }
     
     inline void update_cuda() override{}
 

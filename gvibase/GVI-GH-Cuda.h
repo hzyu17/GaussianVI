@@ -73,6 +73,8 @@ protected:
 
     /// @param _vec_factors Vector of marginal optimizers
     std::vector<std::shared_ptr<FactorizedOptimizer>> _vec_factors;
+    std::vector<std::shared_ptr<FactorizedOptimizer>> _vec_linear_factors;
+    std::vector<std::shared_ptr<FactorizedOptimizer>> _vec_nonlinear_factors;
 
     VectorXd _mu;
 
@@ -115,7 +117,11 @@ public:
      */
     VectorXd factor_cost_vector(const VectorXd& x, SpMat& Precision);
 
-    void time_test();
+    std::tuple<double, VectorXd, VectorXd, SpMat> factor_cost_vector_cuda(const VectorXd& fill_joint_mean, SpMat& joint_precision);
+
+    double cost_value_cuda(const VectorXd& fill_joint_mean, SpMat& joint_precision);
+
+    std::tuple<VectorXd, VectorXd, SpMat> time_test_cuda(const VectorXd& fill_joint_mean, SpMat& joint_precision);
 
     /**
      * @brief Compute the covariances using Gaussian Belief Propagation.
@@ -132,6 +138,8 @@ public:
      * @brief Function which computes one step of update.
      */
     virtual std::tuple<VectorXd, SpMat> compute_gradients(std::optional<double>step_size=std::nullopt){};
+
+    virtual void derivatives(VectorXd& dmu_mat, MatrixXd& ddmu_mat, int sigma_col){};
 
     // /**
     //  * @brief The optimizing process.
@@ -154,6 +162,11 @@ public:
      */
     virtual VectorXd factor_cost_vector(){};
 
+    virtual std::tuple<double, VectorXd, VectorXd, SpMat> factor_cost_vector_cuda(){};
+
+    virtual double cost_value_cuda(){};
+
+    virtual std::tuple<VectorXd, VectorXd, SpMat> time_test_cuda(){};
 
 /// **************************************************************
 /// Internal data IO
@@ -178,7 +191,6 @@ public:
     inline Message calculate_variable_message(const Message &input_message, const Message &prior_message) {
         return {prior_message.first, input_message.second + prior_message.second};
     }
-
 
     /// update the step sizes
     inline void set_step_size(double step_size){ 
@@ -357,6 +369,9 @@ public:
 
     void switch_to_high_temperature();
 
+    void classify_factors();
+
+
     /**
      * @brief calculate and return the E_q{phi(x)} s for each factorized entity.
      * @return vector<double> 
@@ -432,6 +447,6 @@ public:
 }
 
 
-#include "GVI-GH-GBP-impl.h"
+#include "GVI-GH-Cuda-impl.h"
 
 #endif // GVI_GH_H

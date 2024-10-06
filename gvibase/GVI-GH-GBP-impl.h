@@ -39,14 +39,11 @@ void GVIGH<Factor>::optimize(std::optional<bool> verbose)
     bool is_lowtemp = true;
     bool converged = false;
 
-    #pragma omp parallel for
-    for (int i = 0; i < _vec_factors.size(); i++){
-        auto &opt_k = _vec_factors[i];
-        opt_k -> cuda_init();
-    }
-
-    // All factors use one cuda pointer, so only need to initialize once
-    // _vec_factors[2] -> cuda_init();
+    // #pragma omp parallel for
+    // for (int i = 0; i < _vec_factors.size(); i++){
+    //     auto &opt_k = _vec_factors[i];
+    //     opt_k -> cuda_init();
+    // }
 
     for (int i_iter = 0; i_iter < _niters; i_iter++)
     {   
@@ -80,7 +77,7 @@ void GVIGH<Factor>::optimize(std::optional<bool> verbose)
 
         VectorXd dmu = std::get<0>(gradients);
         SpMat dprecision = std::get<1>(gradients);
-        
+
         int cnt = 0;
         int B = 1;
         double step_size = _step_size_base;
@@ -101,7 +98,7 @@ void GVIGH<Factor>::optimize(std::optional<bool> verbose)
             // accept new cost and update mu and precision matrix
             if (new_cost < cost_iter){
                 // update mean and covariance
-                this->update_proposal(new_mu, new_precision);
+                this->update_proposal(new_mu, new_precision); // Update the mu of GVIGH
                 break;
             }else{ 
                 // shrinking the step size
@@ -128,17 +125,23 @@ void GVIGH<Factor>::optimize(std::optional<bool> verbose)
         }
     }
 
-    #pragma omp parallel for
-    for (int i = 0; i < _vec_factors.size(); i++){
-        auto &opt_k = _vec_factors[i];
-        opt_k -> cuda_free();
-    }
-
-    // _vec_factors[2] -> cuda_free();
+    // #pragma omp parallel for
+    // for (int i = 0; i < _vec_factors.size(); i++){
+    //     auto &opt_k = _vec_factors[i];
+    //     opt_k -> cuda_free();
+    // }
 
     std::cout << "=========== Saving Data ===========" << std::endl;
     save_data(is_verbose);
 
+}
+
+
+template <typename Factor>
+void GVIGH<Factor>::time_test()
+{
+    double cost_iter = this->cost_value();
+    std::tuple<VectorXd, SpMat> gradients = compute_gradients();
 }
 
 template <typename Factor>

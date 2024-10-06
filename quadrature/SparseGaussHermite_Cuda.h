@@ -274,6 +274,8 @@ public:
 
     inline Eigen::MatrixXd mean() const { return this->_mean; }
 
+    inline Eigen::MatrixXd covariance() const { return this->_P; }
+
     Function _function;
 
 protected:

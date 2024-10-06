@@ -51,7 +51,7 @@ public:
             }
 public:
 
-void calculate_partial_V() override{
+    void calculate_partial_V() override{
         // update the mu and sigma inside the gauss-hermite integrator
         updateGH(this->_mu, this->_covariance);
 
@@ -75,6 +75,28 @@ void calculate_partial_V() override{
         this->_Vddmu.triangularView<Upper>() = (this->_precision * E_xxphi * this->_precision - this->_precision * E_phi).triangularView<Upper>();
         this->_Vddmu.triangularView<StrictlyLower>() = this->_Vddmu.triangularView<StrictlyUpper>().transpose();
         this->_Vddmu = this->_Vddmu / this->temperature();
+
+    }
+
+
+    std::tuple<double, VectorXd, MatrixXd> derivatives() override{
+        updateGH(this->_mu, this->_covariance);
+
+        this->_Vdmu.setZero();
+        this->_Vddmu.setZero();
+
+        this->_Vdmu = Integrate_cuda(1);
+        this->_Vdmu = this->_precision * this->_Vdmu;
+        this->_Vdmu = this->_Vdmu / this->temperature();
+
+        double E_phi = Integrate_cuda(0)(0, 0);
+        
+        MatrixXd E_xxphi{Integrate_cuda(2)};
+        this->_Vddmu.triangularView<Upper>() = (this->_precision * E_xxphi * this->_precision - this->_precision * E_phi).triangularView<Upper>();
+        this->_Vddmu.triangularView<StrictlyLower>() = this->_Vddmu.triangularView<StrictlyUpper>().transpose();
+        this->_Vddmu = this->_Vddmu / this->temperature();
+
+        return std::make_tuple(E_phi, this->_Vdmu, this->_Vddmu);
 
     }
     
@@ -138,6 +160,23 @@ void calculate_partial_V() override{
         _cuda -> Cuda_free();
     }
 
+    inline bool linear_factor() override { return _isLinear; }
+
+    inline void costIntegration(const MatrixXd& sigmapts, VectorXd& results, const int sigmapts_cols) override{
+        _cuda -> costIntegration(sigmapts, results, sigmapts_cols);
+    }
+
+    inline void dmuIntegration(const MatrixXd& sigmapts, const MatrixXd& mean, VectorXd& E_phi_mat, VectorXd& dmu_mat, MatrixXd& ddmu_mat, const int sigmapts_cols) override{
+        std::cout << std::setprecision(16) << "Sigmapts norm = " << sigmapts.norm() << std::endl;
+        std::cout << std::setprecision(16) << "Mean norm = " << mean.norm() << std::endl;
+        _cuda -> funcValueIntegration(sigmapts, E_phi_mat, sigmapts_cols);
+        _cuda -> dmuIntegration(sigmapts, mean, dmu_mat, sigmapts_cols);
+        _cuda -> ddmuIntegration(ddmu_mat);
+        // std::cout << "dmu_mat norm = " << dmu_mat.norm() << std::endl;
+        // std::cout << "ddmu_mat norm = " << ddmu_mat.norm() << std::endl;
+        _cuda -> Cuda_free_iter();
+    }
+
     double fact_cost_value(const VectorXd& fill_joint_mean, const SpMat& joint_cov) override {
 
         VectorXd mean_k = extract_mu_from_joint(fill_joint_mean);
@@ -149,9 +188,33 @@ void calculate_partial_V() override{
         return Integrate_cuda(0)(0, 0) / this->temperature();
         // return this->_gh->Integrate(this->_func_phi)(0, 0) / this->temperature();
     }
+
+    void cuda_matrices(const VectorXd& fill_joint_mean, const SpMat& joint_cov, std::vector<MatrixXd>& vec_sigmapts, std::vector<VectorXd>& vec_mean) override {
+
+        // Extract only displacement without extracting velocity
+        VectorXd mean_k = extract_mu_from_joint(fill_joint_mean);
+        MatrixXd Cov_k = extract_cov_from_joint(joint_cov);        
+
+        updateGH(mean_k, Cov_k);
+
+        vec_mean[_start_index-1] = mean_k;
+        vec_sigmapts[_start_index-1] = this -> _gh -> sigmapts();
+
+    }
+
+    void cuda_matrices(std::vector<MatrixXd>& vec_sigmapts, std::vector<VectorXd>& vec_mean) override {   
+
+        updateGH(this->_mu, this->_covariance);
+
+        vec_mean[_start_index-1] = this->_mu;
+        vec_sigmapts[_start_index-1] = this -> _gh -> sigmapts();
+
+    }
     
+    VectorXd _mean;
     std::shared_ptr<CudaOperation> _cuda;
     double _sigma, _epsilon, _radius;
+    bool _isLinear = false;
 
 };
 

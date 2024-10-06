@@ -6,6 +6,7 @@
 #include <iostream>
 #include <Eigen/Dense>
 #include <memory>
+#include <iomanip>
 
 using namespace Eigen;
 
@@ -90,8 +91,8 @@ public:
   __host__ __device__ inline double signed_distance(const float_index& idx) const {
     const double lr = floor(idx(0)), lc = floor(idx(1));
     const double hr = lr + 1.0, hc = lc + 1.0;
-    const size_t lri = static_cast<size_t>(lr), lci = static_cast<size_t>(lc),
-                 hri = static_cast<size_t>(hr), hci = static_cast<size_t>(hc);
+    const int lri = static_cast<int>(lr), lci = static_cast<int>(lc),
+              hri = static_cast<int>(hr), hci = static_cast<int>(hc);
     return
         (hr-idx(0))*(hc-idx(1))*signed_distance(lri, lci) +
         (idx(0)-lr)*(hc-idx(1))*signed_distance(hri, lci) +
@@ -102,27 +103,26 @@ public:
   /// gradient operator for bilinear interpolation
   /// gradient regrads to float_index
   /// not numerical differentiable at index point
-  __host__ __device__ inline Eigen::Vector2d gradient(const float_index& idx) const {
-    const double lr = floor(idx(0)), lc = floor(idx(1));
-    const double hr = lr + 1.0, hc = lc + 1.0;
-    const size_t lri = static_cast<size_t>(lr), lci = static_cast<size_t>(lc),
-        hri = static_cast<size_t>(hr), hci = static_cast<size_t>(hc);
-    return Eigen::Vector2d(
-        (hc-idx(1)) * (signed_distance(hri, lci)-signed_distance(lri, lci)) +
-        (idx(1)-lc) * (signed_distance(hri, hci)-signed_distance(lri, hci)),
 
-        (hr-idx(0)) * (signed_distance(lri, hci)-signed_distance(lri, lci)) +
-        (idx(0)-lr) * (signed_distance(hri, hci)-signed_distance(hri, lci)));
-  }
+  // __host__ __device__ inline Eigen::Vector2d gradient(const float_index& idx) const {
+  //   const double lr = floor(idx(0)), lc = floor(idx(1));
+  //   const double hr = lr + 1.0, hc = lc + 1.0;
+  //   const size_t lri = static_cast<size_t>(lr), lci = static_cast<size_t>(lc),
+  //       hri = static_cast<size_t>(hr), hci = static_cast<size_t>(hc);
+  //   return Eigen::Vector2d(
+  //       (hc-idx(1)) * (signed_distance(hri, lci)-signed_distance(lri, lci)) +
+  //       (idx(1)-lc) * (signed_distance(hri, hci)-signed_distance(lri, hci)),
+
+  //       (hr-idx(0)) * (signed_distance(lri, hci)-signed_distance(lri, lci)) +
+  //       (idx(0)-lr) * (signed_distance(hri, hci)-signed_distance(hri, lci)));
+  // }
 
   // access
-  __host__ __device__ inline double signed_distance(size_t r, size_t c) const {
+  __host__ __device__ inline double signed_distance(int r, int c) const {
     return data_array[r + c * field_rows_];
   }
 
   const Eigen::Vector2d& origin() const { return origin_; }
-  size_t x_count() const { return field_cols_; }
-  size_t y_count() const { return field_rows_; }
   double cell_size() const { return cell_size_; }
   const Eigen::MatrixXd& raw_data() const { return data_; }
 
@@ -151,7 +151,17 @@ public:
 
     void Cuda_free();
 
+    void Cuda_free_iter();
+
     void CudaIntegration(const MatrixXd& sigmapts, const MatrixXd& weights, MatrixXd& results, const MatrixXd& mean, int type);
+
+    void costIntegration(const MatrixXd& sigmapts, VectorXd& results, const int sigmapts_cols);
+
+    void funcValueIntegration(const MatrixXd& sigmapts, VectorXd& results, const int sigmapts_cols);
+
+    void dmuIntegration(const MatrixXd& sigmapts, const MatrixXd& mu, VectorXd& results, const int sigmapts_cols);
+
+    void ddmuIntegration(MatrixXd& results);
 
     __host__ __device__ double cost_obstacle_planar(const VectorXd& pose, const PlanarSDF& sdf){
       int n_balls = 1;
@@ -188,7 +198,8 @@ public:
   double _epsilon, _radius, _sigma;
   PlanarSDF _sdf;
 
-  double *_weight_gpu, *_data_gpu;
+  int _sigmapts_rows, _dim_state, _n_states;
+  double *_weight_gpu, *_data_gpu, *_func_value_gpu, *_sigmapts_gpu, *_mu_gpu;
   CudaOperation* _class_gpu;
 
 };
