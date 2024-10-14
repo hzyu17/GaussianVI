@@ -58,9 +58,13 @@ public:
             _mu{VectorXd::Zero(_dim)},
             _precision{SpMat(_dim, _dim)},
             _covariance{SpMat(_dim, _dim)},
-            _res_recorder{niterations, dim_state, num_states, _nfactors}
+            _res_recorder{niterations, dim_state, num_states, _nfactors},
+            _Vdmu(VectorXd::Zero(_dim)),
+            _Vddmu(SpMat(_dim, _dim))
     {
         construct_sparse_precision();
+        _Vdmu.setZero();
+        _Vddmu.setZero();
     }
 
 protected:
@@ -96,6 +100,9 @@ protected:
 
     /// filename for the perturbed costs
     std::string _file_perturbed_cost;
+
+    VectorXd _Vdmu;
+    SpMat _Vddmu;  
 
 
 public:
@@ -175,6 +182,10 @@ public:
     inline SpMat covariance() const { return _covariance; }
 
     inline SpMat precision() const { return _precision; }
+
+    inline VectorXd Vdmu() const {return _Vdmu; }
+
+    inline SpMat Vddmu() const { return _Vddmu; }
 
     inline void inverse_inplace(){
         ldlt_decompose();

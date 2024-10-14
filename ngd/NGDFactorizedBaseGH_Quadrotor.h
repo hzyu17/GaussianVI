@@ -121,6 +121,20 @@ void calculate_partial_V() override{
         _cuda -> Cuda_free();
     }
 
+    inline bool linear_factor() override { return _isLinear; }
+
+    inline void costIntegration(const MatrixXd& sigmapts, VectorXd& results, const int sigmapts_cols) override{
+        _cuda -> Cuda_init_iter(sigmapts, results, sigmapts_cols);
+        _cuda -> costIntegration(sigmapts, results, sigmapts_cols);
+    }
+
+    inline void dmuIntegration(const MatrixXd& sigmapts, const MatrixXd& mean, VectorXd& E_phi_mat, VectorXd& dmu_mat, MatrixXd& ddmu_mat, const int sigmapts_cols) override{
+        _cuda -> costIntegration(sigmapts, E_phi_mat, sigmapts_cols);
+        _cuda -> dmuIntegration(sigmapts, mean, dmu_mat, sigmapts_cols);
+        _cuda -> ddmuIntegration(ddmu_mat);
+        _cuda -> Cuda_free_iter();
+    }
+
     double fact_cost_value(const VectorXd& fill_joint_mean, const SpMat& joint_cov) override {
 
         VectorXd mean_k = extract_mu_from_joint(fill_joint_mean);
@@ -145,8 +159,18 @@ void calculate_partial_V() override{
 
     }
 
+    void cuda_matrices(std::vector<MatrixXd>& vec_sigmapts, std::vector<VectorXd>& vec_mean) override {   
+
+        updateGH(this->_mu, this->_covariance);
+
+        vec_mean[_start_index-1] = this->_mu;
+        vec_sigmapts[_start_index-1] = this -> _gh -> sigmapts();
+
+    }
+
     std::shared_ptr<CudaOperation_Quad> _cuda;
     double _sigma, _epsilon, _radius;
+    bool _isLinear = false;
 
 };
 

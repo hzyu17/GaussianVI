@@ -48,12 +48,6 @@ void GVIGH<Factor>::optimize(std::optional<bool> verbose)
     bool is_lowtemp = true;
     bool converged = false;
 
-    // #pragma omp parallel for
-    // for (int i = 0; i < _vec_factors.size(); i++){
-    //     auto &opt_k = _vec_factors[i];
-    //     opt_k -> cuda_init();
-    // }
-
     _vec_nonlinear_factors[0]->cuda_init();
 
     for (int i_iter = 0; i_iter < _niters; i_iter++)
@@ -79,17 +73,17 @@ void GVIGH<Factor>::optimize(std::optional<bool> verbose)
         // ============= Collect factor costs =============
         VectorXd fact_costs_iter = this->factor_cost_vector();
 
+        // Timer timer;
+        // timer.start();
+
         // auto result_cuda = factor_cost_vector_cuda();
+
+        // std::cout << "========== Optimization time sparse GH: " << timer.end_sec() << std::endl;
 
         // double cost_iter = std::get<0>(result_cuda);
         // VectorXd fact_costs_iter = std::get<1>(result_cuda);
         // VectorXd dmu = std::get<2>(result_cuda);
         // SpMat dprecision = std::get<3>(result_cuda);
-
-        // double cost_iter_cuda = std::get<0>(result_cuda);
-        // VectorXd fact_costs_iter_cuda = std::get<1>(result_cuda);
-        // VectorXd dmu_cuda = std::get<2>(result_cuda);
-        // SpMat dprecision_cuda = std::get<3>(result_cuda);
 
         if (is_verbose){
             std::cout << "--- cost_iter ---" << std::endl << cost_iter << std::endl;
@@ -104,8 +98,10 @@ void GVIGH<Factor>::optimize(std::optional<bool> verbose)
         VectorXd dmu = std::get<0>(gradients);
         SpMat dprecision = std::get<1>(gradients);
 
-        // std::cout << "Error of cost " << cost_iter - cost_iter_cuda << std::endl;
-        // std::cout << "Error of cost vector " << (fact_costs_iter - fact_costs_iter_cuda).norm() << std::endl;
+        // VectorXd dmu_cpu = std::get<0>(gradients);
+        // SpMat dprecision_cpu = std::get<1>(gradients);
+        
+
         // std::cout << "Error of dmu " << (dmu - dmu_cuda).norm() << std::endl;
         // std::cout << "Error of dprecision " << (dprecision.toDense() - dprecision_cuda.toDense()).norm() << std::endl;
         
@@ -157,12 +153,6 @@ void GVIGH<Factor>::optimize(std::optional<bool> verbose)
         }
     }
 
-    // #pragma omp parallel for
-    // for (int i = 0; i < _vec_factors.size(); i++){
-    //     auto &opt_k = _vec_factors[i];
-    //     opt_k -> cuda_free();
-    // }
-
     _vec_nonlinear_factors[0]->cuda_free();
 
     std::cout << "=========== Saving Data ===========" << std::endl;
@@ -174,18 +164,20 @@ template <typename Factor>
 std::tuple<double, VectorXd, VectorXd, SpMat> GVIGH<Factor>::factor_cost_vector_cuda(const VectorXd& fill_joint_mean, SpMat& joint_precision)
 {
     int n_nonlinear = _vec_nonlinear_factors.size();
+
     VectorXd fac_costs(_nfactors);
     VectorXd nonlinear_fac_cost(n_nonlinear);
-    VectorXd linear_fac_cost(_vec_linear_factors.size());
     fac_costs.setZero();
     nonlinear_fac_cost.setZero();
-    linear_fac_cost.setZero();
 
     SpMat joint_cov = inverse_GBP(joint_precision);
 
     std::vector<MatrixXd> sigmapts_vec(n_nonlinear);
     std::vector<VectorXd> mean_vec(n_nonlinear);
 
+    omp_set_num_threads(20); 
+
+    #pragma omp parallel for
     for (int i = 0; i < n_nonlinear; i++)
     {
         auto &opt_k = _vec_nonlinear_factors[i];
@@ -210,22 +202,26 @@ std::tuple<double, VectorXd, VectorXd, SpMat> GVIGH<Factor>::factor_cost_vector_
     _vec_nonlinear_factors[0]->costIntegration(sigmapts_mat, nonlinear_fac_cost, sigma_cols);
     nonlinear_fac_cost = nonlinear_fac_cost / this ->_temperature; 
 
+    int cnt = 0;
+
+    // Use a private counter for each thread to avoid race conditions
     int thread_cnt = 0;
+
     #pragma omp for
-    for (int i = 0; i < _vec_linear_factors.size(); ++i)
+    for (int i = 0; i < _vec_factors.size(); ++i)
     {
-        auto &opt_k = _vec_linear_factors[i];
-        linear_fac_cost(thread_cnt) = opt_k->fact_cost_value(fill_joint_mean, joint_cov); 
+        auto &opt_k = _vec_factors[i];
+        if (opt_k->linear_factor())
+            fac_costs(thread_cnt) = opt_k->fact_cost_value(fill_joint_mean, joint_cov); 
+        else
+            fac_costs(thread_cnt) = nonlinear_fac_cost(opt_k->_start_index - 1);
         thread_cnt += 1;
     }
 
-    fac_costs(0) = linear_fac_cost(0);
-    for(int i = 0; i < n_nonlinear; i++){
-        fac_costs(2*i+1) = linear_fac_cost(i+1);
-        fac_costs(2*i+2) = nonlinear_fac_cost(i);
+    #pragma omp critical
+    {
+        cnt += thread_cnt; // Safely update the global counter
     }
-    fac_costs(fac_costs.size() - 2) = linear_fac_cost(linear_fac_cost.size() - 2);
-    fac_costs(fac_costs.size() - 1) = linear_fac_cost(linear_fac_cost.size() - 1);
 
     double value = fac_costs.sum();
     SparseLDLT ldlt(joint_precision);
@@ -233,17 +229,13 @@ std::tuple<double, VectorXd, VectorXd, SpMat> GVIGH<Factor>::factor_cost_vector_
 
     double cost = value + vec_D.array().log().sum() / 2;
 
-
+    // std::cout << "Factor Costs:" << fac_costs.transpose() << std::endl << std::endl;
 
     #pragma omp parallel for
     for (int i = 0; i < n_nonlinear; i++)
     {
         auto &opt_k = _vec_nonlinear_factors[i];
         opt_k->cuda_matrices(sigmapts_vec, mean_vec); 
-    }
-
-    for (int i = 0; i < n_nonlinear; i++)
-    {
         sigmapts_mat.block(0, i * sigma_cols, sigma_rows, sigma_cols) = sigmapts_vec[i];
         mean_mat.col(i) = mean_vec[i];
     }
@@ -253,10 +245,8 @@ std::tuple<double, VectorXd, VectorXd, SpMat> GVIGH<Factor>::factor_cost_vector_
     MatrixXd ddmu_mat(sigma_cols, sigma_cols * n_nonlinear);
 
     _vec_nonlinear_factors[0]->dmuIntegration(sigmapts_mat, mean_mat, E_phi_mat, dmu_mat, ddmu_mat, sigma_cols);
-
-    // std::cout << std::setprecision(16) << "dmu_mat norm = " << dmu_mat.norm() << std::endl;
-    // std::cout << std::setprecision(16) << "ddmu_mat norm = " << ddmu_mat.norm() << std::endl;
     
+    #pragma omp parallel for
     for (int i = 0; i < n_nonlinear; i++){
         MatrixXd precision_i = _vec_nonlinear_factors[i]->precision();
         dmu_mat.segment(i*sigma_cols, sigma_cols) = precision_i * dmu_mat.segment(i*sigma_cols, sigma_cols) / this ->_temperature;
@@ -287,14 +277,6 @@ std::tuple<double, VectorXd, VectorXd, SpMat> GVIGH<Factor>::factor_cost_vector_
     //         Vddmu_private += opt_k->local2joint_dprecision();
     //     }
 
-    //     #pragma omp for nowait // Nowait allows threads to continue without waiting at the end of the loop
-    //     for (int i = 0; i < _vec_nonlinear_factors.size(); i++){
-    //         _vec_nonlinear_factors[i]->Vdmu() = dmu_mat.segment(i*sigma_cols, sigma_cols);
-    //         _vec_nonlinear_factors[i]->Vddmu() = ddmu_mat.block(0, i*sigma_cols, sigma_cols, sigma_cols);
-    //         Vdmu_private += _vec_nonlinear_factors[i]->local2joint_dmu();
-    //         Vddmu_private += _vec_nonlinear_factors[i]->local2joint_dprecision();
-    //     }
-
     //     #pragma omp critical
     //     {
     //         Vdmu_sum += Vdmu_private;
@@ -312,27 +294,35 @@ std::tuple<double, VectorXd, VectorXd, SpMat> GVIGH<Factor>::factor_cost_vector_
 
     // Vddmu_sum = mat_full.sparseView();
 
+    _Vdmu.setZero();
+    _Vddmu.setZero();
 
-    VectorXd Vdmu_sum_fac(_dim);
-    SpMat Vddmu_sum_fac = SpMat(_dim, _dim);
-    VectorXd dmu_mat_cpu(dmu_mat.size());
-    MatrixXd ddmu_mat_cpu(ddmu_mat.rows(), ddmu_mat.cols());
-    Vdmu_sum_fac.setZero();
-    Vddmu_sum_fac.setZero();
+    VectorXd Vdmu_sum = VectorXd::Zero(_dim);
+    SpMat Vddmu_sum = SpMat(_dim, _dim);
+    Vddmu_sum.setZero();
 
-    #pragma omp parallel
+    #pragma omp parallel 
     {
         // Thread-local storage to avoid race conditions
-        VectorXd Vdmu_private = VectorXd::Zero(Vdmu_sum_fac.size());
-        SpMat Vddmu_private = SpMat(Vddmu_sum_fac.rows(), Vddmu_sum_fac.cols());
+        VectorXd Vdmu_private = VectorXd::Zero(Vdmu_sum.size());
+        SpMat Vddmu_private = SpMat(Vddmu_sum.rows(), Vddmu_sum.cols());
 
         #pragma omp for nowait // Nowait allows threads to continue without waiting at the end of the loop
         for (auto &opt_k : _vec_factors) {
-            opt_k->calculate_partial_V();
-            Vdmu_private += opt_k->local2joint_dmu();
-            Vddmu_private += opt_k->local2joint_dprecision();
+            if (opt_k->linear_factor()){
+                opt_k->calculate_partial_V();
+                Vdmu_private += opt_k->local2joint_dmu();
+                Vddmu_private += opt_k->local2joint_dprecision();
+            }
+            else{
+                opt_k->setVdmu(dmu_mat.segment((opt_k->index()-1)*sigma_cols, sigma_cols));
+                opt_k->setVddmu(ddmu_mat.block(0, (opt_k->index()-1)*sigma_cols, sigma_cols, sigma_cols));
+                Vdmu_private += opt_k->local2joint_dmu();
+                Vddmu_private += opt_k->local2joint_dprecision();
+            }
         }
 
+        // This is for comparing the error of the cuda output
         // #pragma omp for nowait // Nowait allows threads to continue without waiting at the end of the loop
         // for (int i = 0; i < _vec_nonlinear_factors.size(); i++){
         //     auto result = _vec_nonlinear_factors[i]->derivatives();
@@ -344,27 +334,18 @@ std::tuple<double, VectorXd, VectorXd, SpMat> GVIGH<Factor>::factor_cost_vector_
 
         #pragma omp critical
         {
-            Vdmu_sum_fac += Vdmu_private;
-            Vddmu_sum_fac += Vddmu_private;
+            Vdmu_sum += Vdmu_private;
+            Vddmu_sum += Vddmu_private;
         }
     }
 
-    // std::cout << "dmu_mat Error" << std::endl << (dmu_mat - dmu_mat_cpu).transpose() << std::endl;
-    // std::cout << "ddmu_mat Error" << std::endl << (ddmu_mat - ddmu_mat_cpu) << std::endl;
+    _Vdmu = Vdmu_sum;
+    _Vddmu = Vddmu_sum;
 
-    // std::cout << "Vdmu True Value" << std::endl << Vdmu_sum_fac.transpose() << std::endl;
-    // std::cout << "Vdmu Error" << std::endl << (Vdmu_sum_fac - Vdmu_sum).norm() << std::endl;
-    // std::cout << "Vddmu Error" << std::endl << (Vddmu_sum_fac - Vddmu_sum).norm() << std::endl;
-    
-
-    //May be convertion between SpMat and DenseMat
-    SpMat dprecision = Vddmu_sum_fac - _precision;
+    SpMat dprecision = _Vddmu - _precision;
 
     Eigen::ConjugateGradient<SpMat, Eigen::Upper> solver;
-    VectorXd dmu = solver.compute(Vddmu_sum_fac).solve(-Vdmu_sum_fac);
-
-    // std::cout << "dmu norm after filling = " << dmu.norm() << std::endl;
-    // std::cout << "dprecision norm after filling = " << dprecision.norm() << std::endl << std::endl;
+    VectorXd dmu = solver.compute(_Vddmu).solve(-_Vdmu);
 
     return std::make_tuple(cost, fac_costs, dmu, dprecision);
 }
@@ -373,7 +354,12 @@ std::tuple<double, VectorXd, VectorXd, SpMat> GVIGH<Factor>::factor_cost_vector_
 template <typename Factor>
 std::tuple<VectorXd, VectorXd, SpMat> GVIGH<Factor>::time_test_cuda(const VectorXd& fill_joint_mean, SpMat& joint_precision)
 {
-    // _vec_nonlinear_factors[0]->cuda_init();
+    _vec_nonlinear_factors[0]->cuda_init();
+
+    auto result_cuda = factor_cost_vector_cuda();
+
+    _vec_nonlinear_factors[0]->cuda_free();
+
 
     // int n_nonlinear = _vec_nonlinear_factors.size();
     // VectorXd nonlinear_fac_cost(n_nonlinear);

@@ -141,6 +141,7 @@ template <typename Factor>
 void GVIGH<Factor>::time_test()
 {
     double cost_iter = this->cost_value();
+    VectorXd fact_costs_iter = this->factor_cost_vector();
     std::tuple<VectorXd, SpMat> gradients = compute_gradients();
 }
 

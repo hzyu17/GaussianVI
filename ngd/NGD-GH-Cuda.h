@@ -43,18 +43,18 @@ public:
           int niterations = 5,
           double temperature = 1.0,
           double high_temperature = 100.0) :
-        GVIGH<FactorizedOptimizer>(vec_fact_optimizers, dim_state, num_states, niterations, temperature, high_temperature),
-        _Vdmu(VectorXd::Zero(Base::_dim)),
-        _Vddmu(SpMat(Base::_dim, Base::_dim))
+        GVIGH<FactorizedOptimizer>(vec_fact_optimizers, dim_state, num_states, niterations, temperature, high_temperature)
+        // _Vdmu(VectorXd::Zero(Base::_dim)),
+        // _Vddmu(SpMat(Base::_dim, Base::_dim))
     {
-        _Vdmu.setZero();
-        _Vddmu.setZero();
+        // _Vdmu.setZero();
+        // _Vddmu.setZero();
 
     }
 
 protected:
-    VectorXd _Vdmu;
-    SpMat _Vddmu;    
+    // VectorXd _Vdmu;
+    // SpMat _Vddmu;    
 
 public:
 /// ************************* Override functions for NGD algorithm *************************************
@@ -90,12 +90,6 @@ public:
     std::tuple<double, VectorXd, VectorXd, SpMat> factor_cost_vector_cuda() override;
 
     std::tuple<VectorXd, VectorXd, SpMat> time_test_cuda() override;
-    
-
-    inline VectorXd Vdmu() const {return _Vdmu; }
-
-    inline SpMat Vddmu() const { return _Vddmu; }
-    
 
 }; //class
 

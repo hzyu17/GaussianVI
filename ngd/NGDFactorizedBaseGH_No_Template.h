@@ -37,7 +37,7 @@ public:
                         double epsilon, double radius, 
                         double temperature, double high_temperature,
                         QuadratureWeightsMap weight_sigpts_map_option,
-                        std::shared_ptr<CudaOperation> cuda_ptr):
+                        std::shared_ptr<CudaOperation_PlanarPR> cuda_ptr):
                 GVIBase(dimension, state_dim, num_states, start_index, 
                         temperature, high_temperature, weight_sigpts_map_option),
                 _epsilon(epsilon),
@@ -45,7 +45,7 @@ public:
                 _radius(radius)
             {
                 GVIBase::_gh = std::make_shared<GH>(GH{gh_degree, GVIBase::_dim, GVIBase::_mu, GVIBase::_covariance, weight_sigpts_map_option});
-                // _cuda = std::make_shared<CudaOperation>(CudaOperation{cost_sigma, epsilon, radius});
+                // _cuda = std::make_shared<CudaOperation_PlanarPR>(CudaOperation_PlanarPR{cost_sigma, epsilon, radius});
                 _cuda = cuda_ptr;
 
             }
@@ -149,7 +149,7 @@ public:
     }
 
     inline void update_cuda() override{
-        _cuda = std::make_shared<CudaOperation>(CudaOperation{_sigma, _epsilon, _radius});
+        _cuda = std::make_shared<CudaOperation_PlanarPR>(CudaOperation_PlanarPR{_sigma, _epsilon, _radius});
     }
 
     inline void cuda_init() override{
@@ -163,17 +163,14 @@ public:
     inline bool linear_factor() override { return _isLinear; }
 
     inline void costIntegration(const MatrixXd& sigmapts, VectorXd& results, const int sigmapts_cols) override{
+        _cuda -> Cuda_init_iter(sigmapts, results, sigmapts_cols);
         _cuda -> costIntegration(sigmapts, results, sigmapts_cols);
     }
 
     inline void dmuIntegration(const MatrixXd& sigmapts, const MatrixXd& mean, VectorXd& E_phi_mat, VectorXd& dmu_mat, MatrixXd& ddmu_mat, const int sigmapts_cols) override{
-        std::cout << std::setprecision(16) << "Sigmapts norm = " << sigmapts.norm() << std::endl;
-        std::cout << std::setprecision(16) << "Mean norm = " << mean.norm() << std::endl;
-        _cuda -> funcValueIntegration(sigmapts, E_phi_mat, sigmapts_cols);
+        _cuda -> costIntegration(sigmapts, E_phi_mat, sigmapts_cols);
         _cuda -> dmuIntegration(sigmapts, mean, dmu_mat, sigmapts_cols);
         _cuda -> ddmuIntegration(ddmu_mat);
-        // std::cout << "dmu_mat norm = " << dmu_mat.norm() << std::endl;
-        // std::cout << "ddmu_mat norm = " << ddmu_mat.norm() << std::endl;
         _cuda -> Cuda_free_iter();
     }
 
@@ -212,7 +209,7 @@ public:
     }
     
     VectorXd _mean;
-    std::shared_ptr<CudaOperation> _cuda;
+    std::shared_ptr<CudaOperation_PlanarPR> _cuda;
     double _sigma, _epsilon, _radius;
     bool _isLinear = false;
 

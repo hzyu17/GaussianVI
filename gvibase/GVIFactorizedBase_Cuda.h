@@ -194,6 +194,9 @@ public:
         return joint_mean;
     }
 
+    inline void setVdmu(const MatrixXd& Vdmu) { _Vdmu = Vdmu; }
+    
+    inline void setVddmu(const MatrixXd& Vddmu) { _Vddmu = Vddmu; }
 
 
     /**
@@ -208,6 +211,8 @@ public:
     inline MatrixXd Vdmu() const {return _Vdmu; }
 
     inline MatrixXd Vddmu() const {return _Vddmu; }
+
+    inline int index() const {return _start_index; }
 
     /********************************************************/
     /// Function interfaces

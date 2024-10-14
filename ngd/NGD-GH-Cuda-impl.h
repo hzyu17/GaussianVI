@@ -19,11 +19,11 @@ namespace gvi{
  */
 template <typename Factor>
 std::tuple<VectorXd, SpMat> NGDGH<Factor>::compute_gradients(std::optional<double>step_size){
-    _Vdmu.setZero();
-    _Vddmu.setZero();
+    Base::_Vdmu.setZero();
+    Base::_Vddmu.setZero();
 
-    VectorXd Vdmu_sum = VectorXd::Zero(_Vdmu.size());
-    SpMat Vddmu_sum = SpMat(_Vddmu.rows(), _Vddmu.cols());
+    VectorXd Vdmu_sum = VectorXd::Zero(Base::_Vdmu.size());
+    SpMat Vddmu_sum = SpMat(Base::_Vddmu.rows(), Base::_Vddmu.cols());
 
     /**
      * @brief OMP parallel on cpu.
@@ -33,10 +33,8 @@ std::tuple<VectorXd, SpMat> NGDGH<Factor>::compute_gradients(std::optional<doubl
     #pragma omp parallel
     {
         // Thread-local storage to avoid race conditions
-        VectorXd Vdmu_private = VectorXd::Zero(_Vdmu.size());
-        // VectorXd Vdmu_private_nonlinear = VectorXd::Zero(_Vdmu.size());
-        SpMat Vddmu_private = SpMat(_Vddmu.rows(), _Vddmu.cols());
-        // SpMat Vddmu_private_nonlinear = SpMat(_Vddmu.rows(), _Vddmu.cols());
+        VectorXd Vdmu_private = VectorXd::Zero(Base::_Vdmu.size());
+        SpMat Vddmu_private = SpMat(Base::_Vddmu.rows(), Base::_Vddmu.cols());
 
         #pragma omp for nowait // Nowait allows threads to continue without waiting at the end of the loop
         for (auto &opt_k : Base::_vec_factors) {
@@ -44,13 +42,6 @@ std::tuple<VectorXd, SpMat> NGDGH<Factor>::compute_gradients(std::optional<doubl
             Vdmu_private += opt_k->local2joint_dmu();
             Vddmu_private += opt_k->local2joint_dprecision();
         }
-
-        // #pragma omp for nowait // Nowait allows threads to continue without waiting at the end of the loop
-        // for (auto &opt_k : Base::_vec_nonlinear_factors) {
-        //     auto result = opt_k->derivatives();
-        //     Vdmu_private_nonlinear += opt_k->local2joint_dmu();
-        //     Vddmu_private_nonlinear += opt_k->local2joint_dprecision();
-        // }
 
         #pragma omp critical
         {
@@ -62,15 +53,15 @@ std::tuple<VectorXd, SpMat> NGDGH<Factor>::compute_gradients(std::optional<doubl
     }
 
     // Update the member variables 
-    _Vdmu = Vdmu_sum;
-    _Vddmu = Vddmu_sum;
+    Base::_Vdmu = Vdmu_sum;
+    Base::_Vddmu = Vddmu_sum;
 
     // std::cout << "Vdmu" << _Vdmu << std::endl;
 
-    SpMat dprecision = _Vddmu - Base::_precision;
+    SpMat dprecision = Base::_Vddmu - Base::_precision;
 
     Eigen::ConjugateGradient<SpMat, Eigen::Upper> solver;
-    VectorXd dmu =  solver.compute(_Vddmu).solve(-_Vdmu);
+    VectorXd dmu =  solver.compute(Base::_Vddmu).solve(-Base::_Vdmu);
 
     return std::make_tuple(dmu, dprecision);
 }
@@ -78,8 +69,8 @@ std::tuple<VectorXd, SpMat> NGDGH<Factor>::compute_gradients(std::optional<doubl
 
 template <typename Factor>
 void NGDGH<Factor>::derivatives(VectorXd& dmu_mat, MatrixXd& ddmu_mat, int sigma_cols){
-    _Vdmu.setZero();
-    _Vddmu.setZero();
+    Base::_Vdmu.setZero();
+    Base::_Vddmu.setZero();
 
     VectorXd Vdmu(dmu_mat.size());
     MatrixXd Vddmu(ddmu_mat.rows(), ddmu_mat.cols());
