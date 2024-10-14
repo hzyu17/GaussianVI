@@ -37,7 +37,6 @@ public:
                         double epsilon, double radius, 
                         double temperature, double high_temperature,
                         QuadratureWeightsMap weight_sigpts_map_option, 
-                        std::shared_ptr<GH> gh_ptr, 
                         std::shared_ptr<CudaOperation_Quad> cuda_ptr):
                 GVIBase(dimension, state_dim, num_states, start_index, 
                         temperature, high_temperature, weight_sigpts_map_option),
@@ -46,9 +45,8 @@ public:
                 _radius(radius)
             {
                 GVIBase::_gh = std::make_shared<GH>(GH{gh_degree, GVIBase::_dim, GVIBase::_mu, GVIBase::_covariance, weight_sigpts_map_option});
-                // GVIBase::_gh = gh_ptr;
-                _cuda = std::make_shared<CudaOperation_Quad>(CudaOperation_Quad{cost_sigma, epsilon, radius});
-                // _cuda = cuda_ptr;
+                // _cuda = std::make_shared<CudaOperation_Quad>(CudaOperation_Quad{cost_sigma, epsilon, radius});
+                _cuda = cuda_ptr;
 
             }
 public:
@@ -151,11 +149,10 @@ void calculate_partial_V() override{
         VectorXd mean_k = extract_mu_from_joint(fill_joint_mean);
         MatrixXd Cov_k = extract_cov_from_joint(joint_cov);
 
-        vec_mean[_start_index] = mean_k;
-
         updateGH(mean_k, Cov_k);
 
-        vec_sigmapts[_start_index] = this -> _gh -> sigmapts();
+        vec_mean[_start_index-1] = mean_k;
+        vec_sigmapts[_start_index-1] = this -> _gh -> sigmapts();
 
     }
 

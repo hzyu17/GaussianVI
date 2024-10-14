@@ -64,26 +64,26 @@ void GVIGH<Factor>::optimize(std::optional<bool> verbose)
         }
 
         // ============= Cost at current iteration =============
-        double cost_iter = this->cost_value(); // -> Base::cost_value(this->_mu, this->_precision);
+        // double cost_iter = this->cost_value(); // -> Base::cost_value(this->_mu, this->_precision);
 
         if (is_verbose){
             std::cout << "========= iteration " << i_iter << " ========= " << std::endl;
         }
 
         // ============= Collect factor costs =============
-        VectorXd fact_costs_iter = this->factor_cost_vector();
+        // VectorXd fact_costs_iter = this->factor_cost_vector();
 
         // Timer timer;
         // timer.start();
 
-        // auto result_cuda = factor_cost_vector_cuda();
+        auto result_cuda = factor_cost_vector_cuda();
 
         // std::cout << "========== Optimization time sparse GH: " << timer.end_sec() << std::endl;
 
-        // double cost_iter = std::get<0>(result_cuda);
-        // VectorXd fact_costs_iter = std::get<1>(result_cuda);
-        // VectorXd dmu = std::get<2>(result_cuda);
-        // SpMat dprecision = std::get<3>(result_cuda);
+        double cost_iter = std::get<0>(result_cuda);
+        VectorXd fact_costs_iter = std::get<1>(result_cuda);
+        VectorXd dmu = std::get<2>(result_cuda);
+        SpMat dprecision = std::get<3>(result_cuda);
 
         if (is_verbose){
             std::cout << "--- cost_iter ---" << std::endl << cost_iter << std::endl;
@@ -93,17 +93,10 @@ void GVIGH<Factor>::optimize(std::optional<bool> verbose)
         _res_recorder.update_data(_mu, _covariance, _precision, cost_iter, fact_costs_iter);
 
         // gradients
-        std::tuple<VectorXd, SpMat> gradients = compute_gradients(); //Used calculate partial V here
+        // std::tuple<VectorXd, SpMat> gradients = compute_gradients(); //Used calculate partial V here
 
-        VectorXd dmu = std::get<0>(gradients);
-        SpMat dprecision = std::get<1>(gradients);
-
-        // VectorXd dmu_cpu = std::get<0>(gradients);
-        // SpMat dprecision_cpu = std::get<1>(gradients);
-        
-
-        // std::cout << "Error of dmu " << (dmu - dmu_cuda).norm() << std::endl;
-        // std::cout << "Error of dprecision " << (dprecision.toDense() - dprecision_cuda.toDense()).norm() << std::endl;
+        // VectorXd dmu = std::get<0>(gradients);
+        // SpMat dprecision = std::get<1>(gradients);
         
         int cnt = 0;
         int B = 1;
@@ -229,7 +222,6 @@ std::tuple<double, VectorXd, VectorXd, SpMat> GVIGH<Factor>::factor_cost_vector_
 
     double cost = value + vec_D.array().log().sum() / 2;
 
-    // std::cout << "Factor Costs:" << fac_costs.transpose() << std::endl << std::endl;
 
     #pragma omp parallel for
     for (int i = 0; i < n_nonlinear; i++)

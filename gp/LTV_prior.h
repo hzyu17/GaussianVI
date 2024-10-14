@@ -33,46 +33,32 @@ class LTV_GP : public LinearFactor{
         _delta_t{delta_t}, 
         _Qc{Qc}, 
         _invQc{Qc.inverse()}, 
-        _invQ{MatrixXd::Zero(_dim_state, _dim_state)},
-        _Phi{_dim_state, _dim_state}{
-            _Phi.setZero();
-            _Phi = (hA[4*start_index] * delta_t).exp();
-
-            _Phi_left_quater = (hA[4*start_index+1] * delta_t * 3 / 4).exp();
-            _Phi_mid = (hA[4*start_index+2] * delta_t / 2).exp();
-            _Phi_right_quater = (hA[4*start_index+3] * delta_t / 4).exp();
-
-            _A_vec.resize(5); 
-            for (int i = 0; i < 5; i++) {
-                _A_vec[i] = hA[4 * start_index + i];
+        _invQ{MatrixXd::Zero(_dim_state, _dim_state)}{
+            _Phi_results.resize(4);
+            for (int i = 0; i < 4; i++){
+                _Phi_results[i] = (hA[4*start_index + i] * delta_t * (4-i) / 4).exp();
             }
 
-            // MatrixXd Phi_pred = MatrixXd::Identity(_dim_state, _dim_state) + _delta_t * hA[_start_index];
-            // _Phi = MatrixXd::Identity(_dim_state, _dim_state) + (hA[_start_index] + hA[_start_index+1] * Phi_pred) / 2 * delta_t;
+            _A_vec.resize(5); 
+            _B_vec.resize(5); 
+            for (int i = 0; i < 5; i++) {
+                _A_vec[i] = hA[4 * start_index + i];
+                _B_vec[i] = hB[4 * start_index + i];
+            }
 
-            std::vector<double> start_times = {0.0, _delta_t / 4, _delta_t / 2, 3 * _delta_t / 4};
-
-            runge_kutta_dopri5<std::vector<double>> stepper;
-
+            
             double dt = _delta_t / 20;
             auto system_ode_bound = std::bind(&gvi::LTV_GP::system_ode, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3);
+
+            std::vector<double> start_times = {0.0, _delta_t / 4, _delta_t / 2, 3 * _delta_t / 4};
 
             for (double start_time : start_times) {
                 MatrixXd Phi0 = MatrixXd::Identity(_dim_state, _dim_state);
                 std::vector<double> Phi_vec(Phi0.data(), Phi0.data() + _dim_state * _dim_state);
-                integrate_adaptive(stepper, system_ode_bound, Phi_vec, start_time, _delta_t, dt);
+                integrate_adaptive(_stepper, system_ode_bound, Phi_vec, start_time, _delta_t, dt);
                 MatrixXd Phi_result = Eigen::Map<const MatrixXd>(Phi_vec.data(), _dim_state, _dim_state);
-                _Phi_results.push_back(Phi_result);
+                _Phi_ode_results.push_back(Phi_result);
             }
-
-            // std::cout << "Phi0  "  << std::endl << _Phi<< std::endl;
-            // std::cout << "Error of Phi0 = "  << std::endl << _Phi - _Phi_results[0] << std::endl;
-            // std::cout << "Error = " << (Phi_result - Phi_results[0] * Phi_results[1].inverse()).norm() << std::endl;
-            // std::cout << "Norm of Phi0  " << _Phi.norm() << std::endl;
-            // std::cout << "Norm of Error = "  << std::endl << (_Phi - _Phi_results[0]).norm() << std::endl << std::endl;
-            // std::cout << "Error of Phi1  " << (_Phi_left_quater - Phi_results[1]).norm() << std::endl;
-            // std::cout << "Error of Phi2  " << (_Phi_mid - Phi_results[2]).norm() << std::endl;
-            // std::cout << "Error of Phi3  " << (_Phi_right_quater - Phi_results[3]).norm() << std::endl << std::endl << std::endl;
 
             // Obtain mi and mi_next
             VectorXd mi = target_mean[start_index];
@@ -82,47 +68,42 @@ class LTV_GP : public LinearFactor{
             _target_mu.segment(_dim_state, _dim_state) = mi_next;
             
             _Q = MatrixXd::Zero(_dim_state, _dim_state);
-            _Q = compute_Q(hA, hB, n_states);
+            _Q = compute_Q();
 
             compute_invQ();
 
             // \Lambda = [-\Phi, I]
             _Lambda = MatrixXd::Zero(_dim_state, 2*_dim_state);
-            _Lambda.block(0, 0, _dim_state, _dim_state) = -_Phi_results[0];
+            _Lambda.block(0, 0, _dim_state, _dim_state) = -_Phi_ode_results[0];
             _Lambda.block(0, _dim_state, _dim_state, _dim_state) = MatrixXd::Identity(_dim_state, _dim_state);
 
             // \Psi = [\Phi, -I]. When a(t)=0, this part is eliminated.
             _Psi = MatrixXd::Zero(_dim_state, 2*_dim_state);
-            _Psi.block(0, 0, _dim_state, _dim_state) = _Phi_results[0];
+            _Psi.block(0, 0, _dim_state, _dim_state) = _Phi_ode_results[0];
             _Psi.block(0, _dim_state, _dim_state, _dim_state) = -MatrixXd::Identity(_dim_state, _dim_state);
         } 
 
-        MatrixXd compute_Q (const std::vector<MatrixXd>& hA, const std::vector<MatrixXd>& hB, int n_states){
-            MatrixXd hA_next, hB_i, hB_mid, hB_next, hB_left_quater, hB_right_quater;
-            hB_i = hB[4 * _start_index];
-            hB_left_quater = hB[4 * _start_index + 1];
-            hB_mid = hB[4 * _start_index + 2];
-            hB_right_quater = hB[4 * _start_index + 3];
-            hB_next = hB[4 * _start_index + 4];
 
-            // Use Boole's Rule to approximate the integration
-            MatrixXd gramian = (7 * _Phi_results[0] * hB_i * hB_i.transpose() * _Phi_results[0].transpose() 
-            + 32 * _Phi_results[1] * hB_left_quater * hB_left_quater.transpose() * _Phi_results[1].transpose()
-            + 4 * _Phi_results[2] * hB_mid * hB_mid.transpose() * _Phi_results[2].transpose()
-            + 32 * _Phi_results[3] * hB_right_quater * hB_right_quater.transpose() * _Phi_results[3].transpose()
-            + 7 * hB_next * hB_next.transpose()) / 90 * _delta_t;
+        MatrixXd compute_Q (){
+            MatrixXd Q_0 = MatrixXd::Zero(_dim_state, _dim_state);
+            std::vector<double> Q_vec(Q_0.data(), Q_0.data() + _dim_state * _dim_state);
 
-            // MatrixXd gramian_pred = (_Phi * hB_i * hB_i.transpose() * _Phi.transpose() + hB_next * hB_next.transpose()) / 2 * _delta_t;
-            // MatrixXd derivative_i = hB_i * hB_i.transpose();
-            // MatrixXd derivative_next = hB_next * hB_next.transpose() + (hA_next + hA_next.transpose()) * gramian_pred;
-            // MatrixXd gramian = gramian_pred - (derivative_next - derivative_i) / 12 * _delta_t * _delta_t;
+            double dt = _delta_t / 20;
+            auto gramian_ode_bound = std::bind(&gvi::LTV_GP::gramian_ode, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3);
 
-            return gramian;
+            integrate_adaptive(_stepper, gramian_ode_bound, Q_vec, 0.0, _delta_t, dt);
+            MatrixXd Gramian = Eigen::Map<const MatrixXd>(Q_vec.data(), _dim_state, _dim_state);
 
-            // return (_Phi * hB[_start_index] * hB[_start_index].transpose() * _Phi.transpose() +
-            // hB[_start_index + 1] * hB[_start_index + 1].transpose()) / 2 * _delta_t;
+            // // Use Boole's Rule to approximate the integration
+            // MatrixXd gramian = (7 * _Phi_ode_results[0] * _B_vec[0] * _B_vec[0].transpose() * _Phi_ode_results[0].transpose() 
+            // + 32 * _Phi_ode_results[1] * _B_vec[1] * _B_vec[1].transpose() * _Phi_ode_results[1].transpose()
+            // + 4 * _Phi_ode_results[2] * _B_vec[2] * _B_vec[2].transpose() * _Phi_ode_results[2].transpose()
+            // + 32 * _Phi_ode_results[3] * _B_vec[3] * _B_vec[3].transpose() * _Phi_ode_results[3].transpose()
+            // + 7 * _B_vec[4] * _B_vec[4].transpose()) / 90 * _delta_t;
 
+            return Gramian;
         }
+
 
         void system_ode(const std::vector<double>& Phi_vec, std::vector<double>& dPhi_dt, double t) {
             MatrixXd A = A_function(t);
@@ -131,29 +112,44 @@ class LTV_GP : public LinearFactor{
             Eigen::Map<MatrixXd>(dPhi_dt.data(), _dim_state, _dim_state) = dPhi;
         }
 
+        void gramian_ode(const std::vector<double>& Q_vec, std::vector<double>& dQ_dt, double t) {
+            auto matrices = system_param(t);
+            MatrixXd gramian = Eigen::Map<const MatrixXd>(Q_vec.data(), _dim_state, _dim_state);
+            MatrixXd dQ = matrices.first * gramian + gramian * matrices.first.transpose() + matrices.second * matrices.second.transpose();
+            Eigen::Map<MatrixXd>(dQ_dt.data(), _dim_state, _dim_state) = dQ;
+        }
+
         MatrixXd A_function(double t) {
             int t_idx;
             t_idx = static_cast<int>(std::floor(4 * t / _delta_t));
             return _A_vec[t_idx];
         }
 
+        std::pair <MatrixXd, MatrixXd> system_param(double t) {
+            int t_idx;
+            t_idx = static_cast<int>(std::floor(4 * t / _delta_t));
+            return {_A_vec[t_idx], _B_vec[t_idx]};
+        }
+
+
     private:
         int _dim, _start_index;
         int _dim_state;
         double _delta_t;
         MatrixXd _Qc, _invQc, _Q, _invQ;
-        MatrixXd _Phi, _Lambda, _Psi, _Phi_mid, _Phi_left_quater, _Phi_right_quater;
-        std::vector<MatrixXd> _A_vec;
-        std::vector<MatrixXd> _Phi_results;
+        MatrixXd _Lambda, _Psi;
+        std::vector<MatrixXd> _A_vec, _B_vec;
+        std::vector<MatrixXd> _Phi_results, _Phi_ode_results;
         VectorXd _m0, _target_mu;
         EigenWrapper _ei;
+        runge_kutta_dopri5<std::vector<double>> _stepper;
         
     public:
         inline MatrixXd Q() const { return _Q; }
         
         inline MatrixXd Qc() const { return _Qc; }
 
-        inline MatrixXd Phi() const { return _Phi; }
+        inline MatrixXd Phi() const { return _Phi_ode_results[0]; }
 
         /**
          * @brief the cost function
@@ -161,7 +157,7 @@ class LTV_GP : public LinearFactor{
          * @param theta2 [x2; v2]
          */
         inline double cost(const VectorXd& theta1, const VectorXd& theta2) const{
-            double cost = (_Phi*theta1-theta2).transpose()* _invQ * (_Phi*theta1-theta2);
+            double cost = (_Phi_ode_results[0]*theta1-theta2).transpose()* _invQ * (_Phi_ode_results[0]*theta1-theta2);
             return cost / 2;
         }
 
@@ -233,3 +229,16 @@ class LTV_GP : public LinearFactor{
 
 // MatrixXd Err_LTI = _Phi_results[0] - Phi_LTI;
 // std::cout << "Norm of LTI Error = "  << std::endl << Err_LTI.norm() << std::endl << std::endl;
+
+
+// MatrixXd gramian_pred = (_Phi * hB_i * hB_i.transpose() * _Phi.transpose() + hB_next * hB_next.transpose()) / 2 * _delta_t;
+// MatrixXd derivative_i = hB_i * hB_i.transpose();
+// MatrixXd derivative_next = hB_next * hB_next.transpose() + (hA_next + hA_next.transpose()) * gramian_pred;
+// MatrixXd gramian = gramian_pred - (derivative_next - derivative_i) / 12 * _delta_t * _delta_t;
+
+// return (_Phi * hB[_start_index] * hB[_start_index].transpose() * _Phi.transpose() +
+// hB[_start_index + 1] * hB[_start_index + 1].transpose()) / 2 * _delta_t;
+
+
+            // MatrixXd Phi_pred = MatrixXd::Identity(_dim_state, _dim_state) + _delta_t * hA[_start_index];
+            // _Phi = MatrixXd::Identity(_dim_state, _dim_state) + (hA[_start_index] + hA[_start_index+1] * Phi_pred) / 2 * delta_t;
