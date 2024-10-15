@@ -75,6 +75,8 @@ protected:
 
     double _stop_err;
 
+    double _alpha = 0.95;
+
     /// @param _vec_factors Vector of marginal optimizers
     std::vector<std::shared_ptr<FactorizedOptimizer>> _vec_factors;
     std::vector<std::shared_ptr<FactorizedOptimizer>> _vec_linear_factors;

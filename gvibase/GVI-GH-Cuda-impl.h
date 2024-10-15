@@ -87,7 +87,7 @@ void GVIGH<Factor>::optimize(std::optional<bool> verbose)
 
         if (is_verbose){
             std::cout << "--- cost_iter ---" << std::endl << cost_iter << std::endl;
-            // std::cout << "Factor Costs:" << fact_costs_iter.transpose() << std::endl << std::endl;
+            std::cout << "Factor Costs:" << fact_costs_iter.transpose() << std::endl << std::endl;
         }
 
         _res_recorder.update_data(_mu, _covariance, _precision, cost_iter, fact_costs_iter);
@@ -118,7 +118,8 @@ void GVIGH<Factor>::optimize(std::optional<bool> verbose)
             // accept new cost and update mu and precision matrix
             if (new_cost < cost_iter){
                 // update mean and covariance
-                this->update_proposal(new_mu, new_precision); // Update the mu of GVIGH
+                this->update_proposal(_alpha * new_mu + (1-_alpha) * this->_mu, _alpha * new_precision + (1-_alpha) * this->_precision); // Update using EMA
+                // this->update_proposal(new_mu, new_precision); // Update the mu of GVIGH
                 // std::cout << "back tracking time: "<< cnt << std::endl;
                 break;
             }else{ 

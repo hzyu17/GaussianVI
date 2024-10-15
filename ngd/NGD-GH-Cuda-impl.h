@@ -47,8 +47,6 @@ std::tuple<VectorXd, SpMat> NGDGH<Factor>::compute_gradients(std::optional<doubl
         {
             Vdmu_sum += Vdmu_private;
             Vddmu_sum += Vddmu_private;
-            // Vdmu_sum += Vdmu_private_nonlinear;
-            // Vddmu_sum += Vddmu_private_nonlinear;
         }
     }
 
