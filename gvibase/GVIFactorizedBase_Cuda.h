@@ -126,6 +126,8 @@ public:
     */
     virtual void calculate_partial_V(){}
 
+    virtual void calculate_partial_V(const MatrixXd& E_xxphi, const VectorXd& Vdmu, double E_Phi){}
+
     virtual std::tuple<double, VectorXd, MatrixXd> derivatives(){}
 
     /**
@@ -177,6 +179,8 @@ public:
     virtual inline bool linear_factor(){}
 
     virtual inline void costIntegration(const MatrixXd& sigmapts, VectorXd& results, const int sigmapts_cols){}
+
+    virtual inline void newCostIntegration(const MatrixXd& sigmapts, VectorXd& results, const int sigmapts_cols){}
 
     virtual inline void dmuIntegration(const MatrixXd& sigmapts, const MatrixXd& mean, VectorXd& E_phi_mat, VectorXd& dmu_mat, MatrixXd& ddmu_mat, const int sigmapts_cols){}
 

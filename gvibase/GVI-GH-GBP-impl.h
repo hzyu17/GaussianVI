@@ -39,11 +39,7 @@ void GVIGH<Factor>::optimize(std::optional<bool> verbose)
     bool is_lowtemp = true;
     bool converged = false;
 
-    // #pragma omp parallel for
-    // for (int i = 0; i < _vec_factors.size(); i++){
-    //     auto &opt_k = _vec_factors[i];
-    //     opt_k -> cuda_init();
-    // }
+    // std::cout << std::fixed << std::setprecision(16);
 
     for (int i_iter = 0; i_iter < _niters; i_iter++)
     {   
@@ -77,6 +73,9 @@ void GVIGH<Factor>::optimize(std::optional<bool> verbose)
 
         VectorXd dmu = std::get<0>(gradients);
         SpMat dprecision = std::get<1>(gradients);
+
+        std::cout << "--- dmu ---" << std::endl << dmu.norm() << std::endl;
+        std::cout << "--- dprecision ---" << std::endl << dprecision.norm() << std::endl;
 
         int cnt = 0;
         int B = 1;
@@ -125,12 +124,6 @@ void GVIGH<Factor>::optimize(std::optional<bool> verbose)
         }
     }
 
-    // #pragma omp parallel for
-    // for (int i = 0; i < _vec_factors.size(); i++){
-    //     auto &opt_k = _vec_factors[i];
-    //     opt_k -> cuda_free();
-    // }
-
     std::cout << "=========== Saving Data ===========" << std::endl;
     save_data(is_verbose);
 
@@ -150,7 +143,8 @@ inline void GVIGH<Factor>::set_precision(const SpMat &new_precision)
 {
     _precision = new_precision;
     // sparse inverse
-    inverse_inplace();
+    // inverse_inplace();
+    _covariance = inverse_GBP(_precision);
 
     #pragma omp parallel
     {
@@ -230,6 +224,7 @@ SpMat GVIGH<Factor>::inverse_GBP(const SpMat &Precision)
     std::vector<Message> joint_factors(_num_states-1);
     Message variable_message;
     MatrixXd covariance(_dim, _dim);
+    covariance.setZero();
 
     // Extract the factors from the precision matrix
     // The variable in factors are 0, {0,1}, 1, {1,2}, 2, ..., {_num_states-1,_num_states}, _num_states
@@ -273,7 +268,7 @@ SpMat GVIGH<Factor>::inverse_GBP(const SpMat &Precision)
         covariance.block(0, 0, _dim_state, _dim_state) = variance;
     }
 
-    #pragma omp parallel for
+    // #pragma omp parallel for
     for (int i = 0; i < _num_states - 1; ++i) {
         MatrixXd lambda_joint = joint_factors[i].second;
         lambda_joint.block(0, 0, _dim_state, _dim_state) += forward_messages[i].second;

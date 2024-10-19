@@ -116,6 +116,8 @@ std::tuple<double, VectorXd, SpMat> NGDGH<Factor>::onestep_linesearch(const doub
 
     // new cost
     double new_cost = Base::cost_value_cuda(new_mu, new_precision);
+    
+    std::cout << "New cost = " << new_cost << std::endl;
     return std::make_tuple(new_cost, new_mu, new_precision);
 
 }

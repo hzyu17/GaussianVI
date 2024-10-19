@@ -72,7 +72,24 @@ void calculate_partial_V() override{
         this->_Vddmu.triangularView<Upper>() = (this->_precision * E_xxphi * this->_precision - this->_precision * E_phi).triangularView<Upper>();
         this->_Vddmu.triangularView<StrictlyLower>() = this->_Vddmu.triangularView<StrictlyUpper>().transpose();
         this->_Vddmu = this->_Vddmu / this->temperature();
+    }
 
+    void calculate_partial_V(const MatrixXd& ddmu_mat, const VectorXd& Vdmu, double E_Phi) override{
+
+        this->_Vdmu.setZero();
+        this->_Vddmu.setZero();
+
+        /// Integrate for E_q{_Vdmu} 
+        this->_Vdmu = Vdmu;
+        this->_Vdmu = this->_precision * this->_Vdmu;
+        this->_Vdmu = this->_Vdmu / this->temperature();
+        
+        /// Integrate for partial V^2 / ddmu_ 
+        MatrixXd E_xxphi = ddmu_mat;
+
+        this->_Vddmu.triangularView<Upper>() = (this->_precision * E_xxphi * this->_precision - this->_precision * E_Phi).triangularView<Upper>();
+        this->_Vddmu.triangularView<StrictlyLower>() = this->_Vddmu.triangularView<StrictlyUpper>().transpose();
+        this->_Vddmu = this->_Vddmu / this->temperature();
     }
     
     MatrixXd Integrate_cuda(int type){
@@ -126,8 +143,14 @@ void calculate_partial_V() override{
         _cuda -> costIntegration(sigmapts, results, sigmapts_cols);
     }
 
+    inline void newCostIntegration(const MatrixXd& sigmapts, VectorXd& results, const int sigmapts_cols) override{
+        _cuda -> Cuda_init_iter(sigmapts, results, sigmapts_cols);
+        _cuda -> costIntegration(sigmapts, results, sigmapts_cols);
+        _cuda -> Cuda_free_iter();
+    }
+
     inline void dmuIntegration(const MatrixXd& sigmapts, const MatrixXd& mean, VectorXd& E_phi_mat, VectorXd& dmu_mat, MatrixXd& ddmu_mat, const int sigmapts_cols) override{
-        _cuda -> costIntegration(sigmapts, E_phi_mat, sigmapts_cols);
+        // _cuda -> costIntegration(sigmapts, E_phi_mat, sigmapts_cols);
         _cuda -> dmuIntegration(sigmapts, mean, dmu_mat, sigmapts_cols);
         _cuda -> ddmuIntegration(ddmu_mat);
         _cuda -> Cuda_free_iter();

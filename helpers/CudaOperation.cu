@@ -671,40 +671,6 @@ void CudaOperation_3dpR::ddmuIntegration(MatrixXd& results){
 }
 
 
-
-
-
-// void CudaOperation_PlanarPR::funcValueIntegration(const MatrixXd& sigmapts, VectorXd& results, const int sigmapts_cols){
-
-//     double *result_gpu;
-//     cudaMalloc(&result_gpu, results.size() * sizeof(double));
-
-//     cudaMemcpy(_sigmapts_gpu, sigmapts.data(), sigmapts.size() * sizeof(double), cudaMemcpyHostToDevice);
-
-//     // Kernel 1: Obtain the result of function 
-//     dim3 blockSize1(16, 16);
-//     dim3 threadperblock1((_n_states + blockSize1.x - 1) / blockSize1.x, (sigmapts.rows() + blockSize1.y - 1) / blockSize1.y);
-
-//     cost_function<<<blockSize1, threadperblock1>>>(_sigmapts_gpu, _func_value_gpu, sigmapts.rows(), sigmapts_cols, _n_states, _class_gpu, _data_gpu);
-//     cudaDeviceSynchronize();
-
-//     cudaError_t err = cudaGetLastError();
-//     if (err != cudaSuccess) {
-//         printf("CUDA kernel error: %s\n", cudaGetErrorString(err));
-//     }
-
-//     // Kernel 2: Obtain the result by multiplying the pts and the weights
-//     dim3 blockSize2(16);
-//     dim3 threadperblock2((results.size() + blockSize2.x - 1) / blockSize2.x);
-
-//     obtain_cost<<<blockSize2, threadperblock2>>>(_func_value_gpu, _weight_gpu, result_gpu, sigmapts.rows(), results.size());
-//     cudaDeviceSynchronize();
-//     cudaMemcpy(results.data(), result_gpu, results.size() * sizeof(double), cudaMemcpyDeviceToHost);
-
-//     err = cudaGetLastError();
-//     if (err != cudaSuccess) {
-//         printf("CUDA kernel error: %s\n", cudaGetErrorString(err));
-//     }
-
-//     cudaFree(result_gpu);
-// }
+// cudaDeviceProp prop;
+// cudaGetDeviceProperties(&prop, 0);
+// std::cout << "Double precision performance ratio: " << prop.singleToDoublePrecisionPerfRatio << std::endl;
