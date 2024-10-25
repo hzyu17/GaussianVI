@@ -36,7 +36,7 @@ public:
                         int num_states, int start_index, double cost_sigma, 
                         double epsilon, double radius, 
                         double temperature, double high_temperature,
-                        QuadratureWeightsMap weight_sigpts_map_option,
+                        std::shared_ptr<QuadratureWeightsMap> weight_sigpts_map_option,
                         std::shared_ptr<CudaOperation_3dpR> cuda_ptr):
                 GVIBase(dimension, state_dim, num_states, start_index, 
                         temperature, high_temperature, weight_sigpts_map_option),
@@ -163,14 +163,17 @@ public:
         _cuda -> costIntegration(sigmapts, results, sigmapts_cols);
     }
 
+    inline void newCostIntegration(const MatrixXd& sigmapts, VectorXd& results, const int sigmapts_cols) override{
+        _cuda -> Cuda_init_iter(sigmapts, results, sigmapts_cols);
+        _cuda -> costIntegration(sigmapts, results, sigmapts_cols);
+        _cuda -> Cuda_free_iter();
+    }
+
     inline void dmuIntegration(const MatrixXd& sigmapts, const MatrixXd& mean, VectorXd& E_phi_mat, VectorXd& dmu_mat, MatrixXd& ddmu_mat, const int sigmapts_cols) override{
-        // std::cout << std::setprecision(16) << "Sigmapts norm = " << sigmapts.norm() << std::endl;
-        // std::cout << std::setprecision(16) << "Mean norm = " << mean.norm() << std::endl;
+        _cuda -> Cuda_init_iter(sigmapts, E_phi_mat, sigmapts_cols);
         _cuda -> costIntegration(sigmapts, E_phi_mat, sigmapts_cols);
         _cuda -> dmuIntegration(sigmapts, mean, dmu_mat, sigmapts_cols);
         _cuda -> ddmuIntegration(ddmu_mat);
-        // std::cout << "dmu_mat norm = " << dmu_mat.norm() << std::endl;
-        // std::cout << "ddmu_mat norm = " << ddmu_mat.norm() << std::endl;
         _cuda -> Cuda_free_iter();
     }
 

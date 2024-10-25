@@ -62,6 +62,35 @@ std::tuple<VectorXd, SpMat> NGDGH<Factor>::compute_gradients(std::optional<doubl
     return std::make_tuple(dmu, dprecision);
 }
 
+// To avoid using local2joint_dprecision for time tests, as it is too time-consuming
+template <typename Factor>
+std::tuple<VectorXd, SpMat> NGDGH<Factor>::compute_gradients_time(std::optional<double>step_size){
+    _Vdmu.setZero();
+    _Vddmu.setZero();
+
+    VectorXd Vdmu_sum = VectorXd::Zero(_Vdmu.size());
+    SpMat Vddmu_sum = SpMat(_Vddmu.rows(), _Vddmu.cols());
+
+    /**
+     * @brief OMP parallel on cpu.
+     */
+    omp_set_num_threads(20); 
+
+    #pragma omp parallel
+    {
+        // Thread-local storage to avoid race conditions
+        VectorXd Vdmu_private = VectorXd::Zero(_Vdmu.size());
+        SpMat Vddmu_private = SpMat(_Vddmu.rows(), _Vddmu.cols());
+
+        #pragma omp for nowait // Nowait allows threads to continue without waiting at the end of the loop
+        for (auto &opt_k : Base::_vec_factors) {
+            opt_k->calculate_partial_V();
+        }
+    }
+
+    return std::make_tuple(Vdmu_sum, Vddmu_sum);
+}
+
 template <typename Factor>
 std::tuple<double, VectorXd, SpMat> NGDGH<Factor>::onestep_linesearch(const double &step_size, 
                                                                         const VectorXd& dmu, 

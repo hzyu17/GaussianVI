@@ -64,6 +64,8 @@ public:
      */
     std::tuple<VectorXd, SpMat> compute_gradients(std::optional<double>step_size=std::nullopt) override;
 
+    std::tuple<VectorXd, SpMat> compute_gradients_time(std::optional<double>step_size=std::nullopt) override;
+
 
     std::tuple<double, VectorXd, SpMat> onestep_linesearch(const double &step_size, const VectorXd& dmu, const SpMat& dprecision) override;
 

@@ -133,6 +133,8 @@ public:
      */
     virtual std::tuple<VectorXd, SpMat> compute_gradients(std::optional<double>step_size=std::nullopt){};
 
+    virtual std::tuple<VectorXd, SpMat> compute_gradients_time(std::optional<double>step_size=std::nullopt){};
+
     // /**
     //  * @brief The optimizing process.
     //  */

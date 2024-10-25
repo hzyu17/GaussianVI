@@ -85,24 +85,24 @@ public:
         const int& dim, 
         const Eigen::VectorXd& mean, 
         const Eigen::MatrixXd& P,
-        const QuadratureWeightsMap& weights_map): 
+        const std::shared_ptr<QuadratureWeightsMap>& weights_map_pointer): 
             _deg(deg),
             _dim(dim),
             _mean(mean),
             _P(P)
             {  
-                _nodes_weights_map = std::make_shared<QuadratureWeightsMap>(weights_map);
+                _nodes_weights_map = weights_map_pointer;
                 computeSigmaPtsWeights();
             }
     
     SparseGaussHermite_Cuda(
         const int& deg, 
         const int& dim, 
-        const QuadratureWeightsMap& weights_map): 
+        const std::shared_ptr<QuadratureWeightsMap>& weights_map_pointer): 
             _deg(deg),
             _dim(dim)
             {  
-                _nodes_weights_map = std::make_shared<QuadratureWeightsMap>(weights_map);
+                _nodes_weights_map = weights_map_pointer;
                 computeWeights();
             }
             
@@ -269,6 +269,8 @@ public:
     }
 
     inline Eigen::VectorXd weights() const { return this->_Weights; }
+
+    inline Eigen::MatrixXd zeromeanpts() const { return this->_zeromeanpts; }
 
     inline Eigen::MatrixXd sigmapts() const { return this->_sigmapts; }
 

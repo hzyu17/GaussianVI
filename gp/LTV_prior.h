@@ -84,7 +84,15 @@ class LTV_GP : public LinearFactor{
 
             integrate_adaptive(_stepper, gramian_ode_bound, Q_vec, 0.0, _delta_t, dt);
             MatrixXd Gramian = Eigen::Map<const MatrixXd>(Q_vec.data(), _dim_state, _dim_state);
-            
+
+            // Eigen::EigenSolver<MatrixXd> eigensolver(Gramian);
+            // if (eigensolver.info() == Eigen::Success) {
+            //     VectorXcd eigenvalues = eigensolver.eigenvalues();
+            //     std::cout << "Gramian matrix's eigenvalues: " << eigenvalues.real().transpose() << std::endl;
+            // } else {
+            //     std::cerr << "Failed to compute eigenvalues." << std::endl;
+            // }
+
             // // Use Boole's Rule to approximate the integration
             // MatrixXd gramian = (7 * _Phi_ode_results[0] * _B_vec[0] * _B_vec[0].transpose() * _Phi_ode_results[0].transpose() 
             // + 32 * _Phi_ode_results[1] * _B_vec[1] * _B_vec[1].transpose() * _Phi_ode_results[1].transpose()
@@ -156,6 +164,13 @@ class LTV_GP : public LinearFactor{
         inline void compute_invQ() {
             _invQ = MatrixXd::Zero(_dim_state, _dim_state);
             _invQ = _Q.inverse();
+            // Eigen::EigenSolver<MatrixXd> eigensolver(_invQ);
+            // if (eigensolver.info() == Eigen::Success) {
+            //     VectorXcd eigenvalues = eigensolver.eigenvalues();
+            //     std::cout << "Gramian inverse matrix's eigenvalues: " << eigenvalues.real().transpose() << std::endl;
+            // } else {
+            //     std::cerr << "Failed to compute eigenvalues." << std::endl;
+            // }
         }
 
         inline VectorXd get_mu() const { return _target_mu; }

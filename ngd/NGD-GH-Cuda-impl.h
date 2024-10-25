@@ -117,7 +117,7 @@ std::tuple<double, VectorXd, SpMat> NGDGH<Factor>::onestep_linesearch(const doub
     // new cost
     double new_cost = Base::cost_value_cuda(new_mu, new_precision);
     
-    std::cout << "New cost = " << new_cost << std::endl;
+    // std::cout << "New cost = " << new_cost << std::endl;
     return std::make_tuple(new_cost, new_mu, new_precision);
 
 }
@@ -147,9 +147,9 @@ std::tuple<double, VectorXd, VectorXd, SpMat> NGDGH<Factor>::factor_cost_vector_
 }
 
 template <typename Factor>
-std::tuple<VectorXd, VectorXd, SpMat> NGDGH<Factor>::time_test_cuda()
+std::tuple<double, VectorXd, VectorXd, SpMat> NGDGH<Factor>::factor_cost_vector_cuda_time()
 {   
-    return Base::time_test_cuda(this->_mu, this->_precision);
+    return Base::factor_cost_vector_cuda_time(this->_mu, this->_precision);
 }
 
 /**

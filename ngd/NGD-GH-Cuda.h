@@ -89,7 +89,8 @@ public:
 
     std::tuple<double, VectorXd, VectorXd, SpMat> factor_cost_vector_cuda() override;
 
-    std::tuple<VectorXd, VectorXd, SpMat> time_test_cuda() override;
+    std::tuple<double, VectorXd, VectorXd, SpMat> factor_cost_vector_cuda_time() override;
+
 
 }; //class
 

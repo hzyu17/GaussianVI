@@ -36,7 +36,7 @@ public:
                         int num_states, int start_index, double cost_sigma, 
                         double epsilon, double radius, 
                         double temperature, double high_temperature,
-                        QuadratureWeightsMap weight_sigpts_map_option, 
+                        std::shared_ptr<QuadratureWeightsMap> weight_sigpts_map_option, 
                         std::shared_ptr<CudaOperation_Quad> cuda_ptr):
                 GVIBase(dimension, state_dim, num_states, start_index, 
                         temperature, high_temperature, weight_sigpts_map_option),
@@ -138,6 +138,7 @@ void calculate_partial_V() override{
 
     inline bool linear_factor() override { return _isLinear; }
 
+    // Integrated into the dmu function (Change the function's name)
     inline void costIntegration(const MatrixXd& sigmapts, VectorXd& results, const int sigmapts_cols) override{
         _cuda -> Cuda_init_iter(sigmapts, results, sigmapts_cols);
         _cuda -> costIntegration(sigmapts, results, sigmapts_cols);
@@ -150,7 +151,8 @@ void calculate_partial_V() override{
     }
 
     inline void dmuIntegration(const MatrixXd& sigmapts, const MatrixXd& mean, VectorXd& E_phi_mat, VectorXd& dmu_mat, MatrixXd& ddmu_mat, const int sigmapts_cols) override{
-        // _cuda -> costIntegration(sigmapts, E_phi_mat, sigmapts_cols);
+        _cuda -> Cuda_init_iter(sigmapts, E_phi_mat, sigmapts_cols);
+        _cuda -> costIntegration(sigmapts, E_phi_mat, sigmapts_cols);
         _cuda -> dmuIntegration(sigmapts, mean, dmu_mat, sigmapts_cols);
         _cuda -> ddmuIntegration(ddmu_mat);
         _cuda -> Cuda_free_iter();

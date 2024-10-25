@@ -39,8 +39,6 @@ void GVIGH<Factor>::optimize(std::optional<bool> verbose)
     bool is_lowtemp = true;
     bool converged = false;
 
-    // std::cout << std::fixed << std::setprecision(16);
-
     for (int i_iter = 0; i_iter < _niters; i_iter++)
     {   
 
@@ -73,9 +71,6 @@ void GVIGH<Factor>::optimize(std::optional<bool> verbose)
 
         VectorXd dmu = std::get<0>(gradients);
         SpMat dprecision = std::get<1>(gradients);
-
-        std::cout << "--- dmu ---" << std::endl << dmu.norm() << std::endl;
-        std::cout << "--- dprecision ---" << std::endl << dprecision.norm() << std::endl;
 
         int cnt = 0;
         int B = 1;
@@ -133,9 +128,37 @@ void GVIGH<Factor>::optimize(std::optional<bool> verbose)
 template <typename Factor>
 void GVIGH<Factor>::time_test()
 {
-    double cost_iter = this->cost_value();
-    VectorXd fact_costs_iter = this->factor_cost_vector();
-    std::tuple<VectorXd, SpMat> gradients = compute_gradients();
+    // std::cout << "========== Optimization Start: ==========" << std::endl << std::endl;
+
+    Timer timer;
+    std::vector<double> times;
+    times.reserve(_niters);
+
+    for (int i=0; i < _niters+1; i++){
+        timer.start();
+        double cost_iter = this->cost_value();
+        VectorXd fact_costs_iter = this->factor_cost_vector();
+        std::tuple<VectorXd, SpMat> gradients = compute_gradients_time();
+        double time = timer.end_sec();
+        if (i != 0)
+            times.push_back(time * 1000);  
+    }
+
+    double average_time = std::accumulate(times.begin(), times.end(), 0.0) / _niters;
+
+    double min_time = *std::min_element(times.begin(), times.end());
+    double max_time = *std::max_element(times.begin(), times.end());
+
+    std::cout << "% CPU average: " << average_time << " ms" << std::endl;
+    std::cout << "% CPU min: " << min_time << " ms" << std::endl;
+    std::cout << "% CPU max: " << max_time << " ms" << std::endl;
+
+    std::cout << "% [ " << times[0];
+    for (int i = 1; i < times.size(); ++i) {
+        std::cout << ", " << times[i];
+    }
+    std::cout << " ]" << std::endl;
+    
 }
 
 template <typename Factor>

@@ -91,6 +91,23 @@ public:
         const int& dim, 
         const Eigen::VectorXd& mean, 
         const Eigen::MatrixXd& P,
+        std::optional<std::shared_ptr<QuadratureWeightsMap>> weight_sigpts_map_option=std::nullopt): 
+            _deg(deg),
+            _dim(dim),
+            _mean(mean),
+            _P(P)
+            {  
+                if (weight_sigpts_map_option.has_value()){
+                    _nodes_weights_map = weight_sigpts_map_option.value();
+                }
+                computeSigmaPtsWeights();
+            }
+
+    SparseGaussHermite(
+        const int& deg, 
+        const int& dim, 
+        const Eigen::VectorXd& mean, 
+        const Eigen::MatrixXd& P,
         const QuadratureWeightsMap& weights_map): 
             _deg(deg),
             _dim(dim),

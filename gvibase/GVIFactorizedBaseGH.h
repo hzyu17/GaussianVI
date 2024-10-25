@@ -34,7 +34,7 @@ public:
      */
     GVIFactorizedBaseGH(int dimension, int state_dim, int num_states, int start_index, 
                         double temperature=10.0, double high_temperature=100.0, 
-                        std::optional<QuadratureWeightsMap> weight_sigpts_map_option=std::nullopt):
+                        std::optional<std::shared_ptr<QuadratureWeightsMap>> weight_sigpts_map_option=std::nullopt):
             Base(dimension, state_dim, num_states, start_index, temperature, high_temperature){
             }
             

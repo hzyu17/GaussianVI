@@ -38,7 +38,7 @@ public:
                         const Function& function, const CostClass& cost_class,
                         int num_states, int start_index, 
                         double temperature=1.0, double high_temperature=10.0,
-                        std::optional<QuadratureWeightsMap> weight_sigpts_map_option=std::nullopt):
+                        std::optional<std::shared_ptr<QuadratureWeightsMap>> weight_sigpts_map_option=std::nullopt):
                 GVIBase(dimension, state_dim, num_states, start_index, 
                         temperature, high_temperature, weight_sigpts_map_option)
             {

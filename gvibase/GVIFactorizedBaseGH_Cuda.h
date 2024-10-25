@@ -34,7 +34,7 @@ public:
      */
     GVIFactorizedBaseGH_Cuda(int dimension, int state_dim, int num_states, int start_index, 
                         double temperature, double high_temperature, 
-                        QuadratureWeightsMap weight_sigpts_map_option):
+                        std::shared_ptr<QuadratureWeightsMap> weight_sigpts_map_option):
             Base(dimension, state_dim, num_states, start_index, temperature, high_temperature){
             }
             

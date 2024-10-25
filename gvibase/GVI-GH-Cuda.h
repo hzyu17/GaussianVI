@@ -75,7 +75,9 @@ protected:
 
     double _stop_err;
 
-    double _alpha = 0.99;
+    double _alpha = 1.0;
+
+    // Put step size decrease rate in config
 
     /// @param _vec_factors Vector of marginal optimizers
     std::vector<std::shared_ptr<FactorizedOptimizer>> _vec_factors;
@@ -128,9 +130,11 @@ public:
 
     std::tuple<double, VectorXd, VectorXd, SpMat> factor_cost_vector_cuda(const VectorXd& fill_joint_mean, SpMat& joint_precision);
 
+    std::tuple<double, VectorXd, VectorXd, SpMat> factor_cost_vector_cuda_time(const VectorXd& fill_joint_mean, SpMat& joint_precision);
+
     double cost_value_cuda(const VectorXd& fill_joint_mean, SpMat& joint_precision);
 
-    std::tuple<VectorXd, VectorXd, SpMat> time_test_cuda(const VectorXd& fill_joint_mean, SpMat& joint_precision);
+    void time_test();
 
     /**
      * @brief Compute the covariances using Gaussian Belief Propagation.
@@ -173,9 +177,9 @@ public:
 
     virtual std::tuple<double, VectorXd, VectorXd, SpMat> factor_cost_vector_cuda(){};
 
-    virtual double cost_value_cuda(){};
+    virtual std::tuple<double, VectorXd, VectorXd, SpMat> factor_cost_vector_cuda_time(){};
 
-    virtual std::tuple<VectorXd, VectorXd, SpMat> time_test_cuda(){};
+    virtual double cost_value_cuda(){};
 
 /// **************************************************************
 /// Internal data IO
@@ -214,6 +218,8 @@ public:
     }
 
     inline void set_stop_err(double stop_err) { _stop_err = stop_err; }
+
+    inline void set_alpha(double alpha) { _alpha = alpha; }
 
     /// The base step size in backtracking
     inline void set_step_size_base(double step_size_base){ _step_size_base = step_size_base; }
