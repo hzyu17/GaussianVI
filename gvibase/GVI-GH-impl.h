@@ -17,7 +17,6 @@ namespace gvi{
 
 template <typename Factor>
 void GVIGH<Factor>::switch_to_high_temperature(){
-    std::cout << "Switching to high temperature.." << std::endl;
     #pragma omp parallel for
     for (auto& i_factor : _vec_factors) {
         i_factor->factor_switch_to_high_temperature();
@@ -46,6 +45,9 @@ void GVIGH<Factor>::optimize(std::optional<bool> verbose)
 
         // ============= High temperature phase =============
         if (i_iter == _niters_lowtemp && is_lowtemp){
+            if (is_verbose){
+                std::cout << "Switching to high temperature.." << std::endl;
+            }
             this->switch_to_high_temperature();
             is_lowtemp = false;
         }
