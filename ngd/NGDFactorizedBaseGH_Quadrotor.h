@@ -16,7 +16,6 @@
 #define NGDFactorizedBaseGH_H
 
 #include "gvibase/GVIFactorizedBaseGH_Cuda.h"
-#include <helpers/CudaOperation.h>
 #include <memory>
 
 using namespace Eigen;
@@ -124,9 +123,9 @@ void calculate_partial_V() override{
         return res;
     }
 
-    inline void update_cuda() override{
-        _cuda = std::make_shared<CudaOperation_Quad>(CudaOperation_Quad{_sigma, _epsilon, _radius});
-    }
+    // inline void update_cuda() override{
+    //     _cuda = std::make_shared<CudaOperation_Quad>(CudaOperation_Quad{_sigma, _epsilon, _radius});
+    // }
 
     inline void cuda_init() override{
         _cuda -> Cuda_init(this -> _gh -> weights());
@@ -137,12 +136,6 @@ void calculate_partial_V() override{
     }
 
     inline bool linear_factor() override { return _isLinear; }
-
-    // Integrated into the dmu function (Change the function's name)
-    inline void costIntegration(const MatrixXd& sigmapts, VectorXd& results, const int sigmapts_cols) override{
-        _cuda -> Cuda_init_iter(sigmapts, results, sigmapts_cols);
-        _cuda -> costIntegration(sigmapts, results, sigmapts_cols);
-    }
 
     inline void newCostIntegration(const MatrixXd& sigmapts, VectorXd& results, const int sigmapts_cols) override{
         _cuda -> Cuda_init_iter(sigmapts, results, sigmapts_cols);

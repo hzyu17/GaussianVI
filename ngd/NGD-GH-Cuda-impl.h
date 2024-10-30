@@ -64,41 +64,6 @@ std::tuple<VectorXd, SpMat> NGDGH<Factor>::compute_gradients(std::optional<doubl
     return std::make_tuple(dmu, dprecision);
 }
 
-
-template <typename Factor>
-void NGDGH<Factor>::derivatives(VectorXd& dmu_mat, MatrixXd& ddmu_mat, int sigma_cols){
-    Base::_Vdmu.setZero();
-    Base::_Vddmu.setZero();
-
-    VectorXd Vdmu(dmu_mat.size());
-    MatrixXd Vddmu(ddmu_mat.rows(), ddmu_mat.cols());
-
-    for (auto &opt_k : Base::_vec_factors) {
-        opt_k->calculate_partial_V();
-        Vdmu += opt_k->local2joint_dmu();
-        Vddmu += opt_k->local2joint_dprecision();
-    }
-
-    // for (int i = 0; i < Base::_vec_factors.size(); i++){
-    //     auto result = Base::_vec_factors[i]->derivatives();
-    //     Vdmu.segment(i*sigma_cols, sigma_cols) = std::get<1>(result);
-    //     Vddmu.block(0, i*sigma_cols, sigma_cols, sigma_cols) = std::get<2>(result);
-    // }
-
-    // std::cout << "Vdmu Error" << std::endl << (Vdmu - dmu_mat) << std::endl;
-    // std::cout << "Vddmu Error" << std::endl << (Vddmu - ddmu_mat) << std::endl;
-    // std::cout << "Vddmu" << std::endl << Vddmu.transpose() << std::endl;
-
-    // dmu_mat = Vdmu;
-    // ddmu_mat = Vddmu
-
-    // SpMat dprecision = _Vddmu - Base::_precision;
-
-    // Eigen::ConjugateGradient<SpMat, Eigen::Upper> solver;
-    // VectorXd dmu =  solver.compute(_Vddmu).solve(-_Vdmu);
-
-}
-
 template <typename Factor>
 std::tuple<double, VectorXd, SpMat> NGDGH<Factor>::onestep_linesearch(const double &step_size, 
                                                                         const VectorXd& dmu, 

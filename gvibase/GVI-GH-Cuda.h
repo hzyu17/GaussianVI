@@ -128,6 +128,9 @@ public:
      */
     VectorXd factor_cost_vector(const VectorXd& x, SpMat& Precision);
 
+    /**
+     * @brief Compute the costs and derivatives of all factors for a given mean and cov.
+     */
     std::tuple<double, VectorXd, VectorXd, SpMat> factor_cost_vector_cuda(const VectorXd& fill_joint_mean, SpMat& joint_precision);
 
     std::tuple<double, VectorXd, VectorXd, SpMat> factor_cost_vector_cuda_time(const VectorXd& fill_joint_mean, SpMat& joint_precision);
@@ -151,8 +154,6 @@ public:
      * @brief Function which computes one step of update.
      */
     virtual std::tuple<VectorXd, SpMat> compute_gradients(std::optional<double>step_size=std::nullopt){};
-
-    virtual void derivatives(VectorXd& dmu_mat, MatrixXd& ddmu_mat, int sigma_col){};
 
     // /**
     //  * @brief The optimizing process.

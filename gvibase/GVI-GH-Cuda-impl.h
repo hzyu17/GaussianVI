@@ -50,12 +50,12 @@ void GVIGH<Factor>::optimize(std::optional<bool> verbose)
 
     _vec_nonlinear_factors[0]->cuda_init();
 
-    VectorXd mu_EMA(_mu.size());
-    SpMat precision_EMA(_precision.rows(), _precision.cols());
-    mu_EMA.setZero();
-    precision_EMA.setZero();
-    mu_EMA = _mu;
-    precision_EMA = _precision;
+    // VectorXd mu_EMA(_mu.size());
+    // SpMat precision_EMA(_precision.rows(), _precision.cols());
+    // mu_EMA.setZero();
+    // precision_EMA.setZero();
+    // mu_EMA = _mu;
+    // precision_EMA = _precision;
 
     for (int i_iter = 0; i_iter < _niters; i_iter++)
     {   
@@ -83,7 +83,7 @@ void GVIGH<Factor>::optimize(std::optional<bool> verbose)
 
         if (is_verbose){
             std::cout << "--- cost_iter ---" << std::endl << cost_iter << std::endl;
-            std::cout << "Factor Costs:" << fact_costs_iter.transpose() << std::endl;
+            // std::cout << "Factor Costs:" << fact_costs_iter.transpose() << std::endl;
             // std::cout << "--- dmu ---" << std::endl << dmu.norm() << std::endl;
             // std::cout << "--- dprecision ---" << std::endl << dprecision.norm() << std::endl;
         }
@@ -110,9 +110,8 @@ void GVIGH<Factor>::optimize(std::optional<bool> verbose)
             // accept new cost and update mu and precision matrix
             if (new_cost < cost_iter){
                 // update mean and covariance
-                mu_EMA = _alpha * new_mu + (1-_alpha) * mu_EMA;
-                precision_EMA = _alpha * new_precision + (1-_alpha) * precision_EMA;
-                // this->update_proposal(new_mu, new_precision); // Update the mu of GVIGH
+                // mu_EMA = _alpha * new_mu + (1-_alpha) * mu_EMA;
+                // precision_EMA = _alpha * new_precision + (1-_alpha) * precision_EMA;
                 this->update_proposal(_alpha * new_mu + (1-_alpha) * this->_mu, _alpha * new_precision + (1-_alpha) * this->_precision); // Update using EMA
                 // std::cout << "back tracking time: "<< cnt << std::endl;
                 break;
@@ -169,7 +168,7 @@ std::tuple<double, VectorXd, VectorXd, SpMat> GVIGH<Factor>::factor_cost_vector_
     for (int i = 0; i < n_nonlinear; i++)
     {
         auto &opt_k = _vec_nonlinear_factors[i];
-        opt_k->cuda_matrices(_mu, _covariance, sigmapts_vec, mean_vec); 
+        opt_k->cuda_matrices(sigmapts_vec, mean_vec); 
     }
 
     int sigma_rows = sigmapts_vec[0].rows();
@@ -190,7 +189,7 @@ std::tuple<double, VectorXd, VectorXd, SpMat> GVIGH<Factor>::factor_cost_vector_
         mean_mat.col(i) = mean_vec[i];
     }
 
-    // Compute the cost of the nonlinear factors
+    // Compute the cost and derivatives of the nonlinear factors
     _vec_nonlinear_factors[0]->dmuIntegration(sigmapts_mat, mean_mat, nonlinear_fac_cost, dmu_mat, ddmu_mat, sigma_cols);
     E_phi_mat = nonlinear_fac_cost;
 
@@ -222,14 +221,6 @@ std::tuple<double, VectorXd, VectorXd, SpMat> GVIGH<Factor>::factor_cost_vector_
     VectorXd vec_D = ldlt.vectorD();
 
     double cost = value + vec_D.array().log().sum() / 2;
-
-    // std::cout << "nonlinear_fac_cost = "<< nonlinear_fac_cost.sum() << std::endl; 
-    // std::cout << "fac_costs = " << fac_costs.sum() << std::endl; 
-    // std::cout << "Entropy = " << vec_D.array().log().sum() / 2 << std::endl << std::endl; 
-    
-    // std::cout << "Norm of E_phi_mat in derivatives = " << E_phi_mat.norm() << "  Sum = " << E_phi_mat.cwiseAbs().sum() << std::endl;
-    // std::cout << "Norm of dmu_mat in derivatives = " << dmu_mat.norm() << "  Sum = " << dmu_mat.cwiseAbs().sum() << std::endl;
-    // std::cout << "Norm of ddmu_mat in derivatives = " << ddmu_mat.norm() << "  Sum = " << ddmu_mat.cwiseAbs().sum() << std::endl << std::endl;
 
     _Vdmu.setZero();
     _Vddmu.setZero();
@@ -330,7 +321,7 @@ std::tuple<double, VectorXd, VectorXd, SpMat> GVIGH<Factor>::factor_cost_vector_
     for (int i = 0; i < n_nonlinear; i++)
     {
         auto &opt_k = _vec_nonlinear_factors[i];
-        opt_k->cuda_matrices(_mu, _covariance, sigmapts_vec, mean_vec); 
+        opt_k->cuda_matrices(sigmapts_vec, mean_vec); 
     }
 
     int sigma_rows = sigmapts_vec[0].rows();
@@ -445,37 +436,65 @@ template <typename Factor>
 void GVIGH<Factor>::time_test()
 {
     // std::cout << "========== Optimization Start: ==========" << std::endl << std::endl;
-    _vec_nonlinear_factors[0]->cuda_init();
+    // _vec_nonlinear_factors[0]->cuda_init();
 
     Timer timer;
 
-    std::vector<double> times;
-    times.reserve(_niters);
+    std::vector<double> times_GBP, times_inverse;
+    times_GBP.reserve(_niters);
+    times_inverse.reserve(_niters);
+
+    std::cout << "% Dimension = " << (this -> _precision).rows() << std::endl;
 
     for (int i = 0; i < _niters + 1; i++){
         timer.start();
-        auto result_cuda = factor_cost_vector_cuda_time();
+        // auto result_cuda = factor_cost_vector_cuda_time();
+        SpMat joint_cov = inverse_GBP(this -> _precision);
         double time = timer.end_sec();
         if (i!=0)
-            times.push_back(time * 1000);  
+            times_GBP.push_back(time * 1000);  
     }
 
-    double average_time = std::accumulate(times.begin(), times.end(), 0.0) / _niters;
+    double average_time = std::accumulate(times_GBP.begin(), times_GBP.end(), 0.0) / _niters;
 
-    double min_time = *std::min_element(times.begin(), times.end());
-    double max_time = *std::max_element(times.begin(), times.end());
+    double min_time = *std::min_element(times_GBP.begin(), times_GBP.end());
+    double max_time = *std::max_element(times_GBP.begin(), times_GBP.end());
 
-    std::cout << "% GPU average: " << average_time << " ms" << std::endl;
-    std::cout << "% GPU min: " << min_time << " ms" << std::endl;
-    std::cout << "% GPU max: " << max_time << " ms" << std::endl;
+    std::cout << "% GBP average: " << average_time << " ms" << std::endl;
+    std::cout << "% GBP min: " << min_time << " ms" << std::endl;
+    std::cout << "% GBP max: " << max_time << " ms" << std::endl;
 
-    std::cout << "% [ " << times[0];
-    for (int i = 1; i < times.size(); ++i) {
-        std::cout << ", " << times[i];
+    std::cout << "% [ " << times_GBP[0];
+    for (int i = 1; i < times_GBP.size(); ++i) {
+        std::cout << ", " << times_GBP[i];
     }
     std::cout << " ]" << std::endl;
 
-    _vec_nonlinear_factors[0]->cuda_free();
+
+    for (int i = 0; i < _niters + 1; i++){
+        timer.start();
+        SpMat joint_cov = inverse(this -> _precision);
+        double time = timer.end_sec();
+        if (i!=0)
+            times_inverse.push_back(time * 1000);  
+    }
+
+    average_time = std::accumulate(times_inverse.begin(), times_inverse.end(), 0.0) / _niters;
+
+    min_time = *std::min_element(times_inverse.begin(), times_inverse.end());
+    max_time = *std::max_element(times_inverse.begin(), times_inverse.end());
+
+    std::cout << "% Inverse average: " << average_time << " ms" << std::endl;
+    std::cout << "% Inverse min: " << min_time << " ms" << std::endl;
+    std::cout << "% Inverse max: " << max_time << " ms" << std::endl;
+
+    std::cout << "% [ " << times_inverse[0];
+    for (int i = 1; i < times_inverse.size(); ++i) {
+        std::cout << ", " << times_inverse[i];
+    }
+    std::cout << " ]" << std::endl;
+
+    // _vec_nonlinear_factors[0]->cuda_free();
 
 }
 
@@ -661,7 +680,6 @@ SpMat GVIGH<Factor>::inverse_GBP(const SpMat &Precision)
         covariance.block(0, 0, _dim_state, _dim_state) = variance;
     }
 
-    // #pragma omp parallel for
     for (int i = 0; i < _num_states - 1; ++i) {
         MatrixXd lambda_joint = joint_factors[i].second;
         lambda_joint.block(0, 0, _dim_state, _dim_state) += forward_messages[i].second;

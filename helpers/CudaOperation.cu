@@ -378,7 +378,7 @@ void CudaOperation_Quad::CudaIntegration(const MatrixXd& sigmapts, const MatrixX
     cudaMemcpy(mu_gpu, mean.data(), sigmapts.cols() * sizeof(double), cudaMemcpyHostToDevice);
 
     // Kernel 1: Obtain the result of function 
-    dim3 blockSize1(256, 256);
+    dim3 blockSize1(64, 64);
     dim3 threadperblock1((results.cols()*sigmapts.rows() + blockSize1.x - 1) / blockSize1.x, (results.rows() + blockSize1.y - 1) / blockSize1.y);
 
     Sigma_function_quad<<<blockSize1, threadperblock1>>>(sigmapts_gpu, pts_gpu, mu_gpu, sigmapts.rows(), sigmapts.cols(), results.rows(), results.cols(), type, _class_gpu, _data_gpu);
@@ -393,7 +393,7 @@ void CudaOperation_Quad::CudaIntegration(const MatrixXd& sigmapts, const MatrixX
     cudaFree(mu_gpu);
 
     // Kernel 2: Obtain the result by multiplying the pts and the weights
-    dim3 blockSize2(256, 256);
+    dim3 blockSize2(64, 64);
     dim3 threadperblock2((results.cols() + blockSize2.x - 1) / blockSize2.x, (results.rows() + blockSize2.y - 1) / blockSize2.y);
 
     obtain_res<<<blockSize2, threadperblock2>>>(pts_gpu, _weight_gpu, result_gpu, sigmapts.rows(), results.rows(), results.cols());
@@ -416,7 +416,7 @@ void CudaOperation_Quad::costIntegration(const MatrixXd& sigmapts, VectorXd& res
     cudaMemcpy(_sigmapts_gpu, sigmapts.data(), sigmapts.size() * sizeof(double), cudaMemcpyHostToDevice);
 
     // Kernel 1: Obtain the result of function 
-    dim3 blockSize1(256, 256);
+    dim3 blockSize1(64, 64);
     dim3 threadperblock1((results.size() + blockSize1.x - 1) / blockSize1.x, (sigmapts.rows() + blockSize1.y - 1) / blockSize1.y);
 
     cost_function<<<blockSize1, threadperblock1>>>(_sigmapts_gpu, _func_value_gpu, sigmapts.rows(), sigmapts_cols, results.size(), _class_gpu, _data_gpu);
@@ -428,7 +428,7 @@ void CudaOperation_Quad::costIntegration(const MatrixXd& sigmapts, VectorXd& res
     }
 
     // Kernel 2: Obtain the result by multiplying the pts and the weights
-    dim3 blockSize2(256);
+    dim3 blockSize2(64);
     dim3 threadperblock2((results.size() + blockSize2.x - 1) / blockSize2.x);
 
     obtain_cost<<<blockSize2, threadperblock2>>>(_func_value_gpu, _weight_gpu, result_gpu, sigmapts.rows(), results.size());
@@ -454,7 +454,7 @@ void CudaOperation_Quad::dmuIntegration(const MatrixXd& sigmapts, const MatrixXd
     cudaMemcpy(_mu_gpu, mu.data(), mu.size() * sizeof(double), cudaMemcpyHostToDevice);
 
     // Kernel 1: Obtain the result of function 
-    dim3 blockSize1(256, 256);
+    dim3 blockSize1(64, 64);
     dim3 threadperblock1((results.size() + blockSize1.x - 1) / blockSize1.x, (_sigmapts_rows + blockSize1.y - 1) / blockSize1.y);
 
     dmu_function<<<blockSize1, threadperblock1>>>(_sigmapts_gpu, _mu_gpu, _func_value_gpu, vec_gpu, _sigmapts_rows, _dim_state, _n_states);
@@ -466,7 +466,7 @@ void CudaOperation_Quad::dmuIntegration(const MatrixXd& sigmapts, const MatrixXd
     }
 
     // Kernel 2: Obtain the result by multiplying the pts and the weights
-    dim3 blockSize2(256);
+    dim3 blockSize2(64);
     dim3 threadperblock2((results.size() + blockSize2.x - 1) / blockSize2.x);
 
     obtain_dmu<<<blockSize2, threadperblock2>>>(vec_gpu, _weight_gpu, result_gpu, sigmapts.rows(), results.size());
@@ -489,14 +489,14 @@ void CudaOperation_Quad::ddmuIntegration(MatrixXd& results){
     cudaMalloc(&result_gpu, results.size() * sizeof(double));
 
     // Kernel 1: Obtain the result of function 
-    dim3 blockSize1(256, 256);
+    dim3 blockSize1(64, 64);
     dim3 threadperblock1((results.cols() + blockSize1.x - 1) / blockSize1.x, (_sigmapts_rows * results.rows() + blockSize1.y - 1) / blockSize1.y);
 
     ddmu_function<<<blockSize1, threadperblock1>>>(_sigmapts_gpu, _mu_gpu, _func_value_gpu, vec_gpu, _sigmapts_rows, _dim_state, _n_states);
     cudaDeviceSynchronize();
 
     // Kernel 2: Obtain the result by multiplying the pts and the weights
-    dim3 blockSize2(256, 256);
+    dim3 blockSize2(64, 64);
     dim3 threadperblock2((results.cols() + blockSize2.x - 1) / blockSize2.x, (results.rows() + blockSize2.y - 1) / blockSize2.y);
 
     obtain_ddmu<<<blockSize2, threadperblock2>>>(vec_gpu, _weight_gpu, result_gpu, _sigmapts_rows, results.rows(), results.cols());
@@ -667,6 +667,92 @@ void CudaOperation_3dpR::ddmuIntegration(MatrixXd& results){
     cudaFree(result_gpu);
     cudaFree(_mu_gpu);
 }
+
+__global__ void compute_AT_B_A_kernel(const double* d_Mat_A, const double* d_Mat_B, double* d_result, int rows, int cols) {
+    int row = blockIdx.y * blockDim.y + threadIdx.y;
+    int col = blockIdx.x * blockDim.x + threadIdx.x;
+
+    if (row < cols && col < cols) {
+        double sum = 0.0;
+        for (int k = 0; k < rows; k++) {
+            for (int l = 0; l < rows; l++) {
+                sum += d_Mat_A[k * cols + row] * d_Mat_B[k * rows + l] * d_Mat_A[l * cols + col];
+            }
+        }
+        d_result[row * cols + col] = sum;
+    }
+}
+
+MatrixXd compute_AT_B_A(MatrixXd& Matrix_A, MatrixXd& Matrix_B){
+    int rows = Matrix_A.rows();
+    int cols = Matrix_A.cols();
+
+    double *d_Mat_A, *d_Mat_B, *d_result;
+    cudaMalloc(&d_Mat_A, Matrix_A.size() * sizeof(double));
+    cudaMalloc(&d_Mat_B, Matrix_B.size() * sizeof(double));
+    cudaMalloc(&d_result, cols * cols * sizeof(double));
+
+    cudaMemcpy(d_Mat_A, Matrix_A.data(), Matrix_A.size() * sizeof(double), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_Mat_B, Matrix_B.data(), Matrix_B.size() * sizeof(double), cudaMemcpyHostToDevice);
+    cudaMemset(d_result, 0, cols * cols * sizeof(double));
+
+    dim3 blockSize(16, 16);
+    dim3 threadperblock((cols + blockSize.x - 1) / blockSize.x, (cols + blockSize.y - 1) / blockSize.y);
+
+    compute_AT_B_A_kernel<<<blockSize, threadperblock>>>(d_Mat_A, d_Mat_B, d_result, rows, cols);
+
+    MatrixXd result = MatrixXd::Zero(cols, cols);
+    cudaMemcpy(result.data(), d_result, cols * cols * sizeof(double), cudaMemcpyDeviceToHost);
+
+    cudaFree(d_Mat_A);
+    cudaFree(d_Mat_B);
+    cudaFree(d_result);
+
+    return result;
+}
+
+__global__ void computeTmpKernel(double* tmp, const double* covariance, const double* AT_precision_A, int dim) {
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    int j = blockIdx.y * blockDim.y + threadIdx.y;
+    if (i < dim && j < dim) {
+        double sum = 0.0;
+        for (int k = 0; k < dim; k++) {
+            for (int l = 0; l < dim; l++) {
+                sum += (covariance[i * dim + j] * covariance[k * dim + l] +
+                        covariance[i * dim + k] * covariance[j * dim + l] +
+                        covariance[i * dim + l] * covariance[j * dim + k]) * AT_precision_A[k * dim + l];
+            }
+        }
+        tmp[i * dim + j] = sum;
+    }
+}
+
+
+
+void computeTmp_CUDA(Eigen::MatrixXd& tmp, const Eigen::MatrixXd& covariance, const Eigen::MatrixXd& AT_precision_A){
+    int dim = covariance.rows();
+    double *d_tmp, *d_covariance, *d_AT_precision_A;
+    cudaMalloc(&d_tmp, dim * dim * sizeof(double));
+    cudaMalloc(&d_covariance, dim * dim * sizeof(double));
+    cudaMalloc(&d_AT_precision_A, dim * dim * sizeof(double));
+
+    cudaMemcpy(d_covariance, covariance.data(), dim * dim * sizeof(double), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_AT_precision_A, AT_precision_A.data(), dim * dim * sizeof(double), cudaMemcpyHostToDevice);
+
+    dim3 threadsPerBlock(16, 16);
+    dim3 blocksPerGrid((dim + threadsPerBlock.x - 1) / threadsPerBlock.x,
+                       (dim + threadsPerBlock.y - 1) / threadsPerBlock.y);
+
+    computeTmpKernel<<<blocksPerGrid, threadsPerBlock>>>(d_tmp, d_covariance, d_AT_precision_A, dim);
+    cudaDeviceSynchronize();
+
+    cudaMemcpy(tmp.data(), d_tmp, dim * dim * sizeof(double), cudaMemcpyDeviceToHost);
+
+    cudaFree(d_tmp);
+    cudaFree(d_covariance);
+    cudaFree(d_AT_precision_A);
+}
+
 
 }
 

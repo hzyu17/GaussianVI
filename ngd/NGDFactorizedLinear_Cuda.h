@@ -78,11 +78,14 @@ public:
     }
 
     void calculate_partial_V() override{
+        // Timer timer;
+
         _Vdmu.setZero();
         _Vddmu.setZero();
 
         // helper vectors
         MatrixXd tmp{MatrixXd::Zero(_dim, _dim)};
+        MatrixXd tmp_cuda{MatrixXd::Zero(_dim, _dim)};
 
         // partial V / partial mu           
         this->_Vdmu = (2 * _Lambda.transpose() * _target_precision * (_Lambda*_mu - _Psi*_target_mean)) * constant();
@@ -90,17 +93,27 @@ public:
 
         MatrixXd AT_precision_A = _Lambda.transpose() * _target_precision * _Lambda;
 
+        // timer.start();
+
         // partial V^2 / partial mu*mu^T
         // update tmp matrix
+
         for (int i=0; i<(_dim); i++){
             for (int j=0; j<(_dim); j++) {
                 for (int k=0; k<(_dim); k++){
                     for (int l=0; l<(_dim); l++){
-                        tmp(i, j) += (_covariance(i, j) * (_covariance(k, l)) + _covariance(i,k) * (_covariance(j,l)) + _covariance(i,l)*_covariance(j,k))*AT_precision_A(k,l);
+                        tmp(i, j) += (_covariance(i, j)*_covariance(k, l) + _covariance(i,k)*_covariance(j,l) + _covariance(i,l)*_covariance(j,k))*AT_precision_A(k,l);
                     }
                 }
             }
         }
+
+        // computeTmp_CUDA(tmp, _covariance, AT_precision_A);
+
+        // MatrixXd tmp_error = tmp - tmp_cuda;
+        // std::cout << "tmp norm = " << tmp.norm() << std::endl << "tmp error = " << std::endl << tmp_error << std::endl;
+
+        // std::cout << std::endl << "tmp: " << timer.end_sec() * 1000 << "ms" << std::endl;
 
         this->_Vddmu = (_precision * tmp * _precision - _precision * (AT_precision_A*_covariance).trace()) * constant();
         this->_Vddmu = this->_Vddmu / this->temperature();
@@ -113,27 +126,10 @@ public:
         _E_Phi = ((_Lambda.transpose()*_target_precision*_Lambda * Cov_k).trace() + 
                     (_Lambda*mean_k-_Psi*_target_mean).transpose() * _target_precision * (_Lambda*mean_k-_Psi*_target_mean)) * constant();
 
-        // double first_part = (_Lambda.transpose()*_target_precision*_Lambda * Cov_k).trace() * constant();
-        // double second_part = ((_Lambda*mean_k-_Psi*_target_mean).transpose() * _target_precision * (_Lambda*mean_k-_Psi*_target_mean)).value() * constant();
-
-        // std::cout << "Lambda = " << std::endl << _Lambda << std::endl;
-        // std::cout << "target_precision = " << std::endl << _target_precision << std::endl;
-        // std::cout << "Cov_k = " << std::endl << Cov_k << std::endl;
-        // std::cout << "mean_k = " << std::endl << mean_k << std::endl;
-        // std::cout << "Psi = " << std::endl << _Psi << std::endl;
-        // std::cout << "target_mean = " << std::endl << _target_mean << std::endl;
-        
-
         return _E_Phi / this->temperature();
     }
 
     inline bool linear_factor() override { return _isLinear; }
-
-    inline void update_cuda() override{}
-
-    inline void cuda_init() override{}
-
-    inline void cuda_free() override{}
 };
 
 } //namespace

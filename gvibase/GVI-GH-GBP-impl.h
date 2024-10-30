@@ -291,7 +291,6 @@ SpMat GVIGH<Factor>::inverse_GBP(const SpMat &Precision)
         covariance.block(0, 0, _dim_state, _dim_state) = variance;
     }
 
-    // #pragma omp parallel for
     for (int i = 0; i < _num_states - 1; ++i) {
         MatrixXd lambda_joint = joint_factors[i].second;
         lambda_joint.block(0, 0, _dim_state, _dim_state) += forward_messages[i].second;

@@ -16,7 +16,6 @@
 #define NGDFactorizedBaseGH_H
 
 #include "gvibase/GVIFactorizedBaseGH_Cuda.h"
-#include <helpers/CudaOperation.h>
 #include <memory>
 
 using namespace Eigen;
@@ -103,9 +102,6 @@ public:
         MatrixXd weights_gh = this -> _gh -> weights();
         MatrixXd result;
 
-        // for (int i = 0; i< sigmapts_gh.rows(); i++)
-            // sigmapts_gh.row(i) << 1.02041, 1.02041, 6.61224;
-
         if (type == 0)
             result = MatrixXd::Zero(1,1);
         else if (type ==  1)
@@ -113,7 +109,6 @@ public:
         else
            result = MatrixXd::Zero(sigmapts_gh.cols(),sigmapts_gh.cols());
            
-        // MatrixXd pts(result.rows(), sigmapts_gh.rows()*result.cols());
         _cuda -> CudaIntegration(sigmapts_gh, weights_gh, result, mean_gh, type);                  
 
         return result;
@@ -157,11 +152,6 @@ public:
     }
 
     inline bool linear_factor() override { return _isLinear; }
-
-    inline void costIntegration(const MatrixXd& sigmapts, VectorXd& results, const int sigmapts_cols) override{
-        _cuda -> Cuda_init_iter(sigmapts, results, sigmapts_cols);
-        _cuda -> costIntegration(sigmapts, results, sigmapts_cols);
-    }
 
     inline void newCostIntegration(const MatrixXd& sigmapts, VectorXd& results, const int sigmapts_cols) override{
         _cuda -> Cuda_init_iter(sigmapts, results, sigmapts_cols);

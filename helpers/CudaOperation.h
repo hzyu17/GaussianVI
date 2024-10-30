@@ -482,6 +482,7 @@ public:
     _sigma(cost_sigma), _epsilon(epsilon), _radius(radius)
     {
         MatrixIO _m_io;
+        // std::string field_file = source_root + "/maps/2dQuad/field_multiobs.csv";
         std::string field_file = source_root + "/maps/2dQuad/SingleObstacleMap_field.csv";
         MatrixXd field = _m_io.load_csv(field_file);      
 
@@ -581,6 +582,10 @@ public:
   CudaOperation_Quad* _class_gpu;
 
 };
+
+MatrixXd compute_AT_B_A(MatrixXd& _Lambda, MatrixXd& _target_precision);
+
+void computeTmp_CUDA(Eigen::MatrixXd& tmp, const Eigen::MatrixXd& covariance, const Eigen::MatrixXd& AT_precision_A);
 
 
 }

@@ -119,11 +119,6 @@ public:
 
     inline bool linear_factor() override { return _isLinear; }
     
-    inline void update_cuda() override{}
-
-    inline void cuda_init() override{}
-
-    inline void cuda_free() override{}
 };
 
 } //namespace

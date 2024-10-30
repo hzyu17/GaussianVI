@@ -15,25 +15,16 @@
 #ifndef NGDFactorizedBaseGH_H
 #define NGDFactorizedBaseGH_H
 
-// #include "ngd/NGDFactorizedBase.h"
 #include "gvibase/GVIFactorizedBaseGH_Cuda.h"
-#include <helpers/CudaOperation.h>
-
 #include <memory>
 
 using namespace Eigen;
 
 namespace gvi{
 
-template <typename CostClass>
 class NGDFactorizedBaseGH_Cuda: public GVIFactorizedBaseGH_Cuda{
 
     using GVIBase = GVIFactorizedBaseGH_Cuda;
-    using Function = std::function<double(const VectorXd&, const CostClass &)>;
-
-    // Robot = gpmp2::PointRobotModel
-    // CostClass = gpmp2::ObstaclePlanarSDFFactor<gpmp2::PointRobotModel>
-    // NGDClass = NGDFactorizedBaseGH_Cuda<gpmp2::ObstaclePlanarSDFFactor<gpmp2::PointRobotModel>>
 
 public:
     ///@param dimension The dimension of the state
@@ -41,28 +32,25 @@ public:
     // NGDFactorizedBaseGH(const int& dimension, const Function& function, const CostClass& cost_class_, const MatrixXd& Pk_):
     
     NGDFactorizedBaseGH_Cuda(int dimension, int state_dim, int gh_degree, 
-                        const Function& function, const CostClass& cost_class,
                         int num_states, int start_index, double cost_sigma, 
                         double epsilon, double radius, 
                         double temperature, double high_temperature,
-                        QuadratureWeightsMap weight_sigpts_map_option):
+                        std::shared_ptr<QuadratureWeightsMap> weight_sigpts_map_option,
+                        std::shared_ptr<CudaOperation_PlanarPR> cuda_ptr):
                 GVIBase(dimension, state_dim, num_states, start_index, 
                         temperature, high_temperature, weight_sigpts_map_option),
                 _epsilon(epsilon),
                 _sigma(cost_sigma),
                 _radius(radius)
             {
-                /// Override of the GVIBase classes. _func_phi-> Scalar, _func_Vmu -> Vector, _func_Vmumu -> Matrix
-                GVIBase::_func_phi = [this, function, cost_class](const VectorXd& x){return MatrixXd::Constant(1, 1, function(x, cost_class));};
-                GVIBase::_func_Vmu = [this, function, cost_class](const VectorXd& x){return (x-GVIBase::_mu) * function(x, cost_class);};
-                GVIBase::_func_Vmumu = [this, function, cost_class](const VectorXd& x){return MatrixXd{(x-GVIBase::_mu) * (x-GVIBase::_mu).transpose().eval() * function(x, cost_class)};};
                 GVIBase::_gh = std::make_shared<GH>(GH{gh_degree, GVIBase::_dim, GVIBase::_mu, GVIBase::_covariance, weight_sigpts_map_option});
-                _cuda = std::make_shared<CudaOperation_PlanarPR>(CudaOperation_PlanarPR{cost_sigma, epsilon, radius});
+                // _cuda = std::make_shared<CudaOperation_PlanarPR>(CudaOperation_PlanarPR{cost_sigma, epsilon, radius});
+                _cuda = cuda_ptr;
 
             }
 public:
 
-void calculate_partial_V() override{
+    void calculate_partial_V() override{
         // update the mu and sigma inside the gauss-hermite integrator
         updateGH(this->_mu, this->_covariance);
 
@@ -71,21 +59,58 @@ void calculate_partial_V() override{
 
         /// Integrate for E_q{_Vdmu} 
         this->_Vdmu = Integrate_cuda(1);
-        // this->_Vdmu = this->_gh->Integrate(this->_func_Vmu);
         this->_Vdmu = this->_precision * this->_Vdmu;
         this->_Vdmu = this->_Vdmu / this->temperature();
 
         /// Integrate for E_q{phi(x)}
         double E_phi = Integrate_cuda(0)(0, 0);
-        // double E_phi = this->_gh->Integrate(this->_func_phi)(0, 0);
         
         /// Integrate for partial V^2 / ddmu_ 
         MatrixXd E_xxphi{Integrate_cuda(2)};
-        // MatrixXd E_xxphi{this->_gh->Integrate(this->_func_Vmumu)};
 
         this->_Vddmu.triangularView<Upper>() = (this->_precision * E_xxphi * this->_precision - this->_precision * E_phi).triangularView<Upper>();
         this->_Vddmu.triangularView<StrictlyLower>() = this->_Vddmu.triangularView<StrictlyUpper>().transpose();
         this->_Vddmu = this->_Vddmu / this->temperature();
+
+    }
+
+    void calculate_partial_V(const MatrixXd& ddmu_mat, const VectorXd& Vdmu, double E_Phi) override{
+
+        this->_Vdmu.setZero();
+        this->_Vddmu.setZero();
+
+        /// Integrate for E_q{_Vdmu} 
+        this->_Vdmu = Vdmu;
+        this->_Vdmu = this->_precision * this->_Vdmu;
+        this->_Vdmu = this->_Vdmu / this->temperature();
+        
+        /// Integrate for partial V^2 / ddmu_ 
+        MatrixXd E_xxphi = ddmu_mat;
+
+        this->_Vddmu.triangularView<Upper>() = (this->_precision * E_xxphi * this->_precision - this->_precision * E_Phi).triangularView<Upper>();
+        this->_Vddmu.triangularView<StrictlyLower>() = this->_Vddmu.triangularView<StrictlyUpper>().transpose();
+        this->_Vddmu = this->_Vddmu / this->temperature();
+    }
+
+
+    std::tuple<double, VectorXd, MatrixXd> derivatives() override{
+        updateGH(this->_mu, this->_covariance);
+
+        this->_Vdmu.setZero();
+        this->_Vddmu.setZero();
+
+        this->_Vdmu = Integrate_cuda(1);
+        this->_Vdmu = this->_precision * this->_Vdmu;
+        this->_Vdmu = this->_Vdmu / this->temperature();
+
+        double E_phi = Integrate_cuda(0)(0, 0);
+        
+        MatrixXd E_xxphi{Integrate_cuda(2)};
+        this->_Vddmu.triangularView<Upper>() = (this->_precision * E_xxphi * this->_precision - this->_precision * E_phi).triangularView<Upper>();
+        this->_Vddmu.triangularView<StrictlyLower>() = this->_Vddmu.triangularView<StrictlyUpper>().transpose();
+        this->_Vddmu = this->_Vddmu / this->temperature();
+
+        return std::make_tuple(E_phi, this->_Vdmu, this->_Vddmu);
 
     }
     
@@ -94,6 +119,7 @@ void calculate_partial_V() override{
         MatrixXd sigmapts_gh = this -> _gh -> sigmapts();
         MatrixXd weights_gh = this -> _gh -> weights();
         MatrixXd result;
+
         if (type == 0)
             result = MatrixXd::Zero(1,1);
         else if (type ==  1)
@@ -101,7 +127,6 @@ void calculate_partial_V() override{
         else
            result = MatrixXd::Zero(sigmapts_gh.cols(),sigmapts_gh.cols());
            
-        // MatrixXd pts(result.rows(), sigmapts_gh.rows()*result.cols());
         _cuda -> CudaIntegration(sigmapts_gh, weights_gh, result, mean_gh, type);                  
 
         return result;
@@ -136,9 +161,9 @@ void calculate_partial_V() override{
         return _func_Vmumu(x);
     }
 
-    inline void update_cuda() override{
-        _cuda = std::make_shared<CudaOperation_PlanarPR>(CudaOperation_PlanarPR{_sigma, _epsilon, _radius});
-    }
+    // inline void update_cuda() override{
+    //     _cuda = std::make_shared<CudaOperation_PlanarPR>(CudaOperation_PlanarPR{_sigma, _epsilon, _radius});
+    // }
 
     inline void cuda_init() override{
         _cuda -> Cuda_init(this -> _gh -> weights());
@@ -148,31 +173,56 @@ void calculate_partial_V() override{
         _cuda -> Cuda_free();
     }
 
+    inline bool linear_factor() override { return _isLinear; }
+
+    inline void newCostIntegration(const MatrixXd& sigmapts, VectorXd& results, const int sigmapts_cols) override{
+        _cuda -> Cuda_init_iter(sigmapts, results, sigmapts_cols);
+        _cuda -> costIntegration(sigmapts, results, sigmapts_cols);
+        _cuda -> Cuda_free_iter();
+    }
+
+    inline void dmuIntegration(const MatrixXd& sigmapts, const MatrixXd& mean, VectorXd& E_phi_mat, VectorXd& dmu_mat, MatrixXd& ddmu_mat, const int sigmapts_cols) override{
+        _cuda -> Cuda_init_iter(sigmapts, E_phi_mat, sigmapts_cols);
+        _cuda -> costIntegration(sigmapts, E_phi_mat, sigmapts_cols);
+        _cuda -> dmuIntegration(sigmapts, mean, dmu_mat, sigmapts_cols);
+        _cuda -> ddmuIntegration(ddmu_mat);
+        _cuda -> Cuda_free_iter();
+    }
+
     double fact_cost_value(const VectorXd& fill_joint_mean, const SpMat& joint_cov) override {
+
         VectorXd mean_k = extract_mu_from_joint(fill_joint_mean);
         MatrixXd Cov_k = extract_cov_from_joint(joint_cov);
 
         updateGH(mean_k, Cov_k);
 
-        // Function Value becomes 0 after Exp2
-        // _cuda = std::make_shared<CudaOperation_PlanarPR>(CudaOperation_PlanarPR{_sigma, _epsilon, _radius});
-
-        // double value = Integrate_cuda(0)(0, 0) / this->temperature();
-        // double value_cpu_right = this->_gh->Integrate(this->_func_phi)(0, 0) / this->temperature();
-        // double error = value_cpu_right - value;
-
-        // if (error > 0.01 || error < -0.01){
-        //     int aa = 1;
-        //     // value = Integrate_cuda(0)(0, 0) / this->temperature();
-        //     // value_cpu_right = this->_gh->Integrate(this->_func_phi)(0, 0) / this->temperature();
-        // }
-
         return Integrate_cuda(0)(0, 0) / this->temperature();
-        // return this->_gh->Integrate(this->_func_phi)(0, 0) / this->temperature();
+    }
+
+    void cuda_matrices(const VectorXd& fill_joint_mean, const SpMat& joint_cov, std::vector<MatrixXd>& vec_sigmapts, std::vector<VectorXd>& vec_mean) override {
+
+        VectorXd mean_k = extract_mu_from_joint(fill_joint_mean);
+        MatrixXd Cov_k = extract_cov_from_joint(joint_cov);        
+
+        updateGH(mean_k, Cov_k);
+
+        vec_mean[_start_index-1] = mean_k;
+        vec_sigmapts[_start_index-1] = this -> _gh -> sigmapts();
+    }
+
+    void cuda_matrices(std::vector<MatrixXd>& vec_sigmapts, std::vector<VectorXd>& vec_mean) override {   
+
+        updateGH(this->_mu, this->_covariance);
+
+        vec_mean[_start_index-1] = this->_mu;
+        vec_sigmapts[_start_index-1] = this -> _gh -> sigmapts();
+
     }
     
+    VectorXd _mean;
     std::shared_ptr<CudaOperation_PlanarPR> _cuda;
     double _sigma, _epsilon, _radius;
+    bool _isLinear = false;
 
 };
 

@@ -22,6 +22,7 @@
 #include "quadrature/SparseGaussHermite_Cuda.h"
 #include "helpers/CommonDefinitions.h"
 #include "helpers/MatrixHelper.h"
+#include "helpers/CudaOperation.h"
 
 using namespace Eigen;
 
@@ -126,6 +127,9 @@ public:
     */
     virtual void calculate_partial_V(){}
 
+    /**
+     * @brief Compute the increment on mean and precision (or covariance) matrix of nonlinear factors given the matrices.
+    */
     virtual void calculate_partial_V(const MatrixXd& E_xxphi, const VectorXd& Vdmu, double E_Phi){}
 
     virtual std::tuple<double, VectorXd, MatrixXd> derivatives(){}
@@ -170,15 +174,13 @@ public:
 
     virtual inline SpMat local2joint_dprecision(Eigen::MatrixXd & dprecision_lcl){}
 
-    virtual inline void update_cuda(){}
+    // virtual inline void update_cuda(){}
 
     virtual inline void cuda_init(){}
 
     virtual inline void cuda_free(){}
 
     virtual inline bool linear_factor(){}
-
-    virtual inline void costIntegration(const MatrixXd& sigmapts, VectorXd& results, const int sigmapts_cols){}
 
     virtual inline void newCostIntegration(const MatrixXd& sigmapts, VectorXd& results, const int sigmapts_cols){}
 
