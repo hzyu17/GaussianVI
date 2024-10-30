@@ -18,6 +18,7 @@ namespace gvi{
 
 template <typename Factor>
 void GVIGH<Factor>::switch_to_high_temperature(){
+    
     #pragma omp parallel for
     for (auto& i_factor : _vec_factors) {
         i_factor->factor_switch_to_high_temperature();
@@ -47,6 +48,9 @@ void GVIGH<Factor>::optimize(std::optional<bool> verbose)
 
         // ============= High temperature phase =============
         if (i_iter == _niters_lowtemp && is_lowtemp){
+            if (is_verbose){
+                std::cout << "Switching to high temperature.." << std::endl;
+            }
             if (is_verbose){
                 std::cout << "Switching to high temperature.." << std::endl;
             }
@@ -188,8 +192,8 @@ VectorXd GVIGH<Factor>::factor_cost_vector(const VectorXd& fill_joint_mean, SpMa
     VectorXd fac_costs(_nfactors);
     fac_costs.setZero();
     int cnt = 0;
-    SpMat joint_cov = inverse_GBP(joint_precision);
 
+    SpMat joint_cov = inverse_GBP(joint_precision);
     int thread_cnt = 0;
 
     #pragma omp for
