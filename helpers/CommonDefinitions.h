@@ -19,14 +19,7 @@
 #define XSTRING(x) STRING(x)
 static std::string source_root{XSTRING(SOURCE_ROOT)};
 
-
 namespace gvi{
-
-// #ifdef GVI_SUBDUR_ENV 
-// std::string map_file{source_root+"/GaussianVI/quadrature/SparseGHQuadratureWeights.bin"};
-// #else
-// std::string map_file{source_root+"/quadrature/SparseGHQuadratureWeights.bin"};
-// #endif
     
 typedef Eigen::SparseMatrix<double, Eigen::ColMajor> SpMat; // declares a column-major sparse matrix type of double
 typedef Eigen::SparseVector<double> SpVec; 

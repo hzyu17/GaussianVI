@@ -12,9 +12,6 @@
 
 #pragma once
 
-#ifndef SPARSEGAUSSHERMITE_H
-#define SPARSEGAUSSHERMITE_H
-
 #include <optional>
 #include "quadrature/SparseGHQuadratureWeights.h"
 #include "helpers/CommonDefinitions.h"
@@ -29,10 +26,8 @@ namespace gvi{
 template <typename Function>
 class SparseGaussHermite{
 
-    using CudaFunction = std::function<void(double*, double*)>;
     using GHFunction = std::function<MatrixXd(const VectorXd&)>;
     // using CostFunction = std::function<double(const VectorXd&, const CostClass &)>;
-    // using Cuda = CudaOperation<GHFunction>;
 
 public:
 
@@ -277,34 +272,3 @@ protected:
 
 } // namespace gvi
 
-#endif
-
-
-
-    // static void functionWrapper(double* input, double* output, int size, void* context) {
-    //     auto* self = static_cast<SparseGaussHermite*>(context);
-    //     Eigen::Map<const Eigen::VectorXd> x_vector(input, size);
-    //     std::cout << x_vector.transpose() << std::endl << std::endl;
-    //     Eigen::MatrixXd result = self->global_function(x_vector);
-    //     int rows = result.rows();
-    //     int cols = result.cols();
-    //     double* result_array = new double[result.size()];
-    //     Eigen::Map<Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>>(output, rows, cols) = result;
-    //     return;
-    // }
-
-
-    // inline void update_function(const Function& function){
-    //     func_cuda = [this, function](double* input, double* output){
-    //         std::cout << "Comming in the function" << std::endl;
-    //         double* result_array = new double[_mean_func.size()];
-    //         Eigen::Map<const Eigen::VectorXd> x_vector(input, this->_sigmapts.rows());
-    //         // Eigen::Map<Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>> x_vector(non_const_x, res.rows(), res.cols());
-    //         Eigen::MatrixXd result = function(x_vector);
-    //         Eigen::Map<Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>>(result_array, result.rows(), result.cols()) = result;
-    //         for (int i = 0; i<_mean_func.size(); i++){
-    //             output[i] = result_array[i];
-    //         }
-    //         // output =  result_array;
-    //     };
-    // }

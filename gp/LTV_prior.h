@@ -2,7 +2,6 @@
 
 #include "linear_factor.h"
 #include "helpers/EigenWrapper.h"
-#include <unsupported/Eigen/MatrixFunctions>
 #include <boost/numeric/odeint.hpp>
 
 namespace gvi{
@@ -85,14 +84,6 @@ class LTV_GP : public LinearFactor{
             integrate_adaptive(_stepper, gramian_ode_bound, Q_vec, 0.0, _delta_t, dt);
             MatrixXd Gramian = Eigen::Map<const MatrixXd>(Q_vec.data(), _dim_state, _dim_state);
 
-            // Eigen::EigenSolver<MatrixXd> eigensolver(Gramian);
-            // if (eigensolver.info() == Eigen::Success) {
-            //     VectorXcd eigenvalues = eigensolver.eigenvalues();
-            //     std::cout << "Gramian matrix's eigenvalues: " << eigenvalues.real().transpose() << std::endl;
-            // } else {
-            //     std::cerr << "Failed to compute eigenvalues." << std::endl;
-            // }
-
             // // Use Boole's Rule to approximate the integration
             // MatrixXd gramian = (7 * _Phi_ode_results[0] * _B_vec[0] * _B_vec[0].transpose() * _Phi_ode_results[0].transpose() 
             // + 32 * _Phi_ode_results[1] * _B_vec[1] * _B_vec[1].transpose() * _Phi_ode_results[1].transpose()
@@ -164,13 +155,6 @@ class LTV_GP : public LinearFactor{
         inline void compute_invQ() {
             _invQ = MatrixXd::Zero(_dim_state, _dim_state);
             _invQ = _Q.inverse();
-            // Eigen::EigenSolver<MatrixXd> eigensolver(_invQ);
-            // if (eigensolver.info() == Eigen::Success) {
-            //     VectorXcd eigenvalues = eigensolver.eigenvalues();
-            //     std::cout << "Gramian inverse matrix's eigenvalues: " << eigenvalues.real().transpose() << std::endl;
-            // } else {
-            //     std::cerr << "Failed to compute eigenvalues." << std::endl;
-            // }
         }
 
         inline VectorXd get_mu() const { return _target_mu; }
@@ -188,47 +172,3 @@ class LTV_GP : public LinearFactor{
 };
 
 }
-
-
-// EigenSolver<MatrixXd> solver(_Q);
-// VectorXd eigenvalues = solver.eigenvalues().real();
-
-// EigenSolver<MatrixXd> solver_inv(_invQ);
-// VectorXd eigenvalues_inv = solver_inv.eigenvalues().real();
-
-// std::cout << "Matrix A= " << std::endl << hA[start_index] << std::endl;
-// std::cout << "Matrix B= " << std::endl << hB[start_index] << std::endl;
-// std::cout << "Transition Matrix = " << std::endl << _Phi << std::endl;
-// std::cout << "Phi x hB= " << std::endl << _Phi * hB[start_index] << std::endl;
-
-// std::cout << "Grammian = " << std::endl << _Q << std::endl;
-// std::cout << "Precision = " << std::endl << _invQ << std::endl << std::endl;
-// std::cout << "The eigenvalues of the Gramian:\n" << eigenvalues << std::endl;
-// std::cout << "The eigenvalues of the Precision:\n" << eigenvalues_inv << std::endl;
-
-
-// MatrixXd A_Mat(_dim_state, _dim_state);
-// A_Mat << MatrixXd::Zero(_dim, _dim),  MatrixXd::Identity(_dim, _dim), MatrixXd::Zero(_dim, _dim_state);
-// return A_Mat;
-
-
-// MatrixXd Phi_LTI (_dim_state, _dim_state);
-// Phi_LTI.setZero();
-// Phi_LTI << MatrixXd::Identity(_dim, _dim), delta_t*MatrixXd::Identity(_dim, _dim), 
-//             MatrixXd::Zero(_dim, _dim), MatrixXd::Identity(_dim, _dim);
-
-// MatrixXd Err_LTI = _Phi_results[0] - Phi_LTI;
-// std::cout << "Norm of LTI Error = "  << std::endl << Err_LTI.norm() << std::endl << std::endl;
-
-
-// MatrixXd gramian_pred = (_Phi * hB_i * hB_i.transpose() * _Phi.transpose() + hB_next * hB_next.transpose()) / 2 * _delta_t;
-// MatrixXd derivative_i = hB_i * hB_i.transpose();
-// MatrixXd derivative_next = hB_next * hB_next.transpose() + (hA_next + hA_next.transpose()) * gramian_pred;
-// MatrixXd gramian = gramian_pred - (derivative_next - derivative_i) / 12 * _delta_t * _delta_t;
-
-// return (_Phi * hB[_start_index] * hB[_start_index].transpose() * _Phi.transpose() +
-// hB[_start_index + 1] * hB[_start_index + 1].transpose()) / 2 * _delta_t;
-
-
-// MatrixXd Phi_pred = MatrixXd::Identity(_dim_state, _dim_state) + _delta_t * hA[_start_index];
-// _Phi = MatrixXd::Identity(_dim_state, _dim_state) + (hA[_start_index] + hA[_start_index+1] * Phi_pred) / 2 * delta_t;
