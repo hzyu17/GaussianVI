@@ -58,9 +58,13 @@ public:
             _mu{VectorXd::Zero(_dim)},
             _precision{SpMat(_dim, _dim)},
             _covariance{SpMat(_dim, _dim)},
-            _res_recorder{niterations, dim_state, num_states, _nfactors}
+            _res_recorder{niterations, dim_state, num_states, _nfactors},
+            _Vdmu(VectorXd::Zero(_dim)),
+            _Vddmu(SpMat(_dim, _dim))
     {
         construct_sparse_precision();
+        _Vdmu.setZero();
+        _Vddmu.setZero();
     }
 
 protected:
@@ -71,8 +75,14 @@ protected:
 
     double _stop_err;
 
+    double _alpha = 1.0;
+
+    // Put step size decrease rate in config
+
     /// @param _vec_factors Vector of marginal optimizers
     std::vector<std::shared_ptr<FactorizedOptimizer>> _vec_factors;
+    std::vector<std::shared_ptr<FactorizedOptimizer>> _vec_linear_factors;
+    std::vector<std::shared_ptr<FactorizedOptimizer>> _vec_nonlinear_factors;
 
     VectorXd _mu;
 
@@ -95,6 +105,9 @@ protected:
     /// filename for the perturbed costs
     std::string _file_perturbed_cost;
 
+    VectorXd _Vdmu;
+    SpMat _Vddmu;  
+
 
 public:
 
@@ -115,6 +128,15 @@ public:
      */
     VectorXd factor_cost_vector(const VectorXd& x, SpMat& Precision);
 
+    /**
+     * @brief Compute the costs and derivatives of all factors for a given mean and cov.
+     */
+    std::tuple<double, VectorXd, VectorXd, SpMat> factor_cost_vector_cuda(const VectorXd& fill_joint_mean, SpMat& joint_precision);
+
+    std::tuple<double, VectorXd, VectorXd, SpMat> factor_cost_vector_cuda_time(const VectorXd& fill_joint_mean, SpMat& joint_precision);
+
+    double cost_value_cuda(const VectorXd& fill_joint_mean, SpMat& joint_precision);
+
     void time_test();
 
     /**
@@ -132,8 +154,6 @@ public:
      * @brief Function which computes one step of update.
      */
     virtual std::tuple<VectorXd, SpMat> compute_gradients(std::optional<double>step_size=std::nullopt){};
-
-    virtual std::tuple<VectorXd, SpMat> compute_gradients_time(std::optional<double>step_size=std::nullopt){};
 
     // /**
     //  * @brief The optimizing process.
@@ -156,6 +176,11 @@ public:
      */
     virtual VectorXd factor_cost_vector(){};
 
+    virtual std::tuple<double, VectorXd, VectorXd, SpMat> factor_cost_vector_cuda(){};
+
+    virtual std::tuple<double, VectorXd, VectorXd, SpMat> factor_cost_vector_cuda_time(){};
+
+    virtual double cost_value_cuda(){};
 
 /// **************************************************************
 /// Internal data IO
@@ -164,6 +189,10 @@ public:
     inline SpMat covariance() const { return _covariance; }
 
     inline SpMat precision() const { return _precision; }
+
+    inline VectorXd Vdmu() const {return _Vdmu; }
+
+    inline SpMat Vddmu() const { return _Vddmu; }
 
     inline void inverse_inplace(){
         ldlt_decompose();
@@ -181,7 +210,6 @@ public:
         return {prior_message.first, input_message.second + prior_message.second};
     }
 
-
     /// update the step sizes
     inline void set_step_size(double step_size){ 
         _step_size = step_size; 
@@ -191,6 +219,8 @@ public:
     }
 
     inline void set_stop_err(double stop_err) { _stop_err = stop_err; }
+
+    inline void set_alpha(double alpha) { _alpha = alpha; }
 
     /// The base step size in backtracking
     inline void set_step_size_base(double step_size_base){ _step_size_base = step_size_base; }
@@ -359,6 +389,9 @@ public:
 
     void switch_to_high_temperature();
 
+    void classify_factors();
+
+
     /**
      * @brief calculate and return the E_q{phi(x)} s for each factorized entity.
      * @return vector<double> 
@@ -434,6 +467,6 @@ public:
 }
 
 
-#include "GVI-GH-GBP-impl.h"
+#include "GVI-GH-Cuda-impl.h"
 
 #endif // GVI_GH_H

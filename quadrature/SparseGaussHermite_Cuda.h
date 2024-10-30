@@ -12,22 +12,26 @@
 
 #pragma once
 
+#ifndef SPARSEGAUSSHERMITE_H
+#define SPARSEGAUSSHERMITE_H
+
 #include <optional>
+#include <functional>
 #include "quadrature/SparseGHQuadratureWeights.h"
 #include "helpers/CommonDefinitions.h"
+#include "cuda_runtime.h"
 
-#ifdef GVI_SUBDUR_ENV 
-std::string map_file{source_root+"/GaussianVI/quadrature/SparseGHQuadratureWeights.bin"};
-#else
-std::string map_file{source_root+"/quadrature/SparseGHQuadratureWeights.bin"};
-#endif
+
+// #ifdef GVI_SUBDUR_ENV 
+// std::string map_file{source_root+"/GaussianVI/quadrature/SparseGHQuadratureWeights.bin"};
+// #else
+// std::string map_file{source_root+"/quadrature/SparseGHQuadratureWeights.bin"};
+// #endif
 
 namespace gvi{
 template <typename Function>
-class SparseGaussHermite{
-
+class SparseGaussHermite_Cuda{
     using GHFunction = std::function<MatrixXd(const VectorXd&)>;
-    // using CostFunction = std::function<double(const VectorXd&, const CostClass &)>;
 
 public:
 
@@ -39,77 +43,67 @@ public:
      * @param mean mean 
      * @param P covariance matrix
      */
-    SparseGaussHermite(
+
+    SparseGaussHermite_Cuda(
         const int& deg, 
         const int& dim, 
         const Eigen::VectorXd& mean, 
-        const Eigen::MatrixXd& P,
-        std::optional<QuadratureWeightsMap> weight_sigpts_map_option=std::nullopt): 
+        const Eigen::MatrixXd& P): 
             _deg(deg),
             _dim(dim),
             _mean(mean),
             _P(P)
             {  
-                // If input has a loaded map
-                if (weight_sigpts_map_option.has_value()){
-                    _nodes_weights_map = std::make_shared<QuadratureWeightsMap>(weight_sigpts_map_option.value());
-                }
+                std::string map_file_local{source_root+"/GaussianVI/quadrature/SparseGHQuadratureWeights.bin"};
                 // Read map from file
-                else{
-                    QuadratureWeightsMap nodes_weights_map;
-                    try {
-                        std::ifstream ifs(map_file, std::ios::binary);
-                        if (!ifs.is_open()) {
-                            std::string error_msg = "Failed to open file for GH weights reading in file: " + map_file;
-                            throw std::runtime_error(error_msg);
-                        }
-
-                        std::cout << "Opening file for GH weights reading in file: " << map_file << std::endl;
-                        boost::archive::binary_iarchive ia(ifs);
-                        ia >> nodes_weights_map;
-
-                    } catch (const boost::archive::archive_exception& e) {
-                        std::cerr << "Boost archive exception: " << e.what() << std::endl;
-                    } catch (const std::exception& e) {
-                        std::cerr << "Standard exception: " << e.what() << std::endl;
+                QuadratureWeightsMap nodes_weights_map;
+                try {
+                    std::ifstream ifs(map_file_local, std::ios::binary);
+                    if (!ifs.is_open()) {
+                        std::string error_msg = "Failed to open file for GH weights reading in file: " + map_file_local;
+                        throw std::runtime_error(error_msg);
                     }
 
-                    _nodes_weights_map = std::make_shared<QuadratureWeightsMap>(nodes_weights_map);
+                    std::cout << "Opening file for GH weights reading in file: " << map_file_local << std::endl;
+                    boost::archive::binary_iarchive ia(ifs);
+                    ia >> nodes_weights_map;
 
+                } catch (const boost::archive::archive_exception& e) {
+                    std::cerr << "Boost archive exception: " << e.what() << std::endl;
+                } catch (const std::exception& e) {
+                    std::cerr << "Standard exception: " << e.what() << std::endl;
                 }
+
+                _nodes_weights_map = std::make_shared<QuadratureWeightsMap>(nodes_weights_map);
                 
                 computeSigmaPtsWeights();
             }
 
-    SparseGaussHermite(
+
+    SparseGaussHermite_Cuda(
         const int& deg, 
         const int& dim, 
         const Eigen::VectorXd& mean, 
         const Eigen::MatrixXd& P,
-        std::optional<std::shared_ptr<QuadratureWeightsMap>> weight_sigpts_map_option=std::nullopt): 
+        const std::shared_ptr<QuadratureWeightsMap>& weights_map_pointer): 
             _deg(deg),
             _dim(dim),
             _mean(mean),
             _P(P)
             {  
-                if (weight_sigpts_map_option.has_value()){
-                    _nodes_weights_map = weight_sigpts_map_option.value();
-                }
+                _nodes_weights_map = weights_map_pointer;
                 computeSigmaPtsWeights();
             }
-
-    SparseGaussHermite(
+    
+    SparseGaussHermite_Cuda(
         const int& deg, 
         const int& dim, 
-        const Eigen::VectorXd& mean, 
-        const Eigen::MatrixXd& P,
-        const QuadratureWeightsMap& weights_map): 
+        const std::shared_ptr<QuadratureWeightsMap>& weights_map_pointer): 
             _deg(deg),
-            _dim(dim),
-            _mean(mean),
-            _P(P)
+            _dim(dim)
             {  
-                computeSigmaPtsWeights(weights_map);
+                _nodes_weights_map = weights_map_pointer;
+                computeWeights();
             }
             
 
@@ -141,9 +135,33 @@ public:
             std::cout << "(dimension, degree) " << "(" << _dim << ", " << _deg << ") " <<
              "key does not exist in the GH weight map." << std::endl;
         }
-        
 
+        
         return ;
+    }
+
+
+    /**
+     * @brief Compute Weights without computing SigmaPts
+     */
+    void computeWeights(){
+        
+        DimDegTuple dim_deg;
+        dim_deg = std::make_tuple(_dim, _deg);;
+
+        PointsWeightsTuple pts_weights;
+        if (_nodes_weights_map->count(dim_deg) > 0) {
+            pts_weights = _nodes_weights_map->at(dim_deg);
+
+            _zeromeanpts = std::get<0>(pts_weights);
+            _Weights = std::get<1>(pts_weights);
+
+        }
+        else {
+            std::cout << "(dimension, degree) " << "(" << _dim << ", " << _deg << ") " <<
+             "key does not exist in the GH weight map." << std::endl;
+        }
+
     }
 
     /**
@@ -188,7 +206,7 @@ public:
 
             #pragma omp for nowait  // The 'nowait' clause can be used if there is no need for synchronization after the loop
             for (int i = 0; i < _sigmapts.rows(); i++) {
-                pt = _sigmapts.row(i);
+                pt = _sigmapts.row(i); // Row of the matrix
                 private_res += function(pt) * _Weights(i);
             }
 
@@ -196,10 +214,9 @@ public:
             #pragma omp critical
             res += private_res;
         }
-        
         return res;
-        
     };
+
 
     /**
      * Update member variables
@@ -253,9 +270,15 @@ public:
 
     inline Eigen::VectorXd weights() const { return this->_Weights; }
 
+    inline Eigen::MatrixXd zeromeanpts() const { return this->_zeromeanpts; }
+
     inline Eigen::MatrixXd sigmapts() const { return this->_sigmapts; }
 
     inline Eigen::MatrixXd mean() const { return this->_mean; }
+
+    inline Eigen::MatrixXd covariance() const { return this->_P; }
+
+    Function _function;
 
 protected:
     int _deg;
@@ -272,3 +295,4 @@ protected:
 
 } // namespace gvi
 
+#endif

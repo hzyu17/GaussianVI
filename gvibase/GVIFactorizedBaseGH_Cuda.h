@@ -11,30 +11,30 @@
 
 #pragma once
 
-#include "GVIFactorizedBase.h"
+#include "GVIFactorizedBase_Cuda.h"
 
 using namespace Eigen;
 
 namespace gvi{
 
-class GVIFactorizedBaseGH: public GVIFactorizedBase{
-using Base = GVIFactorizedBase;
+class GVIFactorizedBaseGH_Cuda: public GVIFactorizedBase_Cuda{
+using Base = GVIFactorizedBase_Cuda;
 
 public:
-    virtual ~GVIFactorizedBaseGH(){}
+    virtual ~GVIFactorizedBaseGH_Cuda(){}
     /**
      * @brief Default Constructor
      */
-    GVIFactorizedBaseGH(){}
+    GVIFactorizedBaseGH_Cuda(){}
 
     /**
      * @brief Construct a new GVIFactorizedBase object
      * 
      * @param dimension The dimension of the state
      */
-    GVIFactorizedBaseGH(int dimension, int state_dim, int num_states, int start_index, 
-                        double temperature=10.0, double high_temperature=100.0, 
-                        std::optional<std::shared_ptr<QuadratureWeightsMap>> weight_sigpts_map_option=std::nullopt):
+    GVIFactorizedBaseGH_Cuda(int dimension, int state_dim, int num_states, int start_index, 
+                        double temperature, double high_temperature, 
+                        std::shared_ptr<QuadratureWeightsMap> weight_sigpts_map_option):
             Base(dimension, state_dim, num_states, start_index, temperature, high_temperature){
             }
             

@@ -17,7 +17,7 @@
 #include <utility>
 #include <memory>
 
-#include "gvibase/GVI-GH-GBP.h"
+#include "gvibase/GVI-GH-Cuda.h"
 
 using namespace Eigen;
 namespace gvi{
@@ -43,18 +43,18 @@ public:
           int niterations = 5,
           double temperature = 1.0,
           double high_temperature = 100.0) :
-        GVIGH<FactorizedOptimizer>(vec_fact_optimizers, dim_state, num_states, niterations, temperature, high_temperature),
-        _Vdmu(VectorXd::Zero(Base::_dim)),
-        _Vddmu(SpMat(Base::_dim, Base::_dim))
+        GVIGH<FactorizedOptimizer>(vec_fact_optimizers, dim_state, num_states, niterations, temperature, high_temperature)
+        // _Vdmu(VectorXd::Zero(Base::_dim)),
+        // _Vddmu(SpMat(Base::_dim, Base::_dim))
     {
-        _Vdmu.setZero();
-        _Vddmu.setZero();
+        // _Vdmu.setZero();
+        // _Vddmu.setZero();
 
     }
 
 protected:
-    VectorXd _Vdmu;
-    SpMat _Vddmu;    
+    // VectorXd _Vdmu;
+    // SpMat _Vddmu;    
 
 public:
 /// ************************* Override functions for NGD algorithm *************************************
@@ -63,9 +63,6 @@ public:
      * @brief Function which computes one step of update.
      */
     std::tuple<VectorXd, SpMat> compute_gradients(std::optional<double>step_size=std::nullopt) override;
-
-    std::tuple<VectorXd, SpMat> compute_gradients_time(std::optional<double>step_size=std::nullopt) override;
-
 
     std::tuple<double, VectorXd, SpMat> onestep_linesearch(const double &step_size, const VectorXd& dmu, const SpMat& dprecision) override;
 
@@ -76,6 +73,8 @@ public:
      */
     double cost_value() override;
 
+    double cost_value_cuda() override;
+
     /**
      * @brief given a state, compute the total cost function value without the entropy term, using current values.
      */
@@ -85,12 +84,11 @@ public:
      * @brief Compute the costs of all factors, using current values.
      */
     VectorXd factor_cost_vector() override;
-    
 
-    inline VectorXd Vdmu() const {return _Vdmu; }
+    std::tuple<double, VectorXd, VectorXd, SpMat> factor_cost_vector_cuda() override;
 
-    inline SpMat Vddmu() const { return _Vddmu; }
-    
+    std::tuple<double, VectorXd, VectorXd, SpMat> factor_cost_vector_cuda_time() override;
+
 
 }; //class
 
@@ -99,6 +97,6 @@ public:
 
 // function implementations
 
-#include "NGD-GH-impl.h"
+#include "NGD-GH-Cuda-impl.h"
 
 #endif //NGD-GH

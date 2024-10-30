@@ -17,7 +17,7 @@
 
 #define STRING(x) #x
 #define XSTRING(x) STRING(x)
-std::string source_root{XSTRING(SOURCE_ROOT)};
+static std::string source_root{XSTRING(SOURCE_ROOT)};
 
 namespace gvi{
     
@@ -29,7 +29,7 @@ typedef std::pair <Eigen::VectorXd, Eigen::MatrixXd> Message;
 
 
 //https://eigen.tuxfamily.org/dox/structEigen_1_1IOFormat.html
-Eigen::IOFormat CSVFormat(Eigen::FullPrecision, Eigen::DontAlignCols, ", ", "\n");
+static Eigen::IOFormat CSVFormat(Eigen::FullPrecision, Eigen::DontAlignCols, ", ", "\n");
 
 } // namespace gvi
 

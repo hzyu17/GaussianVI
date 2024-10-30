@@ -19,11 +19,11 @@ namespace gvi{
  */
 template <typename Factor>
 std::tuple<VectorXd, SpMat> NGDGH<Factor>::compute_gradients(std::optional<double>step_size){
-    _Vdmu.setZero();
-    _Vddmu.setZero();
+    Base::_Vdmu.setZero();
+    Base::_Vddmu.setZero();
 
-    VectorXd Vdmu_sum = VectorXd::Zero(_Vdmu.size());
-    SpMat Vddmu_sum = SpMat(_Vddmu.rows(), _Vddmu.cols());
+    VectorXd Vdmu_sum = VectorXd::Zero(Base::_Vdmu.size());
+    SpMat Vddmu_sum = SpMat(Base::_Vddmu.rows(), Base::_Vddmu.cols());
 
     /**
      * @brief OMP parallel on cpu.
@@ -33,8 +33,8 @@ std::tuple<VectorXd, SpMat> NGDGH<Factor>::compute_gradients(std::optional<doubl
     #pragma omp parallel
     {
         // Thread-local storage to avoid race conditions
-        VectorXd Vdmu_private = VectorXd::Zero(_Vdmu.size());
-        SpMat Vddmu_private = SpMat(_Vddmu.rows(), _Vddmu.cols());
+        VectorXd Vdmu_private = VectorXd::Zero(Base::_Vdmu.size());
+        SpMat Vddmu_private = SpMat(Base::_Vddmu.rows(), Base::_Vddmu.cols());
 
         #pragma omp for nowait // Nowait allows threads to continue without waiting at the end of the loop
         for (auto &opt_k : Base::_vec_factors) {
@@ -51,44 +51,17 @@ std::tuple<VectorXd, SpMat> NGDGH<Factor>::compute_gradients(std::optional<doubl
     }
 
     // Update the member variables 
-    _Vdmu = Vdmu_sum;
-    _Vddmu = Vddmu_sum;
+    Base::_Vdmu = Vdmu_sum;
+    Base::_Vddmu = Vddmu_sum;
 
-    SpMat dprecision = _Vddmu - Base::_precision;
+    // std::cout << "Vdmu" << _Vdmu << std::endl;
+
+    SpMat dprecision = Base::_Vddmu - Base::_precision;
 
     Eigen::ConjugateGradient<SpMat, Eigen::Upper> solver;
-    VectorXd dmu =  solver.compute(_Vddmu).solve(-_Vdmu);
+    VectorXd dmu =  solver.compute(Base::_Vddmu).solve(-Base::_Vdmu);
 
     return std::make_tuple(dmu, dprecision);
-}
-
-// To avoid using local2joint_dprecision for time tests, as it is too time-consuming
-template <typename Factor>
-std::tuple<VectorXd, SpMat> NGDGH<Factor>::compute_gradients_time(std::optional<double>step_size){
-    _Vdmu.setZero();
-    _Vddmu.setZero();
-
-    VectorXd Vdmu_sum = VectorXd::Zero(_Vdmu.size());
-    SpMat Vddmu_sum = SpMat(_Vddmu.rows(), _Vddmu.cols());
-
-    /**
-     * @brief OMP parallel on cpu.
-     */
-    omp_set_num_threads(20); 
-
-    #pragma omp parallel
-    {
-        // Thread-local storage to avoid race conditions
-        VectorXd Vdmu_private = VectorXd::Zero(_Vdmu.size());
-        SpMat Vddmu_private = SpMat(_Vddmu.rows(), _Vddmu.cols());
-
-        #pragma omp for nowait // Nowait allows threads to continue without waiting at the end of the loop
-        for (auto &opt_k : Base::_vec_factors) {
-            opt_k->calculate_partial_V();
-        }
-    }
-
-    return std::make_tuple(Vdmu_sum, Vddmu_sum);
 }
 
 template <typename Factor>
@@ -107,7 +80,9 @@ std::tuple<double, VectorXd, SpMat> NGDGH<Factor>::onestep_linesearch(const doub
     new_precision = this->_precision + step_size * dprecision;
 
     // new cost
-    double new_cost = Base::cost_value(new_mu, new_precision);
+    double new_cost = Base::cost_value_cuda(new_mu, new_precision);
+    
+    // std::cout << "New cost = " << new_cost << std::endl;
     return std::make_tuple(new_cost, new_mu, new_precision);
 
 }
@@ -130,6 +105,18 @@ VectorXd NGDGH<Factor>::factor_cost_vector()
     return Base::factor_cost_vector(this->_mu, this->_precision);
 }
 
+template <typename Factor>
+std::tuple<double, VectorXd, VectorXd, SpMat> NGDGH<Factor>::factor_cost_vector_cuda()
+{   
+    return Base::factor_cost_vector_cuda(this->_mu, this->_precision);
+}
+
+template <typename Factor>
+std::tuple<double, VectorXd, VectorXd, SpMat> NGDGH<Factor>::factor_cost_vector_cuda_time()
+{   
+    return Base::factor_cost_vector_cuda_time(this->_mu, this->_precision);
+}
+
 /**
  * @brief Compute the total cost function value given a state, using current values.
  */
@@ -137,6 +124,13 @@ template <typename Factor>
 double NGDGH<Factor>::cost_value()
 {
     return Base::cost_value(this->_mu, this->_precision);
+}
+
+
+template <typename Factor>
+double NGDGH<Factor>::cost_value_cuda()
+{
+    return Base::cost_value_cuda(this->_mu, this->_precision);
 }
 
 /**
