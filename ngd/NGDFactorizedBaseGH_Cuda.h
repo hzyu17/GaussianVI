@@ -22,6 +22,7 @@ using namespace Eigen;
 
 namespace gvi{
 
+template <typename CudaClass>
 class NGDFactorizedBaseGH_Cuda: public GVIFactorizedBaseGH_Cuda{
 
     using GVIBase = GVIFactorizedBaseGH_Cuda;
@@ -36,7 +37,7 @@ public:
                         double epsilon, double radius, 
                         double temperature, double high_temperature,
                         std::shared_ptr<QuadratureWeightsMap> weight_sigpts_map_option,
-                        std::shared_ptr<CudaOperation_PlanarPR> cuda_ptr):
+                        std::shared_ptr<CudaClass> cuda_ptr):
                 GVIBase(dimension, state_dim, num_states, start_index, 
                         temperature, high_temperature, weight_sigpts_map_option),
                 _epsilon(epsilon),
@@ -44,7 +45,7 @@ public:
                 _radius(radius)
             {
                 GVIBase::_gh = std::make_shared<GH>(GH{gh_degree, GVIBase::_dim, GVIBase::_mu, GVIBase::_covariance, weight_sigpts_map_option});
-                // _cuda = std::make_shared<CudaOperation_PlanarPR>(CudaOperation_PlanarPR{cost_sigma, epsilon, radius});
+                // _cuda = std::make_shared<CudaClass>(CudaClass{cost_sigma, epsilon, radius});
                 _cuda = cuda_ptr;
 
             }
@@ -162,7 +163,7 @@ public:
     }
 
     // inline void update_cuda() override{
-    //     _cuda = std::make_shared<CudaOperation_PlanarPR>(CudaOperation_PlanarPR{_sigma, _epsilon, _radius});
+    //     _cuda = std::make_shared<CudaClass>(CudaClass{_sigma, _epsilon, _radius});
     // }
 
     inline void cuda_init() override{
@@ -220,7 +221,7 @@ public:
     }
     
     VectorXd _mean;
-    std::shared_ptr<CudaOperation_PlanarPR> _cuda;
+    std::shared_ptr<CudaClass> _cuda;
     double _sigma, _epsilon, _radius;
     bool _isLinear = false;
 
