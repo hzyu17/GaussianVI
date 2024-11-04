@@ -95,8 +95,31 @@ public:
                 if (weight_sigpts_map_option.has_value()){
                     _nodes_weights_map = weight_sigpts_map_option.value();
                 }
+                // Read map from file
+                else{
+                    QuadratureWeightsMap nodes_weights_map;
+                    try {
+                        std::ifstream ifs(map_file, std::ios::binary);
+                        if (!ifs.is_open()) {
+                            std::string error_msg = "Failed to open file for GH weights reading in file: " + map_file;
+                            throw std::runtime_error(error_msg);
+                        }
+
+                        std::cout << "Opening file for GH weights reading in file: " << map_file << std::endl;
+                        boost::archive::binary_iarchive ia(ifs);
+                        ia >> nodes_weights_map;
+
+                    } catch (const boost::archive::archive_exception& e) {
+                        std::cerr << "Boost archive exception: " << e.what() << std::endl;
+                    } catch (const std::exception& e) {
+                        std::cerr << "Standard exception: " << e.what() << std::endl;
+                    }
+
+                    _nodes_weights_map = std::make_shared<QuadratureWeightsMap>(nodes_weights_map);
+                }
                 computeSigmaPtsWeights();
             }
+
 
     SparseGaussHermite(
         const int& deg, 
