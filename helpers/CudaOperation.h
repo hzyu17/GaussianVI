@@ -5,6 +5,7 @@
 
 #include <cuda_runtime.h>
 #include <helpers/MatrixHelper.h>
+#include <helpers/SerializeEigenMaps.h>
 #include <iostream>
 #include <Eigen/Dense>
 #include <memory>
@@ -142,37 +143,23 @@ public:
   // geometry setting of signed distance field
   int field_rows_, field_cols_, field_z_;
   double cell_size_;
-  Eigen::MatrixXd data_;
+  std::vector<Eigen::MatrixXd> data_;
   double* data_array_;
-
-private:
-  
 
 public:
   /// constructor
-  SignedDistanceField() : field_rows_(0), field_cols_(0), field_z_(0), cell_size_(0.0) {}
+  SignedDistanceField() {}
 
   /// constructor with data
-  /// The data here need to change a type
   SignedDistanceField(const Eigen::Vector3d& origin, double cell_size, const std::vector<Eigen::MatrixXd>& data) :
       origin_(origin), field_rows_(data[0].rows()), field_cols_(data[0].cols()), field_z_(data.size()), cell_size_(cell_size)
       {
-        // std::cout << "Raw data 1 in GPU :" << data[20](125, 100) << std::endl;
-        // std::cout << "Raw data 2 in GPU :" << data[50](50, 50) << std::endl;
-        // std::cout << "Raw data 3 in GPU :" << data[100](125, 100) << std::endl;
-        // std::cout << "Raw data 4 in GPU :" << data[200](125, 100) << std::endl;
-
-        // Check some points in the raw data
-        // print out the indeces and sdf value
-        data_.resize(field_rows_, field_cols_*field_z_);
+        data_ = data;
+        Eigen::MatrixXd data_matrix(field_rows_, field_cols_*field_z_);
         for (int i = 0; i < field_z_; i++){
-          data_.block(0, i*field_cols_, field_rows_, field_cols_) = data[i];
+          data_matrix.block(0, i*field_cols_, field_rows_, field_cols_) = data_[i];
         }
-        data_array_ = data_.data();
-        // std::cout << "Raw data 1 in GPU after filling :" << data_array_[125 + (100 + 20 * field_cols_) * field_rows_] << std::endl;
-        // std::cout << "Raw data 2 in GPU after filling :" << data_array_[50 + (50 + 50 * field_cols_) * field_rows_] << std::endl;
-        // std::cout << "Raw data 3 in GPU after filling :" << data_array_[125 + (100 + 100 * field_cols_) * field_rows_] << std::endl;
-        // std::cout << "Raw data 4 in GPU after filling :" << data_array_[125 + (100 + 200 * field_cols_) * field_rows_] << std::endl;
+        data_array_ = data_matrix.data();
       }
 
   ~SignedDistanceField() {}
@@ -266,6 +253,53 @@ public:
   //       (idx(0)-lr) * (signed_distance(hri, hci)-signed_distance(hri, lci)));
   // }
 
+  void loadSDF(const std::string& filename) {
+    std::ifstream ifs(filename, std::ios::binary);
+    if (!ifs.is_open()) {
+        std::cout << "File '" << filename << "' does not exist!" << std::endl;
+        return;
+    }
+
+    std::string fext = filename.substr(filename.find_last_of(".") + 1);
+    if (fext == "xml") {
+        cereal::XMLInputArchive ia(ifs);
+        ia(*this);
+    }
+    else if (fext == "bin") {
+        cereal::BinaryInputArchive ia(ifs);
+        ia(*this);
+    }
+    else {
+        cereal::JSONInputArchive ia(ifs);
+        ia(*this);
+    }
+
+    Eigen::MatrixXd data_matrix(field_rows_, field_cols_*field_z_);
+    for (int i = 0; i < field_z_; i++){
+      data_matrix.block(0, i*field_cols_, field_rows_, field_cols_) = data_[i];
+    }
+    data_array_ = data_matrix.data();
+  }
+
+  void saveSDF(const std::string filename) {
+    std::ofstream ofs(filename.c_str());
+    assert(ofs.good());
+    std::string fext = filename.substr(filename.find_last_of(".") + 1);
+    if (fext == "xml") {
+      cereal::XMLOutputArchive archive(ofs);
+      archive(CEREAL_NVP(*this));
+    }
+    else if (fext == "bin") {
+      cereal::BinaryOutputArchive archive(ofs);
+      archive(*this);
+    }
+    else {
+      cereal::JSONOutputArchive archive(ofs);
+      archive(CEREAL_NVP(*this));
+    }
+  }
+
+
   // access
   __host__ __device__ inline double signed_distance(int r, int c, int z) const {
     return data_array_[r + c * field_rows_ + z * field_rows_ * field_cols_]; //Need to change a way to read
@@ -273,7 +307,19 @@ public:
 
   const Eigen::Vector3d& origin() const { return origin_; }
   double cell_size() const { return cell_size_; }
-  const Eigen::MatrixXd& raw_data() const { return data_; }
+  const std::vector<Eigen::MatrixXd>& raw_data() const { return data_; }
+
+  /** Serialization function */
+  template<class Archive>
+  void serialize(Archive& ar) {
+    ar(CEREAL_NVP(origin_));
+    ar(CEREAL_NVP(field_rows_));
+    ar(CEREAL_NVP(field_cols_));
+    ar(CEREAL_NVP(field_z_));
+    ar(CEREAL_NVP(cell_size_));
+    ar(CEREAL_NVP(data_));
+  }
+
 
 };
 
@@ -381,16 +427,20 @@ public:
     CudaOperation_3dpR(double cost_sigma = 15.5, double epsilon = 0.5, double radius = 1):
     _sigma(cost_sigma), _epsilon(epsilon), _radius(radius)
     {
-        std::string sdf_file = source_root + "/maps/3dpR/pRSDF3D.bin";  
-        gpmp2::SignedDistanceField sdf;
-        sdf.loadSDF(sdf_file);
+        // std::string sdf_file = source_root + "/maps/3dpR/pRSDF3D.bin";
+        // gpmp2::SignedDistanceField sdf;
+        // sdf.loadSDF(sdf_file);
 
-        Vector3d origin;
-        origin.setZero();
-        origin << -10.0, -10.0, -10.0;
+        // Vector3d origin;
+        // origin.setZero();
+        // origin << -10.0, -10.0, -10.0;
 
-        double cell_size = 0.1;
-        _sdf = SignedDistanceField{origin, cell_size, sdf.raw_data()};
+        // double cell_size = 0.1;
+        // _sdf = SignedDistanceField{origin, cell_size, sdf.raw_data()};
+        // _sdf.saveSDF(sdf_file_cereal); // Translate the bin file generated by boost to cereal bin file
+
+        std::string sdf_file_cereal = source_root + "/maps/3dpR/pRSDF3D_cereal.bin";
+        _sdf.loadSDF(sdf_file_cereal);
     }
 
     void Cuda_init(const MatrixXd& weights){

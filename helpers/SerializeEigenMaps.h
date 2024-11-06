@@ -178,3 +178,56 @@ namespace boost {
 }
 
 
+#ifndef SERIALIZE_EIGEN_MAPS_FUNCTIONS_H 
+#define SERIALIZE_EIGEN_MAPS_FUNCTIONS_H
+
+#include <cereal/archives/binary.hpp> 
+#include <cereal/archives/xml.hpp>
+#include <cereal/archives/json.hpp> 
+#include <cereal/types/vector.hpp>
+#include <cereal/types/unordered_map.hpp>
+#include <cereal/types/tuple.hpp>
+
+// Cereal serialization for Eigen::MatrixXd and Eigen::VectorXd
+namespace cereal {
+template <class Archive>
+void serialize(Archive& archive, Eigen::MatrixXd& matrix) {
+    int rows = matrix.rows();
+    int cols = matrix.cols();
+    archive(rows, cols); // Save row and column information
+
+    if (Archive::is_loading::value) {
+        matrix.resize(rows, cols); // Resize the matrix when loading
+    }
+
+    for (int i = 0; i < rows; ++i) {
+        for (int j = 0; j < cols; ++j) {
+            archive(matrix(i, j)); // Serialize each element
+        }
+    }
+}
+
+template <class Archive>
+void serialize(Archive& archive, Eigen::VectorXd& vector) {
+    int size = vector.size();
+    archive(size); // Save the vector size
+
+    if (Archive::is_loading::value) {
+        vector.resize(size); // Resize the vector when loading
+    }
+
+    for (int i = 0; i < size; ++i) {
+        archive(vector(i)); // Serialize each element
+    }
+}
+
+template <class Archive>
+void serialize(Archive& archive, Eigen::Vector3d& vector) {
+    for (int i = 0; i < 3; ++i) {
+        archive(vector[i]); // Serialize each element of the Vector3d
+    }
+}
+
+} // namespace cereal
+
+#endif // SERIALIZE_EIGEN_MAPS_FUNCTIONS_H
