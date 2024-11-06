@@ -4,9 +4,14 @@
 #include "helpers/EigenWrapper.h"
 #include <boost/numeric/odeint.hpp>
 
+#include <gsl/gsl_odeiv2.h>
+#include <gsl/gsl_errno.h>
+
 namespace gvi{
 
 using namespace boost::numeric::odeint;  
+
+int gramian_ode_gsl_helper(double t, const double Q_vec[], double dQ_dt[], void *params);
 
 class LTV_GP : public LinearFactor{
     public: 
@@ -60,7 +65,16 @@ class LTV_GP : public LinearFactor{
             _Q = MatrixXd::Zero(_dim_state, _dim_state);
             _Q = compute_Q();
 
+            MatrixXd Q_gsl = compute_Q_gsl();
+            std::cout << "Q = " << _Q.norm() << std::endl; 
+            std::cout << "Q_gsl Error: " << (_Q - Q_gsl).norm() << std::endl;
+
             compute_invQ();
+
+            MatrixXd inv_Q_gsl = MatrixXd::Zero(_dim_state, _dim_state);
+            inv_Q_gsl = Q_gsl.inverse();
+            std::cout << "invQ = " << _invQ.norm() << std::endl;
+            std::cout << "invQ_gsl Error: " << (_invQ - inv_Q_gsl).norm() << std::endl << std::endl;
 
             // \Lambda = [-\Phi, I]
             _Lambda = MatrixXd::Zero(_dim_state, 2*_dim_state);
@@ -84,14 +98,22 @@ class LTV_GP : public LinearFactor{
             integrate_adaptive(_stepper, gramian_ode_bound, Q_vec, 0.0, _delta_t, dt);
             MatrixXd Gramian = Eigen::Map<const MatrixXd>(Q_vec.data(), _dim_state, _dim_state);
 
-            // // Use Boole's Rule to approximate the integration
-            // MatrixXd gramian = (7 * _Phi_ode_results[0] * _B_vec[0] * _B_vec[0].transpose() * _Phi_ode_results[0].transpose() 
-            // + 32 * _Phi_ode_results[1] * _B_vec[1] * _B_vec[1].transpose() * _Phi_ode_results[1].transpose()
-            // + 4 * _Phi_ode_results[2] * _B_vec[2] * _B_vec[2].transpose() * _Phi_ode_results[2].transpose()
-            // + 32 * _Phi_ode_results[3] * _B_vec[3] * _B_vec[3].transpose() * _Phi_ode_results[3].transpose()
-            // + 7 * _B_vec[4] * _B_vec[4].transpose()) / 90 * _delta_t;
-
             return Gramian;
+        }
+
+        MatrixXd compute_Q_gsl() {
+            gsl_odeiv2_system sys = { gramian_ode_gsl_helper, nullptr, _dim_state * _dim_state, this };
+            gsl_odeiv2_driver *d = gsl_odeiv2_driver_alloc_y_new(&sys, gsl_odeiv2_step_rkf45, 1e-10, 1e-10, 0.0);
+            std::vector<double> Q_vec(_dim_state * _dim_state, 0.0);
+            double t = 0.0;
+            
+            // Perform integration
+            double dt = _delta_t / 20;
+            gsl_odeiv2_driver_apply(d, &t, _delta_t, Q_vec.data());
+            gsl_odeiv2_driver_free(d);
+
+            // Map the result back to an Eigen matrix
+            return Eigen::Map<const MatrixXd>(Q_vec.data(), _dim_state, _dim_state);
         }
 
 
@@ -107,6 +129,15 @@ class LTV_GP : public LinearFactor{
             MatrixXd gramian = Eigen::Map<const MatrixXd>(Q_vec.data(), _dim_state, _dim_state);
             MatrixXd dQ = matrices.first * gramian + gramian * matrices.first.transpose() + matrices.second * matrices.second.transpose();
             Eigen::Map<MatrixXd>(dQ_dt.data(), _dim_state, _dim_state) = dQ;
+        }
+
+        int gramian_ode_gsl(double t, const double Q_vec[], double dQ_dt[], void *params) {
+            LTV_GP* obj = static_cast<LTV_GP*>(params);  // Convert params back to the LTV_GP class
+            MatrixXd gramian = Eigen::Map<const MatrixXd>(Q_vec, obj->_dim_state, obj->_dim_state);
+            auto matrices = obj->system_param(t);
+            MatrixXd dQ = matrices.first * gramian + gramian * matrices.first.transpose() + matrices.second * matrices.second.transpose();
+            Eigen::Map<MatrixXd>(dQ_dt, obj->_dim_state, obj->_dim_state) = dQ;
+            return GSL_SUCCESS;
         }
 
         MatrixXd A_function(double t) {
@@ -171,4 +202,18 @@ class LTV_GP : public LinearFactor{
         
 };
 
+
+int gramian_ode_gsl_helper(double t, const double Q_vec[], double dQ_dt[], void *params) {
+    LTV_GP* obj = static_cast<LTV_GP*>(params);
+    return obj->gramian_ode_gsl(t, Q_vec, dQ_dt, params);
 }
+
+}
+
+// // Use Boole's Rule to approximate the integration
+// MatrixXd gramian = (7 * _Phi_ode_results[0] * _B_vec[0] * _B_vec[0].transpose() * _Phi_ode_results[0].transpose() 
+// + 32 * _Phi_ode_results[1] * _B_vec[1] * _B_vec[1].transpose() * _Phi_ode_results[1].transpose()
+// + 4 * _Phi_ode_results[2] * _B_vec[2] * _B_vec[2].transpose() * _Phi_ode_results[2].transpose()
+// + 32 * _Phi_ode_results[3] * _B_vec[3] * _B_vec[3].transpose() * _Phi_ode_results[3].transpose()
+// + 7 * _B_vec[4] * _B_vec[4].transpose()) / 90 * _delta_t;
+// return gramian;
