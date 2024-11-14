@@ -9,8 +9,10 @@
 #include <Eigen/Dense>
 #include <memory>
 #include <iomanip>
+#include <math.h>
 
 #include <gpmp2/obstacle/SignedDistanceField.h>
+#include <gpmp2/kinematics/ArmModel.h>
 
 using namespace Eigen;
 
@@ -278,6 +280,67 @@ public:
 };
 
 
+class ForwardKinematics{
+
+public:
+  // Denavit-Hartenberg (DH) variables
+  Eigen::VectorXd _a;
+  Eigen::VectorXd _alpha;
+  Eigen::VectorXd _d;
+  Eigen::VectorXd _theta_bias;
+  Eigen::VectorXi _frames;
+  Eigen::VectorXd _radii;
+  Eigen::MatrixXd _centers;
+  // BodySpheres _body_spheres;
+
+private:
+
+public:
+    // Constructors
+    ForwardKinematics() {}
+
+    ForwardKinematics(size_t dof, const Eigen::VectorXd& a, const Eigen::VectorXd& alpha, 
+                      const Eigen::VectorXd& d, const Eigen::VectorXd theta_bias, 
+                      Eigen::VectorXi frames, Eigen::VectorXd radii, Eigen::MatrixXd centers) :
+      _a(a), _alpha(alpha), _d(d), _theta_bias(theta_bias), _frames(frames), _radii(radii), _centers(centers)
+      {
+
+      }
+
+    __host__ __device__ inline Eigen::VectorXd compute_transformed_sphere_centers(const Eigen::VectorXd& theta) const {
+        int num_spheres = _frames.size();
+        Eigen::VectorXd pose(3*num_spheres);
+        for(int i=0; i<num_spheres; ++i){
+            Eigen::VectorXd center {{ _centers(0, i), _centers(1, i), _centers(2, i) }};
+            pose.segment(3*i, 3) = forward_kinematics(theta, _frames[i], center);
+        }
+        return pose;
+    }
+
+    __host__ __device__ inline Eigen::Vector3d forward_kinematics(const Eigen::VectorXd& theta, int frame, const Eigen::VectorXd& center) const {
+        Eigen::Vector3d pos;
+        Eigen::MatrixXd T = Eigen::MatrixXd::Identity(4, 4);
+        for(int i=0; i<=frame; ++i){
+            T = T*dh_matrix(i, theta(i)+_theta_bias(i));
+        }
+        Eigen::VectorXd base_pos {{ T(0, 3), T(1, 3), T(2, 3) }};
+        Eigen::MatrixXd base_rot {{ T(0, 0), T(0, 1), T(0, 2) },
+                                  { T(1, 0), T(1, 0), T(1, 2) },
+                                  { T(2, 0), T(2, 1), T(2, 2) }};
+        pos = base_pos + base_rot*center;
+        return pos;
+    }
+
+    __host__ __device__ inline Eigen::MatrixXd dh_matrix(int i, double theta) const {
+        Eigen::MatrixXd mat {{ cos(theta), -sin(theta)*cos(_alpha(i)),  sin(theta)*sin(_alpha(i)), _a(i)*cos(theta) },
+                             { sin(theta),  cos(theta)*cos(_alpha(i)), -cos(theta)*sin(_alpha(i)), _a(i)*sin(theta) },
+                             {          0,             sin(_alpha(i)),             cos(_alpha(i)),            _d(i) },
+                             {          0,                          0,                          0,                1 }};
+        return mat;
+    }
+
+private:
+};
 
 class CudaOperation_PlanarPR{
 public:
@@ -580,6 +643,137 @@ public:
   int _sigmapts_rows, _dim_state, _n_states;
   double *_weight_gpu, *_data_gpu, *_func_value_gpu, *_sigmapts_gpu, *_mu_gpu;
   CudaOperation_Quad* _class_gpu;
+
+};
+
+class CudaOperation_3dArm{
+public:
+    CudaOperation_3dArm(const Eigen::VectorXd& a, const Eigen::VectorXd& alpha, const Eigen::VectorXd& d, const Eigen::VectorXd& theta_bias,
+                        size_t dof, const Eigen::VectorXd& radii, const Eigen::VectorXi& frames, const Eigen::VectorXd centers,
+                        double cost_sigma = 15.5, double epsilon = 0.5):
+    _radii(radii), _sigma(cost_sigma), _epsilon(epsilon)
+    {
+        std::string sdf_file = source_root + "/maps/WAM/WAMDeskDataset.bin";  
+        gpmp2::SignedDistanceField sdf;
+        sdf.loadSDF(sdf_file);
+
+        Vector3d origin;
+        origin.setZero();
+        origin << -10.0, -10.0, -10.0;
+
+        double cell_size = 0.1;
+        _sdf = SignedDistanceField{origin, cell_size, sdf.raw_data()};
+        _fk = ForwardKinematics(dof, a, alpha, d, theta_bias, frames, radii, centers.transpose());
+    }
+
+    CudaOperation_3dArm(const Eigen::VectorXd& a, const Eigen::VectorXd& alpha, const Eigen::VectorXd& d, const Eigen::VectorXd& theta_bias,
+                        size_t dof, const Eigen::VectorXd& radii, const Eigen::VectorXi& frames, const Eigen::MatrixXd centers,
+                        double cost_sigma, double epsilon, std::string& sdf_file):
+    _radii(radii), _sigma(cost_sigma), _epsilon(epsilon)
+    {
+        gpmp2::SignedDistanceField sdf;
+        sdf.loadSDF(sdf_file);
+
+        Vector3d origin;
+        origin.setZero();
+        origin << -10.0, -10.0, -10.0;
+
+        double cell_size = 0.1;
+        _sdf = SignedDistanceField{origin, cell_size, sdf.raw_data()};
+        _fk = ForwardKinematics(dof, a, alpha, d, theta_bias, frames, radii, centers);
+    }
+
+    CudaOperation_3dArm(const Eigen::VectorXd& a, const Eigen::VectorXd& alpha, const Eigen::VectorXd& d, const Eigen::VectorXd& theta_bias,
+                        size_t dof, const Eigen::VectorXd& radii, const Eigen::VectorXi& frames, const Eigen::MatrixXd centers,
+                        double cost_sigma, double epsilon, gpmp2::SignedDistanceField sdf):
+    _radii(radii), _sigma(cost_sigma), _epsilon(epsilon)
+    {
+        _sdf = SignedDistanceField{sdf.origin(), sdf.cell_size(), sdf.raw_data()};
+        _fk = ForwardKinematics(dof, a, alpha, d, theta_bias, frames, radii, centers);
+    }
+
+    void Cuda_init(const MatrixXd& weights){
+      cudaMalloc(&_weight_gpu, weights.size() * sizeof(double));
+      cudaMalloc(&_data_gpu, _sdf.data_.size() * sizeof(double));
+      cudaMalloc(&_class_gpu, sizeof(CudaOperation_3dArm));
+
+      cudaMemcpy(_weight_gpu, weights.data(), weights.size() * sizeof(double), cudaMemcpyHostToDevice);
+      cudaMemcpy(_class_gpu, this, sizeof(CudaOperation_3dArm), cudaMemcpyHostToDevice);
+      cudaMemcpy(_data_gpu, _sdf.data_.data(), _sdf.data_.size() * sizeof(double), cudaMemcpyHostToDevice);
+    }
+
+    void Cuda_free(){
+      cudaFree(_weight_gpu);
+      cudaFree(_data_gpu);
+      cudaFree(_class_gpu);
+    }
+
+    void Cuda_init_iter(const MatrixXd& sigmapts, VectorXd& results, const int sigmapts_cols){
+      _sigmapts_rows = sigmapts.rows();
+      _dim_state = sigmapts_cols;
+      _n_states = results.size();
+
+      cudaMalloc(&_sigmapts_gpu, sigmapts.size() * sizeof(double));
+      cudaMalloc(&_func_value_gpu, _sigmapts_rows * _n_states * sizeof(double));
+    }
+
+    void Cuda_free_iter(){
+      cudaFree(_sigmapts_gpu);
+      cudaFree(_func_value_gpu); 
+    }
+
+    void CudaIntegration(const MatrixXd& sigmapts, const MatrixXd& weights, MatrixXd& results, const MatrixXd& mean, int type);
+
+    void costIntegration(const MatrixXd& sigmapts, VectorXd& results, const int sigmapts_cols);
+
+    void dmuIntegration(const MatrixXd& sigmapts, const MatrixXd& mu, VectorXd& results, const int sigmapts_cols);
+
+    void ddmuIntegration(MatrixXd& results);
+
+    __host__ __device__ double cost_obstacle(const Eigen::VectorXd& theta, const SignedDistanceField& sdf, const ForwardKinematics& fk){
+      int n_balls = theta.size();
+      double slope = 1;
+      Eigen::VectorXd pose = fk.compute_transformed_sphere_centers(theta);
+      // printf("pose: %f, %f, %f", pose[0], pose[1], pose[2]);
+      MatrixXd checkpoints = vec_balls(pose, n_balls);
+      VectorXd signed_distance = sdf.getSignedDistance(checkpoints);
+      VectorXd err(signed_distance.size());
+
+      double cost = 0;
+      for (int i = 0; i < n_balls; i++){
+        if (signed_distance(i) > _epsilon + _radii[i])
+          err(i) =  0.0;
+        else
+          err(i) =  (_epsilon + _radii[i] - signed_distance(i)) * slope;
+        cost += err(i) * err(i) * _sigma;
+      }
+      
+      return cost;
+    }
+
+    __host__ __device__ Eigen::MatrixXd vec_balls(const Eigen::VectorXd& x, int n_balls) {
+      Eigen::MatrixXd v_pts = Eigen::MatrixXd::Zero(n_balls, 3);
+
+      double pos_x = x(0);
+      double pos_y = x(1);
+      double pos_z = x(2);
+
+      for (int i = 0; i < n_balls; i++) {
+          v_pts(i, 0) = pos_x;
+          v_pts(i, 1) = pos_y;
+          v_pts(i, 2) = pos_z;
+      }
+      return v_pts;
+    }
+
+  double _epsilon, _sigma;
+  Eigen::VectorXd _radii;
+  SignedDistanceField _sdf;
+  ForwardKinematics _fk;
+
+  int _sigmapts_rows, _dim_state, _n_states;
+  double *_weight_gpu, *_data_gpu, *_func_value_gpu, *_sigmapts_gpu, *_mu_gpu;
+  CudaOperation_3dArm* _class_gpu;
 
 };
 

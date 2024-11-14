@@ -33,7 +33,7 @@ public:
                             int start_indx,
                             double temperature,
                             double high_temperature,
-                            std::optional<std::shared_ptr<QuadratureWeightsMap>>  weight_sigpts_map_option=std::nullopt):
+                            std::optional<QuadratureWeightsMap> weight_sigpts_map_option=std::nullopt):
         Base(dimension, dim_state, num_states, start_indx, 
                         temperature, high_temperature, weight_sigpts_map_option),
         _linear_factor{linear_factor}
