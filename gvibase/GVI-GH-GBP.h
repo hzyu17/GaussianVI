@@ -19,6 +19,7 @@
 
 #include "helpers/EigenWrapper.h"
 #include "helpers/DataRecorder.h"
+#include "helpers/timer.h"
 
 using namespace Eigen;
 

@@ -445,12 +445,12 @@ public:
 
     void Cuda_init(const MatrixXd& weights){
       cudaMalloc(&_weight_gpu, weights.size() * sizeof(double));
-      cudaMalloc(&_data_gpu, _sdf.data_.size() * sizeof(double));
+      cudaMalloc(&_data_gpu, _sdf.data_.size() * _sdf.data_[0].size() * sizeof(double));
       cudaMalloc(&_class_gpu, sizeof(CudaOperation_3dpR));
 
       cudaMemcpy(_weight_gpu, weights.data(), weights.size() * sizeof(double), cudaMemcpyHostToDevice);
       cudaMemcpy(_class_gpu, this, sizeof(CudaOperation_3dpR), cudaMemcpyHostToDevice);
-      cudaMemcpy(_data_gpu, _sdf.data_.data(), _sdf.data_.size() * sizeof(double), cudaMemcpyHostToDevice);
+      cudaMemcpy(_data_gpu, _sdf.data_.data(), _sdf.data_.size() * _sdf.data_[0].size() * sizeof(double), cudaMemcpyHostToDevice);
     }
 
     void Cuda_free(){
