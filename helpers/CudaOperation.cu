@@ -793,6 +793,7 @@ void CudaOperation_3dArm::costIntegration(const MatrixXd& sigmapts, VectorXd& re
 void CudaOperation_3dArm::dmuIntegration(const MatrixXd& sigmapts, const MatrixXd& mu, VectorXd& results, const int sigmapts_cols){
     double *vec_gpu, *result_gpu;
 
+    cudaMalloc(&vec_gpu, sigmapts.rows() * results.size() * sizeof(double));
     cudaMalloc(&result_gpu, results.size() * sizeof(double));
     cudaMalloc(&_mu_gpu, mu.size() * sizeof(double));
 
