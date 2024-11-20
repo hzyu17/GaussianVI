@@ -173,7 +173,9 @@ __global__ void cost_function(double* d_sigmapts, double* d_pts, int sigmapts_ro
 }
 
 __global__ void cost_function(double* d_sigmapts, double* d_pts, int sigmapts_rows, int sigmapts_cols, 
-                                int n_states, gvi::CudaOperation_3dArm* pointer, double* d_data){
+                                int n_states, gvi::CudaOperation_3dArm* pointer, double* sdf_data, 
+                                double* a_data, double* alpha_data, double* d_data, double* theta_data,
+                                double* rad_data, int* frames_data, double* centers_data){
     
     int row = blockIdx.y * blockDim.y + threadIdx.y;
     int col = blockIdx.x * blockDim.x + threadIdx.x;
@@ -181,7 +183,16 @@ __global__ void cost_function(double* d_sigmapts, double* d_pts, int sigmapts_ro
     if (row < sigmapts_rows && col < n_states){
         Eigen::Map<MatrixXd> sigmapts(d_sigmapts + col*sigmapts_rows*sigmapts_cols, sigmapts_rows, sigmapts_cols);
 
-        (pointer->_sdf).data_array_ = d_data;
+        (pointer->_sdf).data_array_ = sdf_data;
+
+        (pointer->_fk)._a_data = a_data;
+        (pointer->_fk)._alpha_data = alpha_data;
+        (pointer->_fk)._d_data = d_data;
+        (pointer->_fk)._theta_bias_data = theta_data;
+
+        pointer->_radii_data = rad_data;
+        (pointer->_fk)._frames_data = frames_data;
+        (pointer->_fk)._centers_data = centers_data;
 
         double function_value = pointer -> cost_obstacle(sigmapts.row(row), pointer->_sdf, pointer->_fk);
 
@@ -766,7 +777,9 @@ void CudaOperation_3dArm::costIntegration(const MatrixXd& sigmapts, VectorXd& re
     dim3 blockSize1(1024, 1024);
     dim3 threadperblock1((results.size() + blockSize1.x - 1) / blockSize1.x, (sigmapts.rows() + blockSize1.y - 1) / blockSize1.y);
 
-    cost_function<<<blockSize1, threadperblock1>>>(_sigmapts_gpu, _func_value_gpu, sigmapts.rows(), sigmapts_cols, results.size(), _class_gpu, _data_gpu);
+    cost_function<<<blockSize1, threadperblock1>>>(_sigmapts_gpu, _func_value_gpu, sigmapts.rows(), sigmapts_cols, results.size(), 
+                                                    _class_gpu, _data_gpu, _a_gpu, _alpha_gpu, _d_gpu, _theta_gpu,
+                                                    _rad_gpu, _frames_gpu, _centers_gpu);
     cudaDeviceSynchronize();
 
     cudaError_t err = cudaGetLastError();
