@@ -363,8 +363,7 @@ public:
     __host__ __device__ inline double d(int i) const { return _d_data[i]; }
     __host__ __device__ inline double theta_bias(int i) const { return _theta_bias_data[i]; }
     __host__ __device__ inline double frames(int i) const { return _frames_data[i]; }
-    __host__ __device__ inline double centers(int row, int col) const { return _centers_data[3*row + col]; 
-private:}
+    __host__ __device__ inline double centers(int row, int col) const { return _centers_data[3*row + col]; }
 };
 
 class CudaOperation_PlanarPR{
@@ -681,33 +680,7 @@ public:
         std::string sdf_file = source_root + "/maps/WAM/WAMDeskDataset.bin";  
         gpmp2::SignedDistanceField sdf;
         sdf.loadSDF(sdf_file);
-
-        Vector3d origin;
-        origin.setZero();
-        origin << -10.0, -10.0, -10.0;
-
-        double cell_size = 0.1;
-        _sdf = SignedDistanceField{origin, cell_size, sdf.raw_data()};
-
-        _radii_data = _radii.data();
-        const int num_spheres = frames.size();
-        _fk = ForwardKinematics(a, alpha, d, theta_bias, num_spheres, frames, centers);
-    }
-
-    CudaOperation_3dArm(const Eigen::VectorXd& a, const Eigen::VectorXd& alpha, const Eigen::VectorXd& d, const Eigen::VectorXd& theta_bias,
-                        size_t dof, const Eigen::VectorXd& radii, const Eigen::VectorXi& frames, const Eigen::MatrixXd& centers,
-                        double cost_sigma, double epsilon, std::string& sdf_file):
-    _radii(radii), _sigma(cost_sigma), _epsilon(epsilon)
-    {
-        gpmp2::SignedDistanceField sdf;
-        sdf.loadSDF(sdf_file);
-
-        Vector3d origin;
-        origin.setZero();
-        origin << -10.0, -10.0, -10.0;
-
-        double cell_size = 0.1;
-        _sdf = SignedDistanceField{origin, cell_size, sdf.raw_data()};
+        _sdf = SignedDistanceField{sdf.origin(), sdf.cell_size(), sdf.raw_data()};
 
         _radii_data = _radii.data();
         const int num_spheres = frames.size();
