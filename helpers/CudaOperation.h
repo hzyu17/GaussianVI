@@ -348,6 +348,7 @@ public:
         return pos;
     }
 
+    // Helper function for computing DH matrices
     __host__ __device__ inline Eigen::Matrix4d dh_matrix(int i, double theta) const {
         Eigen::Matrix4d mat;
         mat << cosf(theta), -sinf(theta)*cosf(alpha(i)),  sinf(theta)*sinf(alpha(i)), a(i)*cosf(theta),
@@ -673,7 +674,7 @@ public:
 class CudaOperation_3dArm{
 public:
     CudaOperation_3dArm(const Eigen::VectorXd& a, const Eigen::VectorXd& alpha, const Eigen::VectorXd& d, const Eigen::VectorXd& theta_bias,
-                        size_t dof, const Eigen::VectorXd& radii, const Eigen::VectorXi& frames, const Eigen::VectorXd& centers,
+                        const Eigen::VectorXd& radii, const Eigen::VectorXi& frames, const Eigen::VectorXd& centers,
                         double cost_sigma = 15.5, double epsilon = 0.5):
     _radii(radii), _sigma(cost_sigma), _epsilon(epsilon)
     {
@@ -688,7 +689,7 @@ public:
     }
 
     CudaOperation_3dArm(const Eigen::VectorXd& a, const Eigen::VectorXd& alpha, const Eigen::VectorXd& d, const Eigen::VectorXd& theta_bias,
-                        size_t dof, const Eigen::VectorXd& radii, const Eigen::VectorXi& frames, const Eigen::MatrixXd& centers,
+                        const Eigen::VectorXd& radii, const Eigen::VectorXi& frames, const Eigen::MatrixXd& centers,
                         double cost_sigma, double epsilon, gpmp2::SignedDistanceField sdf):
     _radii(radii), _sigma(cost_sigma), _epsilon(epsilon)
     {
