@@ -1,5 +1,4 @@
 #include <cuda_runtime.h>
-#include <optional>
 #include "helpers/CudaOperation.h"
 
 using namespace Eigen;
@@ -147,7 +146,6 @@ __global__ void cost_function(double* d_sigmapts, double* d_pts, int sigmapts_ro
 }
 
 __global__ void dmu_function(double* d_sigmapts, double* d_mu, double* d_pts, double* d_vec, int sigmapts_rows, int dim_state, int n_states){
-// __global__ void dmu_function(int sigmapts_rows, int dim_state, int n_states){
     
     int row = blockIdx.y * blockDim.y + threadIdx.y;
     int col = blockIdx.x * blockDim.x + threadIdx.x;
@@ -528,7 +526,7 @@ void CudaOperation_3dpR::CudaIntegration(const MatrixXd& sigmapts, const MatrixX
     cudaMemcpy(mu_gpu, mean.data(), sigmapts.cols() * sizeof(double), cudaMemcpyHostToDevice);
 
     // Kernel 1: Obtain the result of function 
-    dim3 blockSize1(1024, 1024);
+    dim3 blockSize1(64, 64);
     dim3 threadperblock1((results.cols()*sigmapts.rows() + blockSize1.x - 1) / blockSize1.x, (results.rows() + blockSize1.y - 1) / blockSize1.y);
 
     Sigma_function<<<blockSize1, threadperblock1>>>(sigmapts_gpu, pts_gpu, mu_gpu, sigmapts.rows(), sigmapts.cols(), results.rows(), results.cols(), type, _class_gpu, _data_gpu);
@@ -544,7 +542,7 @@ void CudaOperation_3dpR::CudaIntegration(const MatrixXd& sigmapts, const MatrixX
     
 
     // Kernel 2: Obtain the result by multiplying the pts and the weights
-    dim3 blockSize2(1024, 1024);
+    dim3 blockSize2(64, 64);
     dim3 threadperblock2((results.cols() + blockSize2.x - 1) / blockSize2.x, (results.rows() + blockSize2.y - 1) / blockSize2.y);
 
     obtain_res<<<blockSize2, threadperblock2>>>(pts_gpu, _weight_gpu, result_gpu, sigmapts.rows(), results.rows(), results.cols());
@@ -568,7 +566,7 @@ void CudaOperation_3dpR::costIntegration(const MatrixXd& sigmapts, VectorXd& res
     cudaMemcpy(_sigmapts_gpu, sigmapts.data(), sigmapts.size() * sizeof(double), cudaMemcpyHostToDevice);
 
     // Kernel 1: Obtain the result of function 
-    dim3 blockSize1(1024, 1024);
+    dim3 blockSize1(64, 64);
     dim3 threadperblock1((results.size() + blockSize1.x - 1) / blockSize1.x, (sigmapts.rows() + blockSize1.y - 1) / blockSize1.y);
 
     cost_function<<<blockSize1, threadperblock1>>>(_sigmapts_gpu, _func_value_gpu, sigmapts.rows(), sigmapts_cols, results.size(), _class_gpu, _data_gpu);
@@ -580,7 +578,7 @@ void CudaOperation_3dpR::costIntegration(const MatrixXd& sigmapts, VectorXd& res
     }
 
     // Kernel 2: Obtain the result by multiplying the pts and the weights
-    dim3 blockSize2(1024);
+    dim3 blockSize2(64);
     dim3 threadperblock2((results.size() + blockSize2.x - 1) / blockSize2.x);
 
     obtain_cost<<<blockSize2, threadperblock2>>>(_func_value_gpu, _weight_gpu, result_gpu, sigmapts.rows(), results.size());
@@ -605,7 +603,7 @@ void CudaOperation_3dpR::dmuIntegration(const MatrixXd& sigmapts, const MatrixXd
     cudaMemcpy(_mu_gpu, mu.data(), mu.size() * sizeof(double), cudaMemcpyHostToDevice);
 
     // Kernel 1: Obtain the result of function 
-    dim3 blockSize1(1024, 1024);
+    dim3 blockSize1(64, 64);
     dim3 threadperblock1((results.size() + blockSize1.x - 1) / blockSize1.x, (_sigmapts_rows + blockSize1.y - 1) / blockSize1.y);
 
     dmu_function<<<blockSize1, threadperblock1>>>(_sigmapts_gpu, _mu_gpu, _func_value_gpu, vec_gpu, _sigmapts_rows, _dim_state, _n_states);
@@ -617,7 +615,7 @@ void CudaOperation_3dpR::dmuIntegration(const MatrixXd& sigmapts, const MatrixXd
     }
 
     // Kernel 2: Obtain the result by multiplying the pts and the weights
-    dim3 blockSize2(1024);
+    dim3 blockSize2(64);
     dim3 threadperblock2((results.size() + blockSize2.x - 1) / blockSize2.x);
 
     obtain_dmu<<<blockSize2, threadperblock2>>>(vec_gpu, _weight_gpu, result_gpu, sigmapts.rows(), results.size());
@@ -640,7 +638,7 @@ void CudaOperation_3dpR::ddmuIntegration(MatrixXd& results){
     cudaMalloc(&result_gpu, results.size() * sizeof(double));
 
     // Kernel 1: Obtain the result of function 
-    dim3 blockSize1(1024, 1024);
+    dim3 blockSize1(64, 64);
     dim3 threadperblock1((results.cols() + blockSize1.x - 1) / blockSize1.x, (_sigmapts_rows * results.rows() + blockSize1.y - 1) / blockSize1.y);
 
     ddmu_function<<<blockSize1, threadperblock1>>>(_sigmapts_gpu, _mu_gpu, _func_value_gpu, vec_gpu, _sigmapts_rows, _dim_state, _n_states);
@@ -651,7 +649,7 @@ void CudaOperation_3dpR::ddmuIntegration(MatrixXd& results){
     }
 
     // Kernel 2: Obtain the result by multiplying the pts and the weights
-    dim3 blockSize2(1024, 1024);
+    dim3 blockSize2(64, 64);
     dim3 threadperblock2((results.cols() + blockSize2.x - 1) / blockSize2.x, (results.rows() + blockSize2.y - 1) / blockSize2.y);
 
     obtain_ddmu<<<blockSize2, threadperblock2>>>(vec_gpu, _weight_gpu, result_gpu, _sigmapts_rows, results.rows(), results.cols());
