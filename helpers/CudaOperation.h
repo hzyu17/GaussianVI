@@ -9,8 +9,10 @@
 #include <Eigen/Dense>
 #include <memory>
 #include <iomanip>
+#include <math.h>
 
 #include <gpmp2/obstacle/SignedDistanceField.h>
+#include <gpmp2/kinematics/ArmModel.h>
 
 using namespace Eigen;
 
@@ -278,6 +280,92 @@ public:
 };
 
 
+class ForwardKinematics{
+
+public:
+  // Denavit-Hartenberg (DH) variables
+  Eigen::VectorXd _a;
+  Eigen::VectorXd _alpha;
+  Eigen::VectorXd _d;
+  Eigen::VectorXd _theta_bias;
+
+  double* _a_data;
+  double* _alpha_data;
+  double* _d_data;
+  double* _theta_bias_data;
+
+  // Body sphere variables
+  int _num_spheres;
+  Eigen::VectorXi _frames;
+  Eigen::MatrixXd _centers; // Note: centers must be constructed in row-major form (each center belongs to a row)
+
+  int* _frames_data;
+  double* _centers_data;
+
+private:
+
+public:
+    // Constructors/Destructor
+    ForwardKinematics() {}
+
+    ForwardKinematics(const Eigen::VectorXd& a, const Eigen::VectorXd& alpha, 
+                      const Eigen::VectorXd& d, const Eigen::VectorXd& theta_bias, int num_spheres,
+                      const Eigen::VectorXi& frames, const Eigen::MatrixXd& centers) :
+      _a(a), _alpha(alpha), _d(d), _theta_bias(theta_bias), _num_spheres(num_spheres), _frames(frames), _centers(centers)
+      {
+          _a_data = _a.data();
+          _alpha_data = _alpha.data();
+          _d_data = _d.data();
+          _theta_bias_data = _theta_bias.data();
+          _frames_data = _frames.data();
+          _centers_data = _centers.data();
+      }
+
+    ~ForwardKinematics() {}
+
+    // Compute 3D pose of the center of each sphere on the arm
+    __host__ __device__ inline Eigen::VectorXd compute_transformed_sphere_centers(const Eigen::VectorXd& theta) const {
+        Eigen::VectorXd pose = Eigen::VectorXd::Zero(3*_num_spheres);
+        for(int i=0; i<_num_spheres; ++i){
+            Eigen::Vector3d center(centers(i, 0), centers(i, 1), centers(i, 2));
+            pose.segment(3*i, 3) = forward_kinematics(theta, frames(i), center);
+        }
+        return pose;
+    }
+
+    // Forward kinematics computed by DH algorithm
+    __host__ __device__ inline Eigen::Vector3d forward_kinematics(const Eigen::VectorXd& theta, int frame, const Eigen::Vector3d& center) const {
+        Eigen::Matrix4d T = Eigen::Matrix4d::Identity();
+        for(int i=0; i<=frame; ++i){
+            T = T*dh_matrix(i, theta(i)+theta_bias(i));
+        }
+        Eigen::Vector3d base_pos(T(0, 3), T(1, 3), T(2, 3));
+        Eigen::Matrix3d base_rot;
+        base_rot << T(0, 0), T(0, 1), T(0, 2),
+                    T(1, 0), T(1, 1), T(1, 2),
+                    T(2, 0), T(2, 1), T(2, 2);
+        Eigen::Vector3d pos = base_pos + base_rot*center;
+        return pos;
+    }
+
+    // Helper function for computing DH matrices
+    __host__ __device__ inline Eigen::Matrix4d dh_matrix(int i, double theta) const {
+        Eigen::Matrix4d mat;
+        mat << cosf(theta), -sinf(theta)*cosf(alpha(i)),  sinf(theta)*sinf(alpha(i)), a(i)*cosf(theta),
+               sinf(theta),  cosf(theta)*cosf(alpha(i)), -cosf(theta)*sinf(alpha(i)), a(i)*sinf(theta),
+                         0,              sinf(alpha(i)),              cosf(alpha(i)),             d(i),
+                         0,                           0,                           0,                1;
+        return mat;
+    }
+
+    // access functions
+    __host__ __device__ inline double a(int i) const { return _a_data[i]; }
+    __host__ __device__ inline double alpha(int i) const { return _alpha_data[i]; }
+    __host__ __device__ inline double d(int i) const { return _d_data[i]; }
+    __host__ __device__ inline double theta_bias(int i) const { return _theta_bias_data[i]; }
+    __host__ __device__ inline double frames(int i) const { return _frames_data[i]; }
+    __host__ __device__ inline double centers(int row, int col) const { return _centers_data[3*row + col]; }
+};
 
 class CudaOperation_PlanarPR{
 public:
@@ -580,6 +668,142 @@ public:
   int _sigmapts_rows, _dim_state, _n_states;
   double *_weight_gpu, *_data_gpu, *_func_value_gpu, *_sigmapts_gpu, *_mu_gpu;
   CudaOperation_Quad* _class_gpu;
+
+};
+
+class CudaOperation_3dArm{
+public:
+    CudaOperation_3dArm(const Eigen::VectorXd& a, const Eigen::VectorXd& alpha, const Eigen::VectorXd& d, const Eigen::VectorXd& theta_bias,
+                        const Eigen::VectorXd& radii, const Eigen::VectorXi& frames, const Eigen::VectorXd& centers,
+                        double cost_sigma = 15.5, double epsilon = 0.5):
+    _radii(radii), _sigma(cost_sigma), _epsilon(epsilon)
+    {
+        std::string sdf_file = source_root + "/maps/WAM/WAMDeskDataset.bin";  
+        gpmp2::SignedDistanceField sdf;
+        sdf.loadSDF(sdf_file);
+        _sdf = SignedDistanceField{sdf.origin(), sdf.cell_size(), sdf.raw_data()};
+
+        _radii_data = _radii.data();
+        const int num_spheres = frames.size();
+        _fk = ForwardKinematics(a, alpha, d, theta_bias, num_spheres, frames, centers);
+    }
+
+    CudaOperation_3dArm(const Eigen::VectorXd& a, const Eigen::VectorXd& alpha, const Eigen::VectorXd& d, const Eigen::VectorXd& theta_bias,
+                        const Eigen::VectorXd& radii, const Eigen::VectorXi& frames, const Eigen::MatrixXd& centers,
+                        double cost_sigma, double epsilon, gpmp2::SignedDistanceField sdf):
+    _radii(radii), _sigma(cost_sigma), _epsilon(epsilon)
+    {
+        _sdf = SignedDistanceField{sdf.origin(), sdf.cell_size(), sdf.raw_data()};
+
+        _radii_data = _radii.data();
+        const int num_spheres = frames.size();
+        _fk = ForwardKinematics(a, alpha, d, theta_bias, num_spheres, frames, centers);
+    }
+
+    void Cuda_init(const MatrixXd& weights){
+      cudaMalloc(&_weight_gpu, weights.size() * sizeof(double));
+      cudaMalloc(&_data_gpu, _sdf.data_.size() * sizeof(double));
+      cudaMalloc(&_class_gpu, sizeof(CudaOperation_3dArm));
+      cudaMalloc(&_a_gpu, _fk._a.size() * sizeof(double));
+      cudaMalloc(&_alpha_gpu, _fk._alpha.size() * sizeof(double));
+      cudaMalloc(&_d_gpu, _fk._d.size() * sizeof(double));
+      cudaMalloc(&_theta_gpu, _fk._theta_bias.size() * sizeof(double));
+      cudaMalloc(&_rad_gpu, _radii.size() * sizeof(double));
+      cudaMalloc(&_frames_gpu, _fk._frames.size() * sizeof(int));
+      cudaMalloc(&_centers_gpu, _fk._centers.size() * sizeof(double));
+
+      cudaMemcpy(_weight_gpu, weights.data(), weights.size() * sizeof(double), cudaMemcpyHostToDevice);
+      cudaMemcpy(_class_gpu, this, sizeof(CudaOperation_3dArm), cudaMemcpyHostToDevice);
+      cudaMemcpy(_data_gpu, _sdf.data_.data(), _sdf.data_.size() * sizeof(double), cudaMemcpyHostToDevice);
+      cudaMemcpy(_a_gpu, _fk._a.data(), _fk._a.size() * sizeof(double), cudaMemcpyHostToDevice);
+      cudaMemcpy(_alpha_gpu, _fk._alpha.data(), _fk._alpha.size() * sizeof(double), cudaMemcpyHostToDevice);
+      cudaMemcpy(_d_gpu, _fk._d.data(), _fk._d.size() * sizeof(double), cudaMemcpyHostToDevice);
+      cudaMemcpy(_theta_gpu, _fk._theta_bias.data(), _fk._theta_bias.size() * sizeof(double), cudaMemcpyHostToDevice);
+      cudaMemcpy(_rad_gpu, _radii.data(), _radii.size() * sizeof(double), cudaMemcpyHostToDevice);
+      cudaMemcpy(_frames_gpu, _fk._frames.data(), _fk._frames.size() * sizeof(int), cudaMemcpyHostToDevice);
+      cudaMemcpy(_centers_gpu, _fk._centers.data(), _fk._centers.size() * sizeof(double), cudaMemcpyHostToDevice);
+    }
+
+    void Cuda_free(){
+      cudaFree(_weight_gpu);
+      cudaFree(_data_gpu);
+      cudaFree(_class_gpu);
+      cudaFree(_a_gpu);
+      cudaFree(_alpha_gpu);
+      cudaFree(_d_gpu);
+      cudaFree(_theta_gpu);
+      cudaFree(_rad_gpu);
+      cudaFree(_frames_gpu);
+      cudaFree(_centers_gpu);
+    }
+
+    void Cuda_init_iter(const MatrixXd& sigmapts, VectorXd& results, const int sigmapts_cols){
+      _sigmapts_rows = sigmapts.rows();
+      _dim_state = sigmapts_cols;
+      _n_states = results.size();
+
+      cudaMalloc(&_sigmapts_gpu, sigmapts.size() * sizeof(double));
+      cudaMalloc(&_func_value_gpu, _sigmapts_rows * _n_states * sizeof(double));
+    }
+
+    void Cuda_free_iter(){
+      cudaFree(_sigmapts_gpu);
+      cudaFree(_func_value_gpu); 
+    }
+
+    void CudaIntegration(const MatrixXd& sigmapts, const MatrixXd& weights, MatrixXd& results, const MatrixXd& mean, int type);
+
+    void costIntegration(const MatrixXd& sigmapts, VectorXd& results, const int sigmapts_cols);
+
+    void dmuIntegration(const MatrixXd& sigmapts, const MatrixXd& mu, VectorXd& results, const int sigmapts_cols);
+
+    void ddmuIntegration(MatrixXd& results);
+
+    __host__ __device__ double cost_obstacle(const VectorXd& theta, const SignedDistanceField& sdf, const ForwardKinematics& fk){
+      int n_balls = theta.size();
+      double slope = 1;
+      VectorXd pose = fk.compute_transformed_sphere_centers(theta);
+      MatrixXd checkpoints = vec_balls(pose, n_balls);
+      VectorXd signed_distance = sdf.getSignedDistance(checkpoints);
+      VectorXd err(signed_distance.size());
+
+      double cost = 0;
+      for (int i = 0; i < n_balls; i++){
+        if (signed_distance(i) > _epsilon + radius(i))
+          err(i) =  0.0;
+        else
+          err(i) =  (_epsilon + radius(i) - signed_distance(i)) * slope;
+        cost += err(i) * err(i) * _sigma;
+      }
+      
+      return cost;
+    }
+
+    __host__ __device__ Eigen::MatrixXd vec_balls(const Eigen::VectorXd& x, int n_balls) {
+      Eigen::MatrixXd v_pts = Eigen::MatrixXd::Zero(n_balls, 3);
+      for (int i = 0; i < n_balls; i++) {
+          v_pts(i, 0) = x(3*i);
+          v_pts(i, 1) = x(3*i+1);
+          v_pts(i, 2) = x(3*i+2);
+      }
+      return v_pts;
+    }
+
+    __host__ __device__ inline double radius(int i) const {
+      return _radii_data[i];
+    }
+
+  double _epsilon, _sigma;
+  Eigen::VectorXd _radii;
+  double* _radii_data;
+  SignedDistanceField _sdf;
+  ForwardKinematics _fk;
+
+  int _sigmapts_rows, _dim_state, _n_states;
+  double *_weight_gpu, *_data_gpu, *_func_value_gpu, *_sigmapts_gpu, *_mu_gpu;
+  double *_a_gpu, *_alpha_gpu, *_d_gpu, *_theta_gpu, *_rad_gpu, *_centers_gpu;
+  int *_frames_gpu;
+  CudaOperation_3dArm* _class_gpu;
 
 };
 

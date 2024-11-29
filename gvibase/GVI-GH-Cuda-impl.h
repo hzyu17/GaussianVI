@@ -75,7 +75,6 @@ void GVIGH<Factor>::optimize(std::optional<bool> verbose)
         }
 
         auto result_cuda = factor_cost_vector_cuda();
-
         double cost_iter = std::get<0>(result_cuda);
         VectorXd fact_costs_iter = std::get<1>(result_cuda);
         VectorXd dmu = std::get<2>(result_cuda);
