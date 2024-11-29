@@ -1,3 +1,14 @@
+/**
+ * @file LTV_prior.h
+ * @author Zinuo Chang (zchang40@gatech.edu)
+ * @brief Obtain the Transition Matrix and Controllability Gramian for the LTV system.
+ * @version 0.1
+ * @date 2024-09-07
+ * 
+ * @copyright Copyright (c) 2024
+ * 
+ */
+
 #pragma once
 
 #include "linear_factor.h"
@@ -64,17 +75,18 @@ class LTV_GP : public LinearFactor{
             
             _Q = MatrixXd::Zero(_dim_state, _dim_state);
             _Q = compute_Q();
+            // _Q = compute_Q_gsl();
 
-            MatrixXd Q_gsl = compute_Q_gsl();
-            std::cout << "Q = " << _Q.norm() << std::endl; 
-            std::cout << "Q_gsl Error: " << (_Q - Q_gsl).norm() << std::endl;
+            // MatrixXd Q_gsl = compute_Q_gsl();
+            // std::cout << "Q = " << _Q.norm() << std::endl; 
+            // std::cout << "Q_gsl Error: " << (_Q - Q_gsl).norm() << std::endl;
 
             compute_invQ();
 
-            MatrixXd inv_Q_gsl = MatrixXd::Zero(_dim_state, _dim_state);
-            inv_Q_gsl = Q_gsl.inverse();
-            std::cout << "invQ = " << _invQ.norm() << std::endl;
-            std::cout << "invQ_gsl Error: " << (_invQ - inv_Q_gsl).norm() << std::endl << std::endl;
+            // MatrixXd inv_Q_gsl = MatrixXd::Zero(_dim_state, _dim_state);
+            // inv_Q_gsl = Q_gsl.inverse();
+            // std::cout << "invQ = " << _invQ.norm() << std::endl;
+            // std::cout << "invQ_gsl Error: " << (_invQ - inv_Q_gsl).norm() << std::endl << std::endl;
 
             // \Lambda = [-\Phi, I]
             _Lambda = MatrixXd::Zero(_dim_state, 2*_dim_state);
