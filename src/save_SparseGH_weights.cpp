@@ -1,7 +1,7 @@
 /**
- * @file save_SparseGH_weights.cpp
- * @author Hongzhe Yu
- * @date 02/03/2024
+ * @file save_cereal_SparseGH_weights.cpp
+ * @author Zinuo Chang
+ * @date 11/05/2024
  * @brief Save a map containing the sigma points and the weights for different degrees and dimensions.
 */
 
@@ -24,9 +24,9 @@ int main(){
     // std::unordered_map<gvi::DimDegTuple, gvi::PointsWeightsTuple> loadedWeightMap;
 
     // {
-    //     std::ifstream ifs(source_root+"/quadrature/SparseGHQuadratureWeights.bin", std::ios::binary);
-    //     boost::archive::binary_iarchive ia(ifs);
-    //     ia >> loadedWeightMap;
+    //     std::ifstream ifs(source_root+"/quadrature/SparseGHQuadratureWeights_cereal.bin", std::ios::binary);
+    //     cereal::BinaryInputArchive archive(ifs);
+    //     archive(loadedWeightMap);
     // }
 
     // gvi::DimDegTuple key = std::make_tuple(8.0, 10.0);

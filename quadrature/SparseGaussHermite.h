@@ -17,9 +17,9 @@
 #include "helpers/CommonDefinitions.h"
 
 #ifdef GVI_SUBDUR_ENV 
-std::string map_file{source_root+"/GaussianVI/quadrature/SparseGHQuadratureWeights.bin"};
+std::string map_file{source_root+"/GaussianVI/quadrature/SparseGHQuadratureWeights_cereal.bin"};
 #else
-std::string map_file{source_root+"/quadrature/SparseGHQuadratureWeights.bin"};
+std::string map_file{source_root+"/quadrature/SparseGHQuadratureWeights_cereal.bin"};
 #endif
 
 namespace gvi{
@@ -64,12 +64,10 @@ public:
                             throw std::runtime_error(error_msg);
                         }
 
-                        std::cout << "Opening file for GH weights reading in file: " << map_file << std::endl;
-                        boost::archive::binary_iarchive ia(ifs);
-                        ia >> nodes_weights_map;
+                        // Use cereal for deserialization
+                        cereal::BinaryInputArchive archive(ifs);
+                        archive(nodes_weights_map);
 
-                    } catch (const boost::archive::archive_exception& e) {
-                        std::cerr << "Boost archive exception: " << e.what() << std::endl;
                     } catch (const std::exception& e) {
                         std::cerr << "Standard exception: " << e.what() << std::endl;
                     }
@@ -105,18 +103,18 @@ public:
                             throw std::runtime_error(error_msg);
                         }
 
-                        std::cout << "Opening file for GH weights reading in file: " << map_file << std::endl;
-                        boost::archive::binary_iarchive ia(ifs);
-                        ia >> nodes_weights_map;
+                        // Use cereal for deserialization
+                        cereal::BinaryInputArchive archive(ifs);
+                        archive(nodes_weights_map);
 
-                    } catch (const boost::archive::archive_exception& e) {
-                        std::cerr << "Boost archive exception: " << e.what() << std::endl;
                     } catch (const std::exception& e) {
                         std::cerr << "Standard exception: " << e.what() << std::endl;
                     }
 
                     _nodes_weights_map = std::make_shared<QuadratureWeightsMap>(nodes_weights_map);
+
                 }
+                
                 computeSigmaPtsWeights();
             }
 

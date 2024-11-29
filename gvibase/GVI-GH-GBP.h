@@ -1,11 +1,11 @@
 /**
- * @file GVI-GH.h
- * @author Hongzhe Yu (hyu419@gatech.edu)
+ * @file GVI-GH-GBP.h
+ * @author Zinuo Chang (zchang40@gatech.edu)
  * @brief The joint optimizer class using Gauss-Hermite quadrature, base class for different algorithms.
  * @version 1.1
- * @date 2024-01-09
+ * @date 2024-06-10
  * 
- * @copyright Copyright (c) 2023
+ * @copyright Copyright (c) 2024
  * 
  */
 

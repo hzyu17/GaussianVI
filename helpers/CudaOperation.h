@@ -4,14 +4,11 @@
 #define CUDA_OPERATION_H
 
 #include <cuda_runtime.h>
+#include <Eigen/Dense>
 #include <helpers/MatrixHelper.h>
 #include <helpers/SerializeEigenMaps.h>
 #include <iostream>
-#include <Eigen/Dense>
 #include <memory>
-#include <iomanip>
-
-#include <gpmp2/obstacle/SignedDistanceField.h>
 
 using namespace Eigen;
 

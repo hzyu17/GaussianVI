@@ -234,11 +234,9 @@ TEST(SparseGaussHermite, external_weight_map){
             throw std::runtime_error("Failed to open file for GH weights reading. File: " + map_file);
         }
 
-        boost::archive::binary_iarchive ia(ifs);
-        ia >> nodes_weights_map;
+        cereal::BinaryInputArchive archive(ifs); // Use cereal for deserialization
+        archive(nodes_weights_map); // Read and deserialize into nodes_weights_map
 
-    } catch (const boost::archive::archive_exception& e) {
-        std::cerr << "Boost archive exception: " << e.what() << std::endl;
     } catch (const std::exception& e) {
         std::cerr << "Standard exception: " << e.what() << std::endl;
     }
