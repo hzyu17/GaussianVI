@@ -4,11 +4,11 @@
 #define CUDA_OPERATION_H
 
 #include <cuda_runtime.h>
-#include <helpers/MatrixHelper.h>
-#include <iostream>
 #include <Eigen/Dense>
+#include <helpers/MatrixHelper.h>
+#include <helpers/SerializeEigenMaps.h>
+#include <iostream>
 #include <memory>
-#include <iomanip>
 #include <math.h>
 
 #include <gpmp2/obstacle/SignedDistanceField.h>
@@ -19,7 +19,6 @@ using namespace Eigen;
 namespace gvi{
 
 class PlanarSDF {
-
 public:
   // index and float_index is <row, col>
   typedef std::tuple<size_t, size_t> index;
@@ -131,7 +130,6 @@ public:
 
 };
 
-
 class SignedDistanceField {
 
 public:
@@ -144,37 +142,23 @@ public:
   // geometry setting of signed distance field
   int field_rows_, field_cols_, field_z_;
   double cell_size_;
-  Eigen::MatrixXd data_;
+  std::vector<Eigen::MatrixXd> data_;
+  Eigen::MatrixXd data_matrix_;
   double* data_array_;
-
-private:
-  
 
 public:
   /// constructor
-  SignedDistanceField() : field_rows_(0), field_cols_(0), field_z_(0), cell_size_(0.0) {}
+  SignedDistanceField() {}
 
   /// constructor with data
-  /// The data here need to change a type
   SignedDistanceField(const Eigen::Vector3d& origin, double cell_size, const std::vector<Eigen::MatrixXd>& data) :
-      origin_(origin), field_rows_(data[0].rows()), field_cols_(data[0].cols()), field_z_(data.size()), cell_size_(cell_size)
+      origin_(origin), field_rows_(data[0].rows()), field_cols_(data[0].cols()), 
+      field_z_(data.size()), cell_size_(cell_size), data_(data), data_matrix_(field_rows_, field_cols_ * field_z_)
       {
-        // std::cout << "Raw data 1 in GPU :" << data[20](125, 100) << std::endl;
-        // std::cout << "Raw data 2 in GPU :" << data[50](50, 50) << std::endl;
-        // std::cout << "Raw data 3 in GPU :" << data[100](125, 100) << std::endl;
-        // std::cout << "Raw data 4 in GPU :" << data[200](125, 100) << std::endl;
-
-        // Check some points in the raw data
-        // print out the indeces and sdf value
-        data_.resize(field_rows_, field_cols_*field_z_);
         for (int i = 0; i < field_z_; i++){
-          data_.block(0, i*field_cols_, field_rows_, field_cols_) = data[i];
+          data_matrix_.block(0, i*field_cols_, field_rows_, field_cols_) = data_[i];
         }
-        data_array_ = data_.data();
-        // std::cout << "Raw data 1 in GPU after filling :" << data_array_[125 + (100 + 20 * field_cols_) * field_rows_] << std::endl;
-        // std::cout << "Raw data 2 in GPU after filling :" << data_array_[50 + (50 + 50 * field_cols_) * field_rows_] << std::endl;
-        // std::cout << "Raw data 3 in GPU after filling :" << data_array_[125 + (100 + 100 * field_cols_) * field_rows_] << std::endl;
-        // std::cout << "Raw data 4 in GPU after filling :" << data_array_[125 + (100 + 200 * field_cols_) * field_rows_] << std::endl;
+        data_array_ = data_matrix_.data();
       }
 
   ~SignedDistanceField() {}
@@ -268,6 +252,54 @@ public:
   //       (idx(0)-lr) * (signed_distance(hri, hci)-signed_distance(hri, lci)));
   // }
 
+  void loadSDF(const std::string& filename) {
+    std::ifstream ifs(filename, std::ios::binary);
+    if (!ifs.is_open()) {
+        std::cout << "File '" << filename << "' does not exist!" << std::endl;
+        return;
+    }
+
+    std::string fext = filename.substr(filename.find_last_of(".") + 1);
+    if (fext == "xml") {
+        cereal::XMLInputArchive ia(ifs);
+        ia(*this);
+    }
+    else if (fext == "bin") {
+        cereal::BinaryInputArchive ia(ifs);
+        ia(*this);
+    }
+    else {
+        cereal::JSONInputArchive ia(ifs);
+        ia(*this);
+    }
+
+    data_matrix_ = Eigen::MatrixXd(field_rows_, field_cols_ * field_z_);
+    for (int i = 0; i < field_z_; i++){
+      data_matrix_.block(0, i*field_cols_, field_rows_, field_cols_) = data_[i];
+    }
+
+    data_array_ = data_matrix_.data();
+  }
+
+  void saveSDF(const std::string filename) {
+    std::ofstream ofs(filename.c_str());
+    assert(ofs.good());
+    std::string fext = filename.substr(filename.find_last_of(".") + 1);
+    if (fext == "xml") {
+      cereal::XMLOutputArchive archive(ofs);
+      archive(CEREAL_NVP(*this));
+    }
+    else if (fext == "bin") {
+      cereal::BinaryOutputArchive archive(ofs);
+      archive(*this);
+    }
+    else {
+      cereal::JSONOutputArchive archive(ofs);
+      archive(CEREAL_NVP(*this));
+    }
+  }
+
+
   // access
   __host__ __device__ inline double signed_distance(int r, int c, int z) const {
     return data_array_[r + c * field_rows_ + z * field_rows_ * field_cols_]; //Need to change a way to read
@@ -275,8 +307,18 @@ public:
 
   const Eigen::Vector3d& origin() const { return origin_; }
   double cell_size() const { return cell_size_; }
-  const Eigen::MatrixXd& raw_data() const { return data_; }
+  const std::vector<Eigen::MatrixXd>& raw_data() const { return data_; }
 
+  /** Serialization function */
+  template<class Archive>
+  void serialize(Archive& ar) {
+    ar(CEREAL_NVP(origin_));
+    ar(CEREAL_NVP(field_rows_));
+    ar(CEREAL_NVP(field_cols_));
+    ar(CEREAL_NVP(field_z_));
+    ar(CEREAL_NVP(cell_size_));
+    ar(CEREAL_NVP(data_));
+  }
 };
 
 
@@ -367,10 +409,52 @@ public:
     __host__ __device__ inline double centers(int row, int col) const { return _centers_data[3*row + col]; }
 };
 
-class CudaOperation_PlanarPR{
+
+template <typename SDFType>
+class CudaOperation_Base{
+
+public:
+    CudaOperation_Base(double cost_sigma, double epsilon, double radius = 1):
+    _sigma(cost_sigma), _epsilon(epsilon), _radius(radius){}
+
+    virtual void Cuda_init(const Eigen::MatrixXd& weights) = 0;
+
+    virtual void Cuda_free() = 0;
+
+    void Cuda_init_iter(const MatrixXd& sigmapts, VectorXd& results, const int sigmapts_cols){
+      _sigmapts_rows = sigmapts.rows();
+      _dim_state = sigmapts_cols;
+      _n_states = results.size();
+
+      cudaMalloc(&_sigmapts_gpu, sigmapts.size() * sizeof(double));
+      cudaMalloc(&_func_value_gpu, _sigmapts_rows * _n_states * sizeof(double));
+    }
+
+    void Cuda_free_iter(){
+      cudaFree(_sigmapts_gpu);
+      cudaFree(_func_value_gpu); 
+    }
+
+    virtual void CudaIntegration(const MatrixXd& sigmapts, const MatrixXd& weights, MatrixXd& results, const MatrixXd& mean, int type){}
+
+    virtual void costIntegration(const MatrixXd& sigmapts, VectorXd& results, const int sigmapts_cols){}
+
+    void dmuIntegration(const MatrixXd& sigmapts, const MatrixXd& mu, VectorXd& results, const int sigmapts_cols);
+
+    void ddmuIntegration(MatrixXd& results);
+
+  double _epsilon, _radius, _sigma;
+  SDFType _sdf; // define sdf in the derived class
+
+  int _sigmapts_rows, _dim_state, _n_states;
+  double *_weight_gpu, *_data_gpu, *_func_value_gpu, *_sigmapts_gpu, *_mu_gpu;
+};
+
+
+class CudaOperation_PlanarPR : public CudaOperation_Base<PlanarSDF>{
 public:
     CudaOperation_PlanarPR(double cost_sigma = 15.5, double epsilon = 0.5, double radius = 1):
-    _sigma(cost_sigma), _epsilon(epsilon), _radius(radius)
+    CudaOperation_Base(cost_sigma, epsilon, radius)
     {
         MatrixIO _m_io;
         std::string field_file = source_root + "/maps/2dpR/map2/field_multiobs_map2.csv";
@@ -400,27 +484,9 @@ public:
       cudaFree(_class_gpu);
     }
 
-    void Cuda_init_iter(const MatrixXd& sigmapts, VectorXd& results, const int sigmapts_cols){
-      _sigmapts_rows = sigmapts.rows();
-      _dim_state = sigmapts_cols;
-      _n_states = results.size();
-
-      cudaMalloc(&_sigmapts_gpu, sigmapts.size() * sizeof(double));
-      cudaMalloc(&_func_value_gpu, _sigmapts_rows * _n_states * sizeof(double));
-    }
-
-    void Cuda_free_iter(){
-      cudaFree(_sigmapts_gpu);
-      cudaFree(_func_value_gpu); 
-    }
-
     void CudaIntegration(const MatrixXd& sigmapts, const MatrixXd& weights, MatrixXd& results, const MatrixXd& mean, int type);
 
     void costIntegration(const MatrixXd& sigmapts, VectorXd& results, const int sigmapts_cols);
-
-    void dmuIntegration(const MatrixXd& sigmapts, const MatrixXd& mu, VectorXd& results, const int sigmapts_cols);
-
-    void ddmuIntegration(MatrixXd& results);
 
     __host__ __device__ double cost_obstacle_planar(const VectorXd& pose, const PlanarSDF& sdf){
       int n_balls = 1;
@@ -454,120 +520,14 @@ public:
       return v_pts;
     }
 
-  double _epsilon, _radius, _sigma;
-  PlanarSDF _sdf;
-
-  int _sigmapts_rows, _dim_state, _n_states;
-  double *_weight_gpu, *_data_gpu, *_func_value_gpu, *_sigmapts_gpu, *_mu_gpu;
   CudaOperation_PlanarPR* _class_gpu;
-
 };
 
 
-class CudaOperation_3dpR{
-public:
-    CudaOperation_3dpR(double cost_sigma = 15.5, double epsilon = 0.5, double radius = 1):
-    _sigma(cost_sigma), _epsilon(epsilon), _radius(radius)
-    {
-        std::string sdf_file = source_root + "/maps/3dpR/pRSDF3D.bin";  
-        gpmp2::SignedDistanceField sdf;
-        sdf.loadSDF(sdf_file);
-
-        Vector3d origin;
-        origin.setZero();
-        origin << -10.0, -10.0, -10.0;
-
-        double cell_size = 0.1;
-        _sdf = SignedDistanceField{origin, cell_size, sdf.raw_data()};
-    }
-
-    void Cuda_init(const MatrixXd& weights){
-      cudaMalloc(&_weight_gpu, weights.size() * sizeof(double));
-      cudaMalloc(&_data_gpu, _sdf.data_.size() * sizeof(double));
-      cudaMalloc(&_class_gpu, sizeof(CudaOperation_3dpR));
-
-      cudaMemcpy(_weight_gpu, weights.data(), weights.size() * sizeof(double), cudaMemcpyHostToDevice);
-      cudaMemcpy(_class_gpu, this, sizeof(CudaOperation_3dpR), cudaMemcpyHostToDevice);
-      cudaMemcpy(_data_gpu, _sdf.data_.data(), _sdf.data_.size() * sizeof(double), cudaMemcpyHostToDevice);
-    }
-
-    void Cuda_free(){
-      cudaFree(_weight_gpu);
-      cudaFree(_data_gpu);
-      cudaFree(_class_gpu);
-    }
-
-    void Cuda_init_iter(const MatrixXd& sigmapts, VectorXd& results, const int sigmapts_cols){
-      _sigmapts_rows = sigmapts.rows();
-      _dim_state = sigmapts_cols;
-      _n_states = results.size();
-
-      cudaMalloc(&_sigmapts_gpu, sigmapts.size() * sizeof(double));
-      cudaMalloc(&_func_value_gpu, _sigmapts_rows * _n_states * sizeof(double));
-    }
-
-    void Cuda_free_iter(){
-      cudaFree(_sigmapts_gpu);
-      cudaFree(_func_value_gpu); 
-    }
-
-    void CudaIntegration(const MatrixXd& sigmapts, const MatrixXd& weights, MatrixXd& results, const MatrixXd& mean, int type);
-
-    void costIntegration(const MatrixXd& sigmapts, VectorXd& results, const int sigmapts_cols);
-
-    void dmuIntegration(const MatrixXd& sigmapts, const MatrixXd& mu, VectorXd& results, const int sigmapts_cols);
-
-    void ddmuIntegration(MatrixXd& results);
-
-    __host__ __device__ double cost_obstacle_planar(const VectorXd& pose, const SignedDistanceField& sdf){
-      int n_balls = 1;
-      double slope = 1;
-      MatrixXd checkpoints = vec_balls(pose, n_balls);
-      VectorXd signed_distance = sdf.getSignedDistance(checkpoints);
-      // printf("signed_distance of pt: (%lf, %lf, %lf) = %lf\n", pose(0), pose(1), pose(2), signed_distance(0));
-      VectorXd err(signed_distance.size());
-
-      double cost = 0;
-      for (int i = 0; i < n_balls; i++){
-        if (signed_distance(i) > _epsilon + _radius)
-          err(i) =  0.0;
-        else
-          err(i) =  (_epsilon + _radius - signed_distance(i)) * slope;
-        cost += err(i) * err(i) * _sigma;
-      }
-      
-      return cost;
-    }
-
-    __host__ __device__ Eigen::MatrixXd vec_balls(const Eigen::VectorXd& x, int n_balls) {
-      Eigen::MatrixXd v_pts = Eigen::MatrixXd::Zero(n_balls, 3);
-
-      double pos_x = x(0);
-      double pos_y = x(1);
-      double pos_z = x(2);
-
-      for (int i = 0; i < n_balls; i++) {
-          v_pts(i, 0) = pos_x;
-          v_pts(i, 1) = pos_y;
-          v_pts(i, 2) = pos_z;
-      }
-      return v_pts;
-    }
-
-  double _epsilon, _radius, _sigma;
-  SignedDistanceField _sdf;
-
-  int _sigmapts_rows, _dim_state, _n_states;
-  double *_weight_gpu, *_data_gpu, *_func_value_gpu, *_sigmapts_gpu, *_mu_gpu;
-  CudaOperation_3dpR* _class_gpu;
-
-};
-
-
-class CudaOperation_Quad{
+class CudaOperation_Quad : public CudaOperation_Base<PlanarSDF>{
 public:
     CudaOperation_Quad(double cost_sigma = 15.5, double epsilon = 0.5, double radius = 1):
-    _sigma(cost_sigma), _epsilon(epsilon), _radius(radius)
+    CudaOperation_Base(cost_sigma, epsilon, radius)
     {
         MatrixIO _m_io;
         // std::string field_file = source_root + "/maps/2dQuad/field_multiobs.csv";
@@ -582,7 +542,7 @@ public:
         _sdf = PlanarSDF{origin, cell_size, field};
     }
 
-    void Cuda_init(const MatrixXd& weights){
+    void Cuda_init(const MatrixXd& weights) override{
       cudaMalloc(&_weight_gpu, weights.size() * sizeof(double));
       cudaMalloc(&_data_gpu, _sdf.data_.size() * sizeof(double));
       cudaMalloc(&_class_gpu, sizeof(CudaOperation_Quad));
@@ -592,33 +552,15 @@ public:
       cudaMemcpy(_class_gpu, this, sizeof(CudaOperation_Quad), cudaMemcpyHostToDevice);
     }
 
-    void Cuda_free(){
+    void Cuda_free() override{
       cudaFree(_weight_gpu);
       cudaFree(_data_gpu);
       cudaFree(_class_gpu);
     }
 
-    void Cuda_init_iter(const MatrixXd& sigmapts, VectorXd& results, const int sigmapts_cols){
-      _sigmapts_rows = sigmapts.rows();
-      _dim_state = sigmapts_cols;
-      _n_states = results.size();
-
-      cudaMalloc(&_sigmapts_gpu, sigmapts.size() * sizeof(double));
-      cudaMalloc(&_func_value_gpu, _sigmapts_rows * _n_states * sizeof(double));
-    }
-
-    void Cuda_free_iter(){
-      cudaFree(_sigmapts_gpu);
-      cudaFree(_func_value_gpu); 
-    }
-
     void CudaIntegration(const MatrixXd& sigmapts, const MatrixXd& weights, MatrixXd& results, const MatrixXd& mean, int type);
 
     void costIntegration(const MatrixXd& sigmapts, VectorXd& results, const int sigmapts_cols);
-
-    void dmuIntegration(const MatrixXd& sigmapts, const MatrixXd& mu, VectorXd& results, const int sigmapts_cols);
-
-    void ddmuIntegration(MatrixXd& results);
 
     __host__ __device__ double cost_obstacle_planar(const VectorXd& pose, const PlanarSDF& sdf){
       int n_balls = 5;
@@ -662,26 +604,91 @@ public:
       return v_pts;
     }
 
-  double _epsilon, _radius, _sigma;
-  PlanarSDF _sdf;
-
-  int _sigmapts_rows, _dim_state, _n_states;
-  double *_weight_gpu, *_data_gpu, *_func_value_gpu, *_sigmapts_gpu, *_mu_gpu;
   CudaOperation_Quad* _class_gpu;
 
 };
 
-class CudaOperation_3dArm{
+
+class CudaOperation_3dpR : public CudaOperation_Base<SignedDistanceField>{
+public:
+    CudaOperation_3dpR(double cost_sigma = 15.5, double epsilon = 0.5, double radius = 1):
+    CudaOperation_Base(cost_sigma, epsilon, radius)
+    {
+        std::string sdf_file = source_root + "/maps/3dpR/pRSDF3D.bin";
+        _sdf.loadSDF(sdf_file);
+    }
+
+    void Cuda_init(const MatrixXd& weights){
+      cudaMalloc(&_weight_gpu, weights.size() * sizeof(double));
+      cudaMalloc(&_data_gpu, _sdf.data_matrix_.size() * sizeof(double));
+      cudaMalloc(&_class_gpu, sizeof(CudaOperation_3dpR));
+
+      cudaMemcpy(_weight_gpu, weights.data(), weights.size() * sizeof(double), cudaMemcpyHostToDevice);
+      cudaMemcpy(_class_gpu, this, sizeof(CudaOperation_3dpR), cudaMemcpyHostToDevice);
+      cudaMemcpy(_data_gpu, _sdf.data_matrix_.data(), _sdf.data_matrix_.size() * sizeof(double), cudaMemcpyHostToDevice);
+    }
+
+    void Cuda_free(){
+      cudaFree(_weight_gpu);
+      cudaFree(_data_gpu);
+      cudaFree(_class_gpu);
+    }
+
+    void CudaIntegration(const MatrixXd& sigmapts, const MatrixXd& weights, MatrixXd& results, const MatrixXd& mean, int type);
+
+    void costIntegration(const MatrixXd& sigmapts, VectorXd& results, const int sigmapts_cols);
+
+    __host__ __device__ double cost_obstacle_planar(const VectorXd& pose, const SignedDistanceField& sdf){
+      int n_balls = 1;
+      double slope = 1;
+      MatrixXd checkpoints = vec_balls(pose, n_balls);
+      VectorXd signed_distance = sdf.getSignedDistance(checkpoints);
+      // printf("signed_distance of pt: (%lf, %lf, %lf) = %lf\n", pose(0), pose(1), pose(2), signed_distance(0));
+      VectorXd err(signed_distance.size());
+
+      double cost = 0;
+      for (int i = 0; i < n_balls; i++){
+        if (signed_distance(i) > _epsilon + _radius)
+          err(i) =  0.0;
+        else
+          err(i) =  (_epsilon + _radius - signed_distance(i)) * slope;
+        cost += err(i) * err(i) * _sigma;
+      }
+      
+      return cost;
+    }
+
+    __host__ __device__ Eigen::MatrixXd vec_balls(const Eigen::VectorXd& x, int n_balls) {
+      Eigen::MatrixXd v_pts = Eigen::MatrixXd::Zero(n_balls, 3);
+
+      double pos_x = x(0);
+      double pos_y = x(1);
+      double pos_z = x(2);
+
+      for (int i = 0; i < n_balls; i++) {
+          v_pts(i, 0) = pos_x;
+          v_pts(i, 1) = pos_y;
+          v_pts(i, 2) = pos_z;
+      }
+      return v_pts;
+    }
+
+  CudaOperation_3dpR* _class_gpu;
+};
+
+
+class CudaOperation_3dArm : public CudaOperation_Base<SignedDistanceField>{
 public:
     CudaOperation_3dArm(const Eigen::VectorXd& a, const Eigen::VectorXd& alpha, const Eigen::VectorXd& d, const Eigen::VectorXd& theta_bias,
                         const Eigen::VectorXd& radii, const Eigen::VectorXi& frames, const Eigen::VectorXd& centers,
                         double cost_sigma = 15.5, double epsilon = 0.5):
-    _radii(radii), _sigma(cost_sigma), _epsilon(epsilon)
+    _radii(radii), CudaOperation_Base(cost_sigma, epsilon)
     {
         std::string sdf_file = source_root + "/maps/WAM/WAMDeskDataset.bin";  
-        gpmp2::SignedDistanceField sdf;
-        sdf.loadSDF(sdf_file);
-        _sdf = SignedDistanceField{sdf.origin(), sdf.cell_size(), sdf.raw_data()};
+        _sdf.loadSDF(sdf_file);
+        // gpmp2::SignedDistanceField sdf;
+        // sdf.loadSDF(sdf_file);
+        // _sdf = SignedDistanceField{sdf.origin(), sdf.cell_size(), sdf.raw_data()};
 
         _radii_data = _radii.data();
         const int num_spheres = frames.size();
@@ -691,9 +698,9 @@ public:
     CudaOperation_3dArm(const Eigen::VectorXd& a, const Eigen::VectorXd& alpha, const Eigen::VectorXd& d, const Eigen::VectorXd& theta_bias,
                         const Eigen::VectorXd& radii, const Eigen::VectorXi& frames, const Eigen::MatrixXd& centers,
                         double cost_sigma, double epsilon, gpmp2::SignedDistanceField sdf):
-    _radii(radii), _sigma(cost_sigma), _epsilon(epsilon)
+    _radii(radii), CudaOperation_Base(cost_sigma, epsilon)
     {
-        _sdf = SignedDistanceField{sdf.origin(), sdf.cell_size(), sdf.raw_data()};
+        _sdf = SignedDistanceField{sdf.origin(), sdf.cell_size(), sdf.raw_data()}; // we can replace the input with the sdf class we defined
 
         _radii_data = _radii.data();
         const int num_spheres = frames.size();
@@ -737,27 +744,9 @@ public:
       cudaFree(_centers_gpu);
     }
 
-    void Cuda_init_iter(const MatrixXd& sigmapts, VectorXd& results, const int sigmapts_cols){
-      _sigmapts_rows = sigmapts.rows();
-      _dim_state = sigmapts_cols;
-      _n_states = results.size();
-
-      cudaMalloc(&_sigmapts_gpu, sigmapts.size() * sizeof(double));
-      cudaMalloc(&_func_value_gpu, _sigmapts_rows * _n_states * sizeof(double));
-    }
-
-    void Cuda_free_iter(){
-      cudaFree(_sigmapts_gpu);
-      cudaFree(_func_value_gpu); 
-    }
-
     void CudaIntegration(const MatrixXd& sigmapts, const MatrixXd& weights, MatrixXd& results, const MatrixXd& mean, int type);
 
     void costIntegration(const MatrixXd& sigmapts, VectorXd& results, const int sigmapts_cols);
-
-    void dmuIntegration(const MatrixXd& sigmapts, const MatrixXd& mu, VectorXd& results, const int sigmapts_cols);
-
-    void ddmuIntegration(MatrixXd& results);
 
     __host__ __device__ double cost_obstacle(const VectorXd& theta, const SignedDistanceField& sdf, const ForwardKinematics& fk){
       int n_balls = theta.size();
@@ -793,14 +782,10 @@ public:
       return _radii_data[i];
     }
 
-  double _epsilon, _sigma;
   Eigen::VectorXd _radii;
   double* _radii_data;
-  SignedDistanceField _sdf;
   ForwardKinematics _fk;
 
-  int _sigmapts_rows, _dim_state, _n_states;
-  double *_weight_gpu, *_data_gpu, *_func_value_gpu, *_sigmapts_gpu, *_mu_gpu;
   double *_a_gpu, *_alpha_gpu, *_d_gpu, *_theta_gpu, *_rad_gpu, *_centers_gpu;
   int *_frames_gpu;
   CudaOperation_3dArm* _class_gpu;
@@ -810,7 +795,6 @@ public:
 MatrixXd compute_AT_B_A(MatrixXd& _Lambda, MatrixXd& _target_precision);
 
 void computeTmp_CUDA(Eigen::MatrixXd& tmp, const Eigen::MatrixXd& covariance, const Eigen::MatrixXd& AT_precision_A);
-
 
 }
 

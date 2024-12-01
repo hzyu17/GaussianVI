@@ -165,6 +165,8 @@ public:
 
     virtual inline VectorXd local2joint_dmu(Eigen::VectorXd & dmu_lcl) {}
 
+    virtual inline VectorXd local2joint_dmu_insertion() {}
+
     /**
      * @brief Get the joint Pk.T * V^2 / dmu /dmu * Pk using block insertion
      */
@@ -174,7 +176,7 @@ public:
 
     virtual inline SpMat local2joint_dprecision(Eigen::MatrixXd & dprecision_lcl){}
 
-    // virtual inline void update_cuda(){}
+    virtual inline SpMat local2joint_dprecision_insertion() {}
 
     virtual inline void cuda_init(){}
 

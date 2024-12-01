@@ -38,7 +38,7 @@ public:
                         const Function& function, const CostClass& cost_class,
                         int num_states, int start_index, 
                         double temperature=1.0, double high_temperature=10.0,
-                        std::optional<QuadratureWeightsMap> weight_sigpts_map_option=std::nullopt):
+                        std::optional<std::shared_ptr<QuadratureWeightsMap>> weight_sigpts_map_option=std::nullopt):
                 GVIBase(dimension, state_dim, num_states, start_index, 
                         temperature, high_temperature, weight_sigpts_map_option)
             {
@@ -88,6 +88,22 @@ void calculate_partial_V(std::optional<double> step_size=std::nullopt) override{
         return res;
     }
 
+    inline VectorXd local2joint_dmu_insertion() override{ 
+        VectorXd res(this->_joint_size);
+        res.setZero();
+        res.block(this->_state_dim * this->_start_index, 0, this->_dim, 1) = this->_Vdmu;
+        return res;
+    }
+
+    inline SpMat local2joint_dprecision_insertion() override{ 
+        SpMat res(this->_joint_size, this->_joint_size);
+
+        for (int i = 0; i < this->_dim; ++i)
+            for (int j = 0; j < this->_dim; ++j)
+                res.insert(i + this->_state_dim * this->_start_index, j + this->_state_dim * this->_start_index) = this->_Vddmu(i, j);
+        
+        return res;
+    }
 
     /**
      * @brief returns the (x-mu)*Phi(x) 

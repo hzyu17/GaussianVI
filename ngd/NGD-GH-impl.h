@@ -39,8 +39,8 @@ std::tuple<VectorXd, SpMat> NGDGH<Factor>::compute_gradients(std::optional<doubl
         #pragma omp for nowait // Nowait allows threads to continue without waiting at the end of the loop
         for (auto &opt_k : Base::_vec_factors) {
             opt_k->calculate_partial_V();
-            Vdmu_private += opt_k->local2joint_dmu();
-            Vddmu_private += opt_k->local2joint_dprecision();
+            Vdmu_private += opt_k->local2joint_dmu_insertion();
+            Vddmu_private += opt_k->local2joint_dprecision_insertion();
         }
 
         #pragma omp critical
@@ -65,6 +65,9 @@ std::tuple<VectorXd, SpMat> NGDGH<Factor>::compute_gradients(std::optional<doubl
 // To avoid using local2joint_dprecision for time tests, as it is too time-consuming
 template <typename Factor>
 std::tuple<VectorXd, SpMat> NGDGH<Factor>::compute_gradients_time(std::optional<double>step_size){
+    static int flag = 0;
+    Timer timer;
+
     _Vdmu.setZero();
     _Vddmu.setZero();
 
@@ -76,6 +79,9 @@ std::tuple<VectorXd, SpMat> NGDGH<Factor>::compute_gradients_time(std::optional<
      */
     omp_set_num_threads(20); 
 
+    if (!flag)
+        timer.start();
+
     #pragma omp parallel
     {
         // Thread-local storage to avoid race conditions
@@ -85,10 +91,39 @@ std::tuple<VectorXd, SpMat> NGDGH<Factor>::compute_gradients_time(std::optional<
         #pragma omp for nowait // Nowait allows threads to continue without waiting at the end of the loop
         for (auto &opt_k : Base::_vec_factors) {
             opt_k->calculate_partial_V();
+            Vdmu_private += opt_k->local2joint_dmu_insertion();
+            Vddmu_private += opt_k->local2joint_dprecision_insertion();
+        }
+
+        #pragma omp critical
+        {
+            Vdmu_sum += Vdmu_private;
+            Vddmu_sum += Vddmu_private;
         }
     }
 
-    return std::make_tuple(Vdmu_sum, Vddmu_sum);
+    // Update the member variables 
+    _Vdmu = Vdmu_sum;
+    _Vddmu = Vddmu_sum;
+
+    if (!flag)
+        std::cout << "Derivative Mapping time: " << timer.end_mis() << " ms" << std::endl;
+
+    if (!flag)
+        timer.start();
+
+    SpMat dprecision = _Vddmu - Base::_precision;
+
+    // Eigen::ConjugateGradient<SpMat, Eigen::Upper> solver;
+    Eigen::ConjugateGradient<SpMat, Eigen::Upper, Eigen::IncompleteLUT<double>> solver;
+    VectorXd dmu =  solver.compute(_Vddmu).solve(-_Vdmu);
+
+    if (!flag)
+        std::cout << "Solver time: " << timer.end_mis() << " ms" << std::endl << std::endl;
+    
+    flag = 1;
+
+    return std::make_tuple(dmu, dprecision);
 }
 
 template <typename Factor>

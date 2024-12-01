@@ -1,12 +1,13 @@
 /**
- * @file minimum_acc.h
- * @author Hongzhe Yu (hyu419@gatech.edu)
+ * @file minimum_acc_prior_integral.h
+ * @author Zinuo Chang (zchang40@gatech.edu)
  * @brief minimum acceleration gp model, which is a linear model of the form
- * -log(p(x|z)) = ||A*x - B*\mu_t||_{\Sigma^{-1}}.
+ * -log(p(x|z)) = ||A*x - B*\mu_t||_{\Sigma^{-1}}, but using Euler to obtain 
+ * the transition matrix.
  * @version 0.1
- * @date 2022-07-31
+ * @date 2024-08-24
  * 
- * @copyright Copyright (c) 2022
+ * @copyright Copyright (c) 2024
  * 
  */
 

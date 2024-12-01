@@ -221,6 +221,14 @@ std::tuple<double, VectorXd, VectorXd, SpMat> GVIGH<Factor>::factor_cost_vector_
 
     double cost = value + vec_D.array().log().sum() / 2;
 
+    double entropy = vec_D.array().log().sum() / 2;
+    double collision_cost = nonlinear_fac_cost.cwiseAbs().sum();
+    double prior_cost = fac_costs.sum() - collision_cost;
+
+    std::cout << "Entropy: " << entropy << std::endl;
+    std::cout << "Collision Cost: " << collision_cost << std::endl;
+    std::cout << "Prior Cost: " << prior_cost << std::endl;
+
     _Vdmu.setZero();
     _Vddmu.setZero();
 
@@ -250,9 +258,8 @@ std::tuple<double, VectorXd, VectorXd, SpMat> GVIGH<Factor>::factor_cost_vector_
                 opt_k->calculate_partial_V(ddmu_i, dmu_i, E_phi_mat(index));
             }
 
-            // This part takes most time
-            Vdmu_private += opt_k->local2joint_dmu();
-            Vddmu_private += opt_k->local2joint_dprecision();
+            Vdmu_private += opt_k->local2joint_dmu_insertion();
+            Vddmu_private += opt_k->local2joint_dprecision_insertion();
         }
 
         #pragma omp critical
@@ -270,6 +277,7 @@ std::tuple<double, VectorXd, VectorXd, SpMat> GVIGH<Factor>::factor_cost_vector_
     dprecision = _Vddmu - _precision;
 
     Eigen::ConjugateGradient<SpMat, Eigen::Upper> solver;
+    // Eigen::ConjugateGradient<SpMat, Eigen::Upper, Eigen::IncompleteLUT<double>> solver;
     VectorXd dmu(_dim);
     dmu.setZero();
     dmu = solver.compute(_Vddmu).solve(-_Vdmu);
@@ -280,7 +288,7 @@ std::tuple<double, VectorXd, VectorXd, SpMat> GVIGH<Factor>::factor_cost_vector_
 template <typename Factor>
 std::tuple<double, VectorXd, VectorXd, SpMat> GVIGH<Factor>::factor_cost_vector_cuda_time(const VectorXd& fill_joint_mean, SpMat& joint_precision)
 {
-    // static int flag = 0;
+    static int flag = 0;
     Timer timer;
 
     int n_nonlinear = _vec_nonlinear_factors.size();
@@ -290,13 +298,13 @@ std::tuple<double, VectorXd, VectorXd, SpMat> GVIGH<Factor>::factor_cost_vector_
     fac_costs.setZero();
     nonlinear_fac_cost.setZero();
 
-    // if (!flag)
-    //     timer.start();
+    if (!flag)
+        timer.start();
 
     SpMat joint_cov = inverse_GBP(joint_precision);
 
-    // if (!flag)
-        // std::cout << "GBP Inverse time: " << timer.end_sec() * 1000 << " ms" << std::endl;
+    if (!flag)
+        std::cout << "GBP Inverse time: " << timer.end_mis() << " ms" << std::endl;
 
 
     // if (!flag)
@@ -305,7 +313,7 @@ std::tuple<double, VectorXd, VectorXd, SpMat> GVIGH<Factor>::factor_cost_vector_
     // SpMat cov = inverse(joint_precision);
 
     // if (!flag)
-    //     std::cout << "Inverse time: " << timer.end_sec() * 1000 << " ms" << std::endl;
+    //     std::cout << "Inverse time: " << timer.end_mis() << " ms" << std::endl;
 
 
     // if (!flag)
@@ -342,22 +350,18 @@ std::tuple<double, VectorXd, VectorXd, SpMat> GVIGH<Factor>::factor_cost_vector_
     }
 
     // if (!flag)
-        // std::cout << "Matrix Filling time: " << timer.end_sec() * 1000 << " ms" << std::endl;
+        // std::cout << "Matrix Filling time: " << timer.end_mis() << " ms" << std::endl;
 
-    // if (!flag)
-    //     timer.start();
+    if (!flag)
+        timer.start();
 
     // Compute the cost of the nonlinear factors
     _vec_nonlinear_factors[0]->dmuIntegration(sigmapts_mat, mean_mat, nonlinear_fac_cost, dmu_mat, ddmu_mat, sigma_cols);
     E_phi_mat = nonlinear_fac_cost;
     nonlinear_fac_cost = nonlinear_fac_cost / this ->_temperature;     
 
-    // if (!flag)
-        // std::cout << "Cuda Computation time: " << timer.end_sec() * 1000 << " ms" << std::endl;
-
-    
-    // if (!flag)
-        timer.start();
+    if (!flag)
+        std::cout << "Cuda Computation time: " << timer.end_mis() << " ms" << std::endl;
 
     int cnt = 0;
     // Use a private counter for each thread to avoid race conditions
@@ -384,6 +388,9 @@ std::tuple<double, VectorXd, VectorXd, SpMat> GVIGH<Factor>::factor_cost_vector_
     VectorXd vec_D = ldlt.vectorD();
 
     double cost = value + vec_D.array().log().sum() / 2;
+
+    if (!flag)
+        timer.start();
 
     _Vdmu.setZero();
     _Vddmu.setZero();
@@ -413,19 +420,41 @@ std::tuple<double, VectorXd, VectorXd, SpMat> GVIGH<Factor>::factor_cost_vector_
 
                 opt_k->calculate_partial_V(ddmu_i, dmu_i, E_phi_mat(index));
             }
+
+            Vdmu_private += opt_k->local2joint_dmu_insertion();
+            Vddmu_private += opt_k->local2joint_dprecision_insertion();
+        }
+
+        #pragma omp critical
+        {
+            Vdmu_sum += Vdmu_private;
+            Vddmu_sum += Vddmu_private;
         }
     }
 
+    _Vdmu = Vdmu_sum;
+    _Vddmu = Vddmu_sum;
+
+    if (!flag)
+        std::cout << "Derivative Mapping time: " << timer.end_mis() << " ms" << std::endl;
+
+    if (!flag)
+        timer.start();
+
     SpMat dprecision(_dim, _dim);
     dprecision.setZero();
+    dprecision = _Vddmu - _precision;
 
+    Eigen::ConjugateGradient<SpMat, Eigen::Upper> solver;
+    // Eigen::ConjugateGradient<SpMat, Eigen::Upper, Eigen::IncompleteLUT<double>> solver;
     VectorXd dmu(_dim);
     dmu.setZero();
+    dmu = solver.compute(_Vddmu).solve(-_Vdmu);
 
-    // if (!flag)
-        // std::cout << "Matrix Processing time: " << timer.end_sec() * 1000 << " ms" << std::endl;
+    if (!flag)
+        std::cout << "Solver time: " << timer.end_mis() << " ms" << std::endl << std::endl;
     
-    // flag = 1;
+    flag = 1;
 
     return std::make_tuple(cost, fac_costs, dmu, dprecision);
 }
@@ -435,7 +464,7 @@ template <typename Factor>
 void GVIGH<Factor>::time_test()
 {
     // std::cout << "========== Optimization Start: ==========" << std::endl << std::endl;
-    // _vec_nonlinear_factors[0]->cuda_init();
+    _vec_nonlinear_factors[0]->cuda_init();
 
     Timer timer;
 
@@ -443,15 +472,14 @@ void GVIGH<Factor>::time_test()
     times_GBP.reserve(_niters);
     times_inverse.reserve(_niters);
 
-    std::cout << "% Dimension = " << (this -> _precision).rows() << std::endl;
+    std::cout << "Optimization Start" << std::endl;
 
     for (int i = 0; i < _niters + 1; i++){
         timer.start();
-        // auto result_cuda = factor_cost_vector_cuda_time();
-        SpMat joint_cov = inverse_GBP(this -> _precision);
-        double time = timer.end_sec();
+        auto result_cuda = factor_cost_vector_cuda_time();
+        double time = timer.end_mis();
         if (i!=0)
-            times_GBP.push_back(time * 1000);  
+            times_GBP.push_back(time);  
     }
 
     double average_time = std::accumulate(times_GBP.begin(), times_GBP.end(), 0.0) / _niters;
@@ -459,41 +487,42 @@ void GVIGH<Factor>::time_test()
     double min_time = *std::min_element(times_GBP.begin(), times_GBP.end());
     double max_time = *std::max_element(times_GBP.begin(), times_GBP.end());
 
-    std::cout << "% GBP average: " << average_time << " ms" << std::endl;
-    std::cout << "% GBP min: " << min_time << " ms" << std::endl;
-    std::cout << "% GBP max: " << max_time << " ms" << std::endl;
+    std::cout << "% " << _vec_nonlinear_factors.size() + 2 << std::endl;
+    std::cout << "% GPU average: " << average_time << " ms" << std::endl;
+    std::cout << "% GPU min: " << min_time << " ms" << std::endl;
+    std::cout << "% GPU max: " << max_time << " ms" << std::endl;
 
-    std::cout << "% [ " << times_GBP[0];
-    for (int i = 1; i < times_GBP.size(); ++i) {
-        std::cout << ", " << times_GBP[i];
-    }
-    std::cout << " ]" << std::endl;
+    // std::cout << "% [ " << times_GBP[0];
+    // for (int i = 1; i < times_GBP.size(); ++i) {
+    //     std::cout << ", " << times_GBP[i];
+    // }
+    // std::cout << " ]" << std::endl;
 
 
-    for (int i = 0; i < _niters + 1; i++){
-        timer.start();
-        SpMat joint_cov = inverse(this -> _precision);
-        double time = timer.end_sec();
-        if (i!=0)
-            times_inverse.push_back(time * 1000);  
-    }
+    // for (int i = 0; i < _niters + 1; i++){
+    //     timer.start();
+    //     SpMat joint_cov = inverse(this -> _precision);
+    //     double time = timer.end_sec();
+    //     if (i!=0)
+    //         times_inverse.push_back(time * 1000);  
+    // }
 
-    average_time = std::accumulate(times_inverse.begin(), times_inverse.end(), 0.0) / _niters;
+    // average_time = std::accumulate(times_inverse.begin(), times_inverse.end(), 0.0) / _niters;
 
-    min_time = *std::min_element(times_inverse.begin(), times_inverse.end());
-    max_time = *std::max_element(times_inverse.begin(), times_inverse.end());
+    // min_time = *std::min_element(times_inverse.begin(), times_inverse.end());
+    // max_time = *std::max_element(times_inverse.begin(), times_inverse.end());
 
-    std::cout << "% Inverse average: " << average_time << " ms" << std::endl;
-    std::cout << "% Inverse min: " << min_time << " ms" << std::endl;
-    std::cout << "% Inverse max: " << max_time << " ms" << std::endl;
+    // std::cout << "% Inverse average: " << average_time << " ms" << std::endl;
+    // std::cout << "% Inverse min: " << min_time << " ms" << std::endl;
+    // std::cout << "% Inverse max: " << max_time << " ms" << std::endl;
 
-    std::cout << "% [ " << times_inverse[0];
-    for (int i = 1; i < times_inverse.size(); ++i) {
-        std::cout << ", " << times_inverse[i];
-    }
-    std::cout << " ]" << std::endl;
+    // std::cout << "% [ " << times_inverse[0];
+    // for (int i = 1; i < times_inverse.size(); ++i) {
+    //     std::cout << ", " << times_inverse[i];
+    // }
+    // std::cout << " ]" << std::endl;
 
-    // _vec_nonlinear_factors[0]->cuda_free();
+    _vec_nonlinear_factors[0]->cuda_free();
 
 }
 
