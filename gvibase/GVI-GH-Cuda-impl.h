@@ -221,13 +221,13 @@ std::tuple<double, VectorXd, VectorXd, SpMat> GVIGH<Factor>::factor_cost_vector_
 
     double cost = value + vec_D.array().log().sum() / 2;
 
-    double entropy = vec_D.array().log().sum() / 2;
-    double collision_cost = nonlinear_fac_cost.cwiseAbs().sum();
-    double prior_cost = fac_costs.sum() - collision_cost;
+    // double entropy = vec_D.array().log().sum() / 2;
+    // double collision_cost = nonlinear_fac_cost.cwiseAbs().sum();
+    // double prior_cost = fac_costs.sum() - collision_cost;
 
-    std::cout << "Entropy: " << entropy << std::endl;
-    std::cout << "Collision Cost: " << collision_cost << std::endl;
-    std::cout << "Prior Cost: " << prior_cost << std::endl;
+    // std::cout << "Entropy: " << entropy << std::endl;
+    // std::cout << "Collision Cost: " << collision_cost << std::endl;
+    // std::cout << "Prior Cost: " << prior_cost << std::endl;
 
     _Vdmu.setZero();
     _Vddmu.setZero();

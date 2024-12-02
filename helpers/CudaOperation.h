@@ -698,9 +698,9 @@ public:
     CudaOperation_3dArm(const Eigen::VectorXd& a, const Eigen::VectorXd& alpha, const Eigen::VectorXd& d, const Eigen::VectorXd& theta_bias,
                         const Eigen::VectorXd& radii, const Eigen::VectorXi& frames, const Eigen::MatrixXd& centers,
                         double cost_sigma, double epsilon, gpmp2::SignedDistanceField sdf):
-    _radii(radii), CudaOperation_Base(cost_sigma, epsilon)
+    _radii(radii), CudaOperation_Base(cost_sigma, epsilon) // we can replace the input with the sdf class we defined
     {
-        _sdf = SignedDistanceField{sdf.origin(), sdf.cell_size(), sdf.raw_data()}; // we can replace the input with the sdf class we defined
+        _sdf = SignedDistanceField{sdf.origin(), sdf.cell_size(), sdf.raw_data()}; 
 
         _radii_data = _radii.data();
         const int num_spheres = frames.size();

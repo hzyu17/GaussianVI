@@ -46,11 +46,11 @@ set(CMAKE_CUDA_STANDARD 14)
 find_package(Eigen3 3.4.0 REQUIRED)
 add_definitions(-DEIGEN_DONT_VECTORIZE)
 
-# Boost
-find_package(Boost 1.70 REQUIRED)
-find_package(Boost COMPONENTS serialization REQUIRED)
-include_directories(${Boost_INCLUDE_DIR})
-link_directories(${Boost_LIBRARY_DIRS})
+# # Boost
+# find_package(Boost 1.70 REQUIRED)
+# find_package(Boost COMPONENTS serialization REQUIRED)
+# include_directories(${Boost_INCLUDE_DIR})
+# link_directories(${Boost_LIBRARY_DIRS})
 
 # OpenMP
 find_package(OpenMP)
@@ -92,7 +92,7 @@ foreach(gvi_source ${gvi_SOURCES})
                             )   
     target_link_libraries(${gvi_name} ${EIGEN3_LIBRARIES} ${Matlab_MEX_LIBRARY} ${CUDA_LIBRARIES} OpenMP::OpenMP_CXX 
                         #   ${Matlab_MX_LIBRARY} 
-                          ${libSpGH_LIBRARY} ${MCR_LIBRARY_PATH}/libmwmclmcrrt.so.9.9 Boost::serialization)
+                          ${libSpGH_LIBRARY} ${MCR_LIBRARY_PATH}/libmwmclmcrrt.so.9.9)
     target_include_directories(${gvi_name} PRIVATE ${Matlab_INCLUDE_DIRS})
 endforeach()
 
