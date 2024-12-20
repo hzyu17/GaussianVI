@@ -55,8 +55,6 @@ void calculate_partial_V(std::optional<double> step_size=std::nullopt) override{
 
         /// Integrate for E_q{_Vdmu} 
         this->_Vdmu = this->_gh->Integrate(this->_func_Vmu);
-        this->_Vdmu = this->_precision * this->_Vdmu;
-        this->_Vdmu = this->_Vdmu / this->temperature();
 
         /// Integrate for E_q{phi(x)}
         double E_phi = this->_gh->Integrate(this->_func_phi)(0, 0);
@@ -66,7 +64,6 @@ void calculate_partial_V(std::optional<double> step_size=std::nullopt) override{
 
         this->_Vddmu.triangularView<Upper>() = (this->_precision * E_xxphi * this->_precision - this->_precision * E_phi).triangularView<Upper>();
         this->_Vddmu.triangularView<StrictlyLower>() = this->_Vddmu.triangularView<StrictlyUpper>().transpose();
-        this->_Vddmu = this->_Vddmu / this->temperature();
     }
     
 

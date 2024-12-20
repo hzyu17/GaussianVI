@@ -24,8 +24,8 @@ std::tuple<double, VectorXd, SpMat> ProxKLGH<Factor>::onestep_linesearch(const d
     new_mu.setZero(); new_precision.setZero();
 
     // update mu and precision matrix
-    new_mu = this->_mu + step_size * dmu;
-    new_precision = this->_precision + step_size * dprecision;
+    new_mu = this->_mu - step_size * dmu;
+    new_precision = 1 / (step_size + 1) * this->_precision + step_size /(step_size + 1)  * dprecision;
 
     // new cost
     double new_cost = Base::cost_value(new_mu, new_precision);
@@ -86,7 +86,7 @@ std::tuple<VectorXd, SpMat> ProxKLGH<Factor>::compute_gradients(std::optional<do
  * @brief One step of optimization.
  */
 template <typename Factor>
-std::tuple<VectorXd, SpMat> ProxKLGH<Factor>::update_proposal_KL(std::optional<double>step_size){
+std::tuple<VectorXd, SpMat> ProxKLGH<Factor>::compute_gradients_KL(std::optional<double>step_size){
     _Vdmu.setZero();
     _Vddmu.setZero();
 
@@ -122,12 +122,7 @@ std::tuple<VectorXd, SpMat> ProxKLGH<Factor>::update_proposal_KL(std::optional<d
     _Vdmu = Vdmu_sum;
     _Vddmu = Vddmu_sum;
 
-    SpMat dprecision = _Vddmu - Base::_precision;
-
-    Eigen::ConjugateGradient<SpMat, Eigen::Upper> solver;
-    VectorXd dmu =  solver.compute(_Vddmu).solve(-_Vdmu);
-
-    return std::make_tuple(dmu, dprecision);
+    return std::make_tuple(_Vdmu, _Vddmu);
 }
 
 
@@ -170,7 +165,7 @@ void ProxKLGH<Factor>::optimize(std::optional<bool> verbose)
 
         // gradients
         // here change to update proposal
-        std::tuple<VectorXd, SpMat> gradients = compute_gradients();
+        std::tuple<VectorXd, SpMat> gradients = compute_gradients_KL();
 
         VectorXd dmu = std::get<0>(gradients);
         SpMat dprecision = std::get<1>(gradients);
