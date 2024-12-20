@@ -792,6 +792,43 @@ public:
 
 };
 
+
+class CudaOperation_SLR{
+public:
+    CudaOperation_SLR(const MatrixXd& sigmapts, const VectorXd& weights, const MatrixXd& x_bar, int dim_states, int n_states) :
+    _sigmapts_rows(sigmapts.rows()), _dim_state(dim_states), _n_states(n_states)
+    {
+      cudaMalloc(&_sigmapts_gpu, sigmapts.size() * sizeof(double));
+      cudaMalloc(&_y_sigmapts_gpu, sigmapts.size() * sizeof(double));
+      cudaMalloc(&_x_bar_gpu, x_bar.size() * sizeof(double));
+      cudaMalloc(&_y_bar_gpu, x_bar.size() * sizeof(double));
+      cudaMalloc(&_weights_gpu, weights.size() * sizeof(double));
+
+      cudaMemcpy(_sigmapts_gpu, sigmapts.data(), sigmapts.size() * sizeof(double), cudaMemcpyHostToDevice);
+      cudaMemcpy(_x_bar_gpu, x_bar.data(), x_bar.size() * sizeof(double), cudaMemcpyHostToDevice);
+      cudaMemcpy(_weights_gpu, weights.data(), weights.size() * sizeof(double), cudaMemcpyHostToDevice);
+
+      cudaMemset(_y_sigmapts_gpu, 0, sigmapts.size() * sizeof(double));
+      cudaMemset(_y_bar_gpu, 0, x_bar.size() * sizeof(double));
+    }
+
+    ~CudaOperation_SLR(){
+      cudaFree(_sigmapts_gpu);
+      cudaFree(_y_sigmapts_gpu);
+      cudaFree(_x_bar_gpu);
+      cudaFree(_y_bar_gpu);
+      cudaFree(_weights_gpu);
+    }
+
+    void expectationIntegration(MatrixXd& y_bar);
+
+    void covarianceIntegration(MatrixXd& results);
+
+    int _sigmapts_rows, _dim_state, _n_states;
+    double *_sigmapts_gpu, *_y_sigmapts_gpu, *_x_bar_gpu, *_y_bar_gpu, *_weights_gpu;
+
+};
+
 MatrixXd compute_AT_B_A(MatrixXd& _Lambda, MatrixXd& _target_precision);
 
 void computeTmp_CUDA(Eigen::MatrixXd& tmp, const Eigen::MatrixXd& covariance, const Eigen::MatrixXd& AT_precision_A);
