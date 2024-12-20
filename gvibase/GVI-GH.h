@@ -19,6 +19,7 @@
 
 #include "helpers/EigenWrapper.h"
 #include "helpers/DataRecorder.h"
+#include "helpers/timer.h"
 
 using namespace Eigen;
 
@@ -115,12 +116,15 @@ public:
      */
     VectorXd factor_cost_vector(const VectorXd& x, SpMat& Precision);
 
+    void time_test();
 
 // ******** Functions that differs in different algorithms ********
     /**
      * @brief Function which computes one step of update.
      */
     virtual std::tuple<VectorXd, SpMat> compute_gradients(std::optional<double>step_size=std::nullopt){};
+
+    virtual std::tuple<VectorXd, SpMat> compute_gradients_time(std::optional<double>step_size=std::nullopt){};
 
     // /**
     //  * @brief The optimizing process.
