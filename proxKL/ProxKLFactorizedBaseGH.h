@@ -27,22 +27,24 @@ class ProxKLFactorizedBaseGH: public GVIFactorizedBaseGH{
 
 public:
     ///@param dimension The dimension of the state
-    ///@param function Template function class which calculate the cost
+    ///@param function_d Template function class which calculate the cost
     // ProxKLFactorizedBaseGH(const int& dimension, const Function& function, const CostClass& cost_class_, const MatrixXd& Pk_):
     
     ProxKLFactorizedBaseGH(int dimension, int state_dim, int gh_degree, 
-                        const Function& function, const CostClass& cost_class,
-                        int num_states, int start_index, 
+                        const Function& function_d, const Function& function_e, 
+                        const CostClass& cost_class, int num_states, int start_index, 
                         double temperature=1.0, double high_temperature=10.0,
                         std::optional<std::shared_ptr<QuadratureWeightsMap>> weight_sigpts_map_option=std::nullopt):
                 GVIBase(dimension, state_dim, num_states, start_index, 
                         temperature, high_temperature, weight_sigpts_map_option)
             {
                 /// Override of the GVIBase classes. _func_phi-> Scalar, _func_Vmu -> Vector, _func_Vmumu -> Matrix
-                GVIBase::_func_phi = [this, function, cost_class](const VectorXd& x){return MatrixXd::Constant(1, 1, function(x, cost_class));};
-                GVIBase::_func_Vmu = [this, function, cost_class](const VectorXd& x){return (x-GVIBase::_mu) * function(x, cost_class);};
-                GVIBase::_func_Vmumu = [this, function, cost_class](const VectorXd& x){return MatrixXd{(x-GVIBase::_mu) * (x-GVIBase::_mu).transpose().eval() * function(x, cost_class)};};
+                GVIBase::_func_phi = [this, function_d, cost_class](const VectorXd& x){return MatrixXd::Constant(1, 1, function_d(x, cost_class));};
+                GVIBase::_func_Vmu = [this, function_d, cost_class](const VectorXd& x){return (x-GVIBase::_mu) * function_d(x, cost_class);};
+                GVIBase::_func_Vmumu = [this, function_d, cost_class](const VectorXd& x){return MatrixXd{(x-GVIBase::_mu) * (x-GVIBase::_mu).transpose().eval() * function_d(x, cost_class)};};
                 GVIBase::_gh = std::make_shared<GH>(GH{gh_degree, GVIBase::_dim, GVIBase::_mu, GVIBase::_covariance, weight_sigpts_map_option});
+
+                _func_phi_e = [this, function_e, cost_class](const VectorXd& x){return MatrixXd::Constant(1, 1, function_e(x, cost_class));};
             }
 public:
 
@@ -55,6 +57,7 @@ void calculate_partial_V(std::optional<double> step_size=std::nullopt) override{
 
         /// Integrate for E_q{_Vdmu} 
         this->_Vdmu = this->_gh->Integrate(this->_func_Vmu);
+        this->_Vdmu = this->_precision * this->_Vdmu;
 
         /// Integrate for E_q{phi(x)}
         double E_phi = this->_gh->Integrate(this->_func_phi)(0, 0);
@@ -118,10 +121,10 @@ void calculate_partial_V(std::optional<double> step_size=std::nullopt) override{
 
         updateGH(mean_k, Cov_k);
 
-        return this->_gh->Integrate(this->_func_phi)(0, 0) / this->temperature();
+        return this->_gh->Integrate(this->_func_phi)(0, 0) + this->_gh->Integrate(_func_phi_e)(0, 0);
     }
     
-
+    GHFunction _func_phi_e;
 };
 
 

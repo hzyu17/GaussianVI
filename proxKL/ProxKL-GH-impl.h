@@ -18,14 +18,36 @@ std::tuple<double, VectorXd, SpMat> ProxKLGH<Factor>::onestep_linesearch(const d
                                                                             const VectorXd& dmu, 
                                                                             const SpMat& dprecision)
 {
+    SpMat K_inverse(this->_precision.rows(), this->_precision.cols());
+    VectorXd mu(this->_mu.size());
+
+    K_inverse.insert(0, 0) = 1.0 / 9.0;
+    mu(0) = 20.0;
 
     SpMat new_precision; 
     VectorXd new_mu; 
     new_mu.setZero(); new_precision.setZero();
 
     // update mu and precision matrix
-    new_mu = this->_mu - step_size * dmu;
-    new_precision = 1 / (step_size + 1) * this->_precision + step_size /(step_size + 1)  * dprecision;
+    Eigen::ConjugateGradient<SpMat> solver;
+    new_mu = solver.compute(K_inverse + this->_precision / step_size).solve(-dmu + K_inverse * mu + this->_precision * this->_mu / step_size);
+    new_precision = step_size / (step_size + 1) * (dprecision + K_inverse + this->_precision / step_size);
+
+    // // Test the error of the solver
+    // double K_inv_value = K_inverse.coeff(0, 0);
+    // double precision_value = this->_precision.coeff(0, 0);
+    // VectorXd new_mu1 = (-dmu + K_inverse * mu + this->_precision * this->_mu / step_size) / (K_inv_value + precision_value / step_size);
+    // std:cout << "error: " << (new_mu1 - new_mu).norm() << std::endl;
+    
+
+    // std::cout << "mu: " << this->_mu << std::endl;
+    // std::cout << "new mu: " << new_mu << std::endl;
+    // std::cout << "precision: " << this->_precision.coeff(0, 0) << std::endl;
+    // std::cout << "new precision: " << new_precision.coeff(0, 0) << std::endl;
+
+
+    // new_mu = this->_mu - step_size * dmu;
+    // new_precision = 1 / (step_size + 1) * this->_precision + step_size /(step_size + 1)  * dprecision;
 
     // new cost
     double new_cost = Base::cost_value(new_mu, new_precision);

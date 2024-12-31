@@ -22,7 +22,9 @@
 using namespace Eigen;
 using namespace gvi;
 
-double cost_function(const VectorXd& vec_x, const gvi::NoneType& none_type){
+
+// Cost function in KL proximal only have the hard part, we compute the prior part as KL divergence
+double cost_function_difficult(const VectorXd& vec_x, const gvi::NoneType& none_type){
     double x = vec_x(0);
     double mu_p = 20, f = 400, b = 0.1, sig_r_sq = 0.09;
     double sig_p_sq = 9;
@@ -30,8 +32,16 @@ double cost_function(const VectorXd& vec_x, const gvi::NoneType& none_type){
     // y should be sampled. for single trial just give it a value.
     double y = f*b/mu_p - 0.8;
 
-    return ((x - mu_p)*(x - mu_p) / sig_p_sq / 2 + (y - f*b/x)*(y - f*b/x) / sig_r_sq / 2); 
+    return ((y - f*b/x)*(y - f*b/x) / sig_r_sq / 2); 
 
+}
+
+// Use the easy part to compute cost
+double cost_function_easy(const VectorXd& vec_x, const gvi::NoneType& none_type){
+    double x = vec_x(0);
+    double mu_p = 20, sig_p_sq = 9;
+
+    return ((x - mu_p)*(x - mu_p) / sig_p_sq / 2);
 }
 
 
@@ -55,8 +65,8 @@ int main(){
 
     // Change the classes all to proxKL after
     std::shared_ptr<ProxKLFactorizedSimpleGH> p_opt_fac{new ProxKLFactorizedSimpleGH(dim_factor, dim_state, gh_degree, 
-                                                                               cost_function, none_type, 
-                                                                               num_states, start_index,
+                                                                               cost_function_difficult, cost_function_easy,
+                                                                               none_type, num_states, start_index,
                                                                                temperature, high_temperature)
                                                     };
     
