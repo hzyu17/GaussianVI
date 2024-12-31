@@ -573,6 +573,133 @@ void CudaOperation_3dArm::costIntegration(const MatrixXd& sigmapts, VectorXd& re
     cudaFree(result_gpu);
 }
 
+// set m, l, J as input
+__host__ __device__ void function_value(const VectorXd& sigmapt, VectorXd& function_value){
+    double px = sigmapt(0);       // p_x
+    double pz = sigmapt(1);       // p_z
+    double phi = sigmapt(2);      // ϕ
+    double vx = sigmapt(3);       // v_x
+    double vz = sigmapt(4);       // v_z
+    double phi_dot = sigmapt(5);  // ϕ_dot
+    const double g = 9.81;
+
+    function_value(0) = vx * cos(phi) - vz * sin(phi); // \(\dot{p_x}\)
+    function_value(1) = vx * sin(phi) + vz * cos(phi); // \(\dot{p_z}\)
+    function_value(2) = phi_dot;                       // \(\dot{\phi}\)
+    function_value(3) = vz * phi_dot - g * sin(phi);   // \(\dot{v_x}\)
+    function_value(4) = -vx * phi_dot - g * cos(phi);  // \(\dot{v_z}\)
+    function_value(5) = 0.0;                           // \(\ddot{\phi}\)
+}
+
+__global__ void obtain_y_sigma(double* d_sigmapts, double* d_y_sigmapts, int sigmapts_rows, int sigmapts_cols, int n_states){
+    int row = blockIdx.y * blockDim.y + threadIdx.y;
+    int col = blockIdx.x * blockDim.x + threadIdx.x;
+
+    if (row < sigmapts_rows && col < n_states){
+        Eigen::Map<MatrixXd> sigmapts(d_sigmapts + col*sigmapts_rows*sigmapts_cols, sigmapts_rows, sigmapts_cols);
+        VectorXd y_sigmapt(sigmapts_cols);
+        function_value(sigmapts.row(row), y_sigmapt);
+        for (int i = 0; i < sigmapts_cols; i++)
+            d_y_sigmapts[col*sigmapts_rows*sigmapts_cols + i * sigmapts_rows + row] = y_sigmapt(i);
+    }
+}
+
+__global__ void covariance_function(double* d_sigmapts, double* d_x_bar, double* d_y_sigmapts, double* d_y_bar, double* d_vec, int sigmapts_rows, int sigmapts_cols, int n_states){
+    
+    int row = blockIdx.y * blockDim.y + threadIdx.y;
+    int col = blockIdx.x * blockDim.x + threadIdx.x;
+
+    if (row < sigmapts_rows*sigmapts_cols && col < n_states*sigmapts_cols){
+        int idx_x = col / sigmapts_cols; // Use which x_bar and y_bar
+        int idx_y = row / sigmapts_cols; // use which sigma point
+        int mat_x = col % sigmapts_cols; // which element in x
+        int mat_y = row % sigmapts_cols;
+
+        d_vec[col*sigmapts_rows*sigmapts_cols + row] = (d_sigmapts[(idx_x*sigmapts_cols + mat_y) * sigmapts_rows + idx_y] - d_x_bar[idx_x*sigmapts_cols + mat_y]) 
+                                                     * (d_y_sigmapts[(idx_x*sigmapts_cols + mat_x) * sigmapts_rows + idx_y] - d_y_bar[idx_x*sigmapts_cols + mat_x]) ;
+    }
+}
+
+__global__ void obtain_covariance(double* d_vec, double* d_weights, double* d_result, int sigmapts_rows, int res_rows, int res_cols){
+    int row = blockIdx.y * blockDim.y + threadIdx.y;
+    int col = blockIdx.x * blockDim.x + threadIdx.x;
+    if(row < res_rows && col < res_cols){
+        double sum = 0;
+        for(int i = 0; i < sigmapts_rows; i++){
+            sum += d_vec[col*sigmapts_rows*res_rows + row + i*res_rows] * d_weights[i];
+        }
+        d_result[col*res_rows + row] = sum;
+    }
+}
+
+__global__ void obtain_y_bar(double* d_pts, double* d_weights, double* d_result, int sigmapts_rows, int n_states){
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if(idx < n_states){
+        double sum = 0;
+        for(int i = 0; i < sigmapts_rows; i++){
+            sum += d_pts[idx*sigmapts_rows + i]* d_weights[i];
+        }
+        d_result[idx] = sum;
+    }
+}
+
+void CudaOperation_SLR::expectationIntegration(MatrixXd& y_bar){
+
+    // Kernel 1: Obtain the result of function 
+    dim3 threadperblock1(32, 32);
+    dim3 blockSize1((_n_states + threadperblock1.x - 1) / threadperblock1.x, (_sigmapts_rows + threadperblock1.y - 1) / threadperblock1.y);
+
+    obtain_y_sigma<<<blockSize1, threadperblock1>>>(_sigmapts_gpu, _y_sigmapts_gpu, _sigmapts_rows, _dim_state, _n_states);
+    cudaDeviceSynchronize();
+
+    // Kernel 2: Obtain the result by multiplying the pts and the weights
+    dim3 threadperblock2(256);
+    dim3 blockSize2((_dim_state*_n_states + threadperblock2.x - 1) / threadperblock2.x);
+
+    obtain_y_bar<<<blockSize2, threadperblock2>>>(_y_sigmapts_gpu, _weights_gpu, _y_bar_gpu, _sigmapts_rows, _dim_state*_n_states);
+    cudaDeviceSynchronize();
+
+    cudaError_t err = cudaGetLastError();
+    if (err != cudaSuccess) {
+        printf("CUDA kernel error: %s\n", cudaGetErrorString(err));
+    }
+
+    cudaMemcpy(y_bar.data(), _y_bar_gpu, y_bar.size() * sizeof(double), cudaMemcpyDeviceToHost);
+}
+
+void CudaOperation_SLR::covarianceIntegration(MatrixXd& results){
+    // result is the matrix of P_xy (dim_state, dim_state*n_states)
+    double *vec_gpu, *result_gpu;
+    cudaMalloc(&vec_gpu, _sigmapts_rows * results.size() * sizeof(double));
+    cudaMalloc(&result_gpu, results.size() * sizeof(double));
+
+    // Kernel 1: Obtain the result of function 
+    dim3 threadperblock(32, 32);
+    dim3 blockSize1((results.cols() + threadperblock.x - 1) / threadperblock.x, (_sigmapts_rows * results.rows() + threadperblock.y - 1) / threadperblock.y);
+
+    covariance_function<<<blockSize1, threadperblock>>>(_sigmapts_gpu, _x_bar_gpu, _y_sigmapts_gpu, _y_bar_gpu, vec_gpu, _sigmapts_rows, _dim_state, _n_states);
+    cudaDeviceSynchronize();
+
+    // Kernel 2: Obtain the result by multiplying the pts and the weights
+    dim3 blockSize2((results.cols() + threadperblock.x - 1) / threadperblock.x, (results.rows() + threadperblock.y - 1) / threadperblock.y);
+
+    obtain_covariance<<<blockSize2, threadperblock>>>(vec_gpu, _weights_gpu, result_gpu, _sigmapts_rows, _dim_state, _dim_state*_n_states);
+    cudaDeviceSynchronize();
+    cudaMemcpy(results.data(), result_gpu, results.size() * sizeof(double), cudaMemcpyDeviceToHost);
+
+    cudaError_t err = cudaGetLastError();
+    if (err != cudaSuccess) {
+        printf("CUDA kernel error: %s\n", cudaGetErrorString(err));
+    }
+
+    cudaFree(vec_gpu);
+    cudaFree(result_gpu);
+}
+
+
+
+
+
 __global__ void compute_AT_B_A_kernel(const double* d_Mat_A, const double* d_Mat_B, double* d_result, int rows, int cols) {
     int row = blockIdx.y * blockDim.y + threadIdx.y;
     int col = blockIdx.x * blockDim.x + threadIdx.x;
