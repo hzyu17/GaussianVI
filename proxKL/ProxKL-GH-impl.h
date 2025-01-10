@@ -98,7 +98,7 @@ std::tuple<VectorXd, SpMat> ProxKLGH<Factor>::compute_gradients(std::optional<do
     SpMat dprecision = _Vddmu - Base::_precision;
 
     Eigen::ConjugateGradient<SpMat, Eigen::Upper> solver;
-    VectorXd dmu =  solver.compute(_Vddmu).solve(-_Vdmu);
+    VectorXd dmu = solver.compute(_Vddmu).solve(-_Vdmu);
 
     return std::make_tuple(dmu, dprecision);
 }
