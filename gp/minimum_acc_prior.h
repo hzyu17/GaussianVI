@@ -74,6 +74,7 @@ class MinimumAccGP : public LinearFactor{
             _Lambda.block(0, _dim_state, _dim_state, _dim_state) = MatrixXd::Identity(_dim_state, _dim_state);
 
             // \Psi = [\Phi, -I]. When a(t)=0, this part is eliminated.
+            // When a(t) = 0, \Phi * mi =  mi_next, so \Psi * _target_mu = 0. That's why we don't need \Psi and _target_mu
             _Psi = MatrixXd::Zero(_dim_state, 2*_dim_state);
             // _Psi.block(0, 0, _dim_state, _dim_state) = _Phi;
             // _Psi.block(0, _dim_state, _dim_state, _dim_state) = -MatrixXd::Identity(_dim_state, _dim_state);
