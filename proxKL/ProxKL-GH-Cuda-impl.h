@@ -28,19 +28,51 @@ std::tuple<double, VectorXd, SpMat> ProxKLGH<Factor>::onestep_linesearch(const d
 
     std::cout << "step_size: " << step_size << std::endl;
 
-    // std::cout << "dmu" << dmu.transpose() << std::endl << std::endl;
-    // std::cout << "K_inv * mu" << (_precision_prior * _mu_prior).transpose() << std::endl << std::endl;
+    VectorXd prior_term = _precision_prior * _mu_prior;
+    VectorXd dmu_term = dmu;
+    double threshold = 1e-9;
+    for (int i = 0; i < prior_term.size(); ++i) {
+        if (std::abs(prior_term[i]) < threshold)
+            prior_term[i] = 0;
+        if (std::abs(dmu_term[i]) < threshold)
+            dmu_term[i] = 0;
+    }
+
+    // std::cout << "dmu" << dmu_term.transpose() << std::endl << std::endl;
+    // std::cout << "K_inv * mu" << prior_term.transpose() << std::endl << std::endl;
     // std::cout << "precision * mu" << (this->_precision * this->_mu / step_size).transpose() << std::endl << std::endl;
 
     // std::cout << "K-inv norm: " << _precision_prior.norm() << std::endl;
     // std::cout << "precision norm: " << this->_precision.norm() << std::endl;
     // std::cout << "dprecision norm: " << dprecision.norm() << std::endl;
 
-    new_mu = solver.compute(_precision_prior + this->_precision / step_size).solve(-dmu + _precision_prior * _mu_prior + this->_precision * this->_mu / step_size);
-    new_precision = step_size / (step_size + 1) * (dprecision + _precision_prior + this->_precision / step_size);
+    // Need to make the dmu larger to realize collision avoidance, add Temperature
+    new_mu = solver.compute(_precision_prior + this->_precision / step_size).solve(-5*dmu + _precision_prior * _mu_prior + this->_precision * this->_mu / step_size);
+    new_precision = step_size / (step_size + 1) * (dprecision + _precision_prior) + this->_precision / (step_size + 1);
+
+    // std::cout << "New mu: " << new_mu.transpose() << std::endl;
+
+    // The dprecision make the precision matrix not definite positive, which will cause the solver failed when updating GH.
+    // Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> solver_dp(dprecision);
+    // if (solver_dp.info() == Eigen::Success)
+    //     std::cout << "Eigenvaluse: \n" << solver_dp.eigenvalues().transpose() << std::endl;
+
+    // Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> solver_prior(_precision_prior);
+    // if (solver_prior.info() == Eigen::Success)
+    //     std::cout << "Eigenvaluse: \n" << solver_prior.eigenvalues().transpose() << std::endl;
+
+    // Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> solver_joint(this->_precision);
+    // if (solver_joint.info() == Eigen::Success)
+    //     std::cout << "Eigenvaluse: \n" << solver_joint.eigenvalues().transpose() << std::endl;
 
     // new cost
     double new_cost = cost_value_cuda(new_mu, new_precision);
+
+    if (std::isnan(new_cost)) {
+        std::cerr << "Error: Detected NaN in cost calculation. Exiting program." << std::endl;
+        std::exit(EXIT_FAILURE);
+    }
+
     std::cout << "New cost = " << new_cost << std::endl << std::endl;
     return std::make_tuple(new_cost, new_mu, new_precision);
 }
@@ -294,8 +326,8 @@ std::tuple<double, VectorXd, VectorXd, SpMat>ProxKLGH<Factor>::factor_cost_vecto
         {
             double cost_value = opt_k->fact_cost_value(this->_mu, this->_covariance); 
             fac_costs(thread_cnt) = cost_value;
-            if (cost_value > 10) // only show the cost of the linear factors that are too large
-                std::cout << "Linear Factor " << i << " Cost: " << cost_value << std::endl;
+            // if (cost_value > 10) // only show the cost of the linear factors that are too large
+            //     std::cout << "Linear Factor " << i << " Cost: " << cost_value << std::endl;
         }
         else
             fac_costs(thread_cnt) = nonlinear_fac_cost(opt_k->_start_index - 1);
@@ -311,14 +343,10 @@ std::tuple<double, VectorXd, VectorXd, SpMat>ProxKLGH<Factor>::factor_cost_vecto
     SparseLDLT ldlt(joint_precision);
     VectorXd vec_D = ldlt.vectorD();
 
-    double linear_cost = value - nonlinear_fac_cost.sum();
-    std::cout << "Nonlinear Cost: " << nonlinear_fac_cost.sum() << std::endl;
-    std::cout << "Linear Cost: " << linear_cost << std::endl << std::endl;
-
     double cost = value + vec_D.array().log().sum() / 2;
 
     double entropy = vec_D.array().log().sum() / 2;
-    double collision_cost = nonlinear_fac_cost.cwiseAbs().sum();
+    double collision_cost = nonlinear_fac_cost.sum();
     double prior_cost = fac_costs.sum() - collision_cost;
 
     std::cout << "Entropy: " << entropy << std::endl;
@@ -326,19 +354,16 @@ std::tuple<double, VectorXd, VectorXd, SpMat>ProxKLGH<Factor>::factor_cost_vecto
     std::cout << "Prior Cost: " << prior_cost << std::endl;
 
 
-    SparseLDLT ldlt_prior(_precision_prior);
+    // SparseLDLT ldlt_prior(_precision_prior);
 
-    SpMat precision_prior_times_Cov = _precision_prior * this->_covariance;
-    double trace_term = precision_prior_times_Cov.diagonal().sum();
-    double quadratic_term = (fill_joint_mean - _mu_prior).transpose() * _precision_prior * (fill_joint_mean - _mu_prior);
+    // SpMat precision_prior_times_Cov = _precision_prior * this->_covariance;
+    // double trace_term = precision_prior_times_Cov.diagonal().sum();
+    // double quadratic_term = (fill_joint_mean - _mu_prior).transpose() * _precision_prior * (fill_joint_mean - _mu_prior);
 
-    VectorXd vec_D_prior = ldlt_prior.vectorD();
-    VectorXd vec_D_joint = ldlt.vectorD();
-    double log_term = vec_D_prior.array().log().sum() - vec_D_joint.array().log().sum();
+    // std::cout << "Joint linear cost: " << (trace_term + quadratic_term) / (2 * this->_temperature) << std::endl;
+    // std::cout << "Error of the joint linear cost: " << (trace_term + quadratic_term) / (2 * this->_temperature) - prior_cost << std::endl;
 
-    std::cout << "Joint linear cost: " << (trace_term + quadratic_term) / (2 * this->_temperature) << std::endl << std::endl;
-
-    double cost_joint = nonlinear_fac_cost.sum() + (trace_term + quadratic_term) / (2 * this->_temperature) + vec_D.array().log().sum() / 2;
+    // double cost_joint = nonlinear_fac_cost.sum() + (trace_term + quadratic_term) / (2 * this->_temperature) + vec_D.array().log().sum() / 2;
 
 
     _Vdmu.setZero();
@@ -379,8 +404,7 @@ std::tuple<double, VectorXd, VectorXd, SpMat>ProxKLGH<Factor>::factor_cost_vecto
     _Vdmu = Vdmu_sum;
     _Vddmu = Vddmu_sum;
 
-    // return std::make_tuple(cost, fac_costs, _Vdmu, _Vddmu);
-    return std::make_tuple(cost_joint, fac_costs, _Vdmu, _Vddmu);
+    return std::make_tuple(cost, fac_costs, _Vdmu, _Vddmu);
 }
 
 
@@ -426,17 +450,8 @@ double ProxKLGH<Factor>::cost_value_cuda(const VectorXd& fill_joint_mean, SpMat&
         value += opt_k->fact_cost_value(fill_joint_mean, joint_cov); 
     }
 
-    // for (int i = 0; i < Base::_vec_linear_factors.size(); ++i)
-    // {
-    //     auto &opt_k = Base::_vec_linear_factors[i];
-    //     double cost_value = opt_k->fact_cost_value(fill_joint_mean, joint_cov);
-    //     // if (cost_value > 10)
-    //     //     std::cout << "Linear Factor " << i << " Cost: " << cost_value << std::endl << std::endl;
-    //     value += cost_value;
-    // }
-
-    std::cout << "Nonlinear Cost: " << nonlinear_fac_cost.sum() << std::endl;
-    std::cout << "Linear Cost: " << value << std::endl;
+    std::cout << "Collision Cost: " << nonlinear_fac_cost.sum() << std::endl;
+    std::cout << "Prior Cost: " << value << std::endl;
     
     value += nonlinear_fac_cost.sum();
 
@@ -444,26 +459,25 @@ double ProxKLGH<Factor>::cost_value_cuda(const VectorXd& fill_joint_mean, SpMat&
     VectorXd vec_D = ldlt.vectorD();
 
     std::cout << "Entropy: " << vec_D.array().log().sum() / 2 << std::endl;
-    // return value + vec_D.array().log().sum() / 2;
+    return value + vec_D.array().log().sum() / 2;
 
 
+    // // Compute prior cost in joint level
+    // SparseLDLT ldlt_prior(_precision_prior);
 
-    // Compute prior cost in joint level
-    SparseLDLT ldlt_prior(_precision_prior);
+    // SpMat precision_prior_times_Cov = _precision_prior * joint_cov;
+    // double trace_term = precision_prior_times_Cov.diagonal().sum();
+    // double quadratic_term = (fill_joint_mean - _mu_prior).transpose() * _precision_prior * (fill_joint_mean - _mu_prior);
 
-    SpMat precision_prior_times_Cov = _precision_prior * joint_cov;
-    double trace_term = precision_prior_times_Cov.diagonal().sum();
-    double quadratic_term = (fill_joint_mean - _mu_prior).transpose() * _precision_prior * (fill_joint_mean - _mu_prior);
+    // VectorXd vec_D_prior = ldlt_prior.vectorD();
+    // VectorXd vec_D_joint = ldlt.vectorD();
+    // double log_term = vec_D_prior.array().log().sum() - vec_D_joint.array().log().sum();
 
-    VectorXd vec_D_prior = ldlt_prior.vectorD();
-    VectorXd vec_D_joint = ldlt.vectorD();
-    double log_term = vec_D_prior.array().log().sum() - vec_D_joint.array().log().sum();
+    // // std::cout << "Joint linear cost: " << (trace_term + quadratic_term) / (2 * this->_temperature) << std::endl << std::endl;
 
-    std::cout << "Joint linear cost: " << (trace_term + quadratic_term) / (2 * this->_temperature) << std::endl << std::endl;
-
-    double cost_joint = (trace_term + quadratic_term) / (2 * this->_temperature);
-    cost_joint += nonlinear_fac_cost.sum();
-    return cost_joint + vec_D.array().log().sum() / 2;
+    // double cost_joint = (trace_term + quadratic_term) / (2 * this->_temperature);
+    // cost_joint += nonlinear_fac_cost.sum();
+    // return cost_joint + vec_D.array().log().sum() / 2;
 }
 
 template <typename Factor>
@@ -489,35 +503,32 @@ double ProxKLGH<Factor>::cost_value_linear(const VectorXd& fill_joint_mean, cons
 {   
     SpMat joint_cov = Base::inverse_GBP(joint_precision); // The result of matrix multiplication will keeps the same because of the sparse structure.
 
-    // // Compute the cost of the linear factors (There might be some problems)
+    // Compute the cost of the linear factors
+    VectorXd fac_costs(Base::_vec_linear_factors.size());
+    fac_costs.setZero();
 
-    // VectorXd fac_costs(Base::_vec_linear_factors.size());
-    // fac_costs.setZero();
+    for (int i = 0; i < Base::_vec_linear_factors.size(); ++i)
+    {
+        auto &opt_k = Base::_vec_linear_factors[i];
+        double cost_value = opt_k->fact_cost_value(fill_joint_mean, joint_cov); 
+        fac_costs(i) = cost_value;
+    }
 
-    // for (int i = 0; i < Base::_vec_linear_factors.size(); ++i)
-    // {
-    //     auto &opt_k = Base::_vec_linear_factors[i];
-    //     double cost_value = opt_k->fact_cost_value(fill_joint_mean, joint_cov); 
-    //     fac_costs(i) = cost_value;
-    // }
+    double value = fac_costs.sum();
+    SparseLDLT ldlt(joint_precision);
+    VectorXd vec_D = ldlt.vectorD();
 
-    // double value = fac_costs.sum();
-    // SparseLDLT ldlt(joint_precision);
-    // VectorXd vec_D = ldlt.vectorD();
+    std::cout << "linear cost: " << value << std::endl;
+    std::cout << "entropy: " << vec_D.array().log().sum() / 2 << std::endl;
 
-    // std::cout << "linear cost: " << value << std::endl;
-    // std::cout << "entropy: " << vec_D.array().log().sum() / 2 << std::endl;
+    double cost = value + vec_D.array().log().sum() / 2;
 
-    // double cost = value + vec_D.array().log().sum() / 2;
-
-    // //return {cost, fac_costs};
+    //return {cost, fac_costs};
 
 
 
     // Compute the cost and KL divergence in joint level (The time cost is actually lower than the factorization)
     SparseLDLT ldlt_prior(_precision_prior);
-    SparseLDLT ldlt(joint_precision);
-    VectorXd vec_D = ldlt.vectorD();
 
     SpMat precision_prior_times_Cov = _precision_prior * joint_cov;
     double trace_term = precision_prior_times_Cov.diagonal().sum();
@@ -532,7 +543,6 @@ double ProxKLGH<Factor>::cost_value_linear(const VectorXd& fill_joint_mean, cons
     std::cout << "Entropy: " << vec_D.array().log().sum() / 2 << std::endl;
 
     double cost_joint = cost_joint_linear + vec_D.array().log().sum() / 2;
-
 
     // VectorXd vec_D_prior = ldlt_prior.vectorD();
     // VectorXd vec_D_joint = ldlt.vectorD();
