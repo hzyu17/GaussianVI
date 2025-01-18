@@ -49,14 +49,12 @@ public:
         /// Integrate for E_q{_Vdmu} 
         this->_Vdmu = Vdmu;
         this->_Vdmu = this->_precision * this->_Vdmu;
-        // this->_Vdmu = this->_Vdmu / this->temperature();
         
         /// Integrate for partial V^2 / ddmu_ 
         MatrixXd E_xxphi = ddmu_mat;
 
         this->_Vddmu.triangularView<Upper>() = (this->_precision * E_xxphi * this->_precision - this->_precision * E_Phi).triangularView<Upper>();
         this->_Vddmu.triangularView<StrictlyLower>() = this->_Vddmu.triangularView<StrictlyUpper>().transpose();
-        // this->_Vddmu = this->_Vddmu / this->temperature();
     }
 
     inline VectorXd local2joint_dmu_insertion() override{ 

@@ -18,6 +18,7 @@ std::tuple<double, VectorXd, SpMat> ProxKLGH<Factor>::onestep_linesearch(const d
     SpMat new_precision; 
     VectorXd new_mu; 
     new_mu.setZero(); new_precision.setZero();
+    double temperature = this->_temperature;
 
     // update mu and precision matrix
     Eigen::ConjugateGradient<SpMat> solver;
@@ -26,10 +27,8 @@ std::tuple<double, VectorXd, SpMat> ProxKLGH<Factor>::onestep_linesearch(const d
     // std::cout << "mu_prior" << _mu_prior.transpose() << std::endl << std::endl;
     // std::cout << "mu" << this->_mu.transpose() << std::endl << std::endl;
 
-    std::cout << "step_size: " << step_size << std::endl;
-
-    VectorXd prior_term = _precision_prior * _mu_prior;
-    VectorXd dmu_term = dmu;
+    VectorXd prior_term = _precision_prior * _mu_prior / temperature;
+    VectorXd dmu_term = -dmu / temperature;
     double threshold = 1e-9;
     for (int i = 0; i < prior_term.size(); ++i) {
         if (std::abs(prior_term[i]) < threshold)
@@ -46,9 +45,8 @@ std::tuple<double, VectorXd, SpMat> ProxKLGH<Factor>::onestep_linesearch(const d
     // std::cout << "precision norm: " << this->_precision.norm() << std::endl;
     // std::cout << "dprecision norm: " << dprecision.norm() << std::endl;
 
-    // Need to make the dmu larger to realize collision avoidance, add Temperature
-    new_mu = solver.compute(_precision_prior + this->_precision / step_size).solve(-5*dmu + _precision_prior * _mu_prior + this->_precision * this->_mu / step_size);
-    new_precision = step_size / (step_size + 1) * (dprecision + _precision_prior) + this->_precision / (step_size + 1);
+    new_mu = solver.compute(_precision_prior / temperature + this->_precision / step_size).solve(-dmu / temperature + _precision_prior * _mu_prior / temperature + this->_precision * this->_mu / step_size);
+    new_precision = (dprecision / temperature + _precision_prior / temperature + this->_precision / step_size) * step_size / (step_size + 1);
 
     // std::cout << "New mu: " << new_mu.transpose() << std::endl;
 
@@ -289,6 +287,7 @@ std::tuple<double, VectorXd, VectorXd, SpMat>ProxKLGH<Factor>::factor_cost_vecto
         opt_k->cuda_matrices(sigmapts_vec, mean_vec); 
     }
 
+    // Mean and Sigma points here only include states without velocity
     int sigma_rows = sigmapts_vec[0].rows();
     int sigma_cols = sigmapts_vec[0].cols();
     int mean_size = mean_vec[0].size();
@@ -312,6 +311,7 @@ std::tuple<double, VectorXd, VectorXd, SpMat>ProxKLGH<Factor>::factor_cost_vecto
     E_phi_mat = nonlinear_fac_cost;
 
     nonlinear_fac_cost = nonlinear_fac_cost / this ->_temperature; 
+    // std::cout << "Nonlinear Costs: " << nonlinear_fac_cost.transpose() << std::endl;
 
     int cnt = 0;
 
@@ -326,8 +326,6 @@ std::tuple<double, VectorXd, VectorXd, SpMat>ProxKLGH<Factor>::factor_cost_vecto
         {
             double cost_value = opt_k->fact_cost_value(this->_mu, this->_covariance); 
             fac_costs(thread_cnt) = cost_value;
-            // if (cost_value > 10) // only show the cost of the linear factors that are too large
-            //     std::cout << "Linear Factor " << i << " Cost: " << cost_value << std::endl;
         }
         else
             fac_costs(thread_cnt) = nonlinear_fac_cost(opt_k->_start_index - 1);
@@ -349,10 +347,9 @@ std::tuple<double, VectorXd, VectorXd, SpMat>ProxKLGH<Factor>::factor_cost_vecto
     double collision_cost = nonlinear_fac_cost.sum();
     double prior_cost = fac_costs.sum() - collision_cost;
 
-    std::cout << "Entropy: " << entropy << std::endl;
-    std::cout << "Collision Cost: " << collision_cost << std::endl;
     std::cout << "Prior Cost: " << prior_cost << std::endl;
-
+    std::cout << "Collision Cost: " << collision_cost << std::endl;
+    std::cout << "Entropy: " << entropy << std::endl;
 
     // SparseLDLT ldlt_prior(_precision_prior);
 
@@ -404,6 +401,14 @@ std::tuple<double, VectorXd, VectorXd, SpMat>ProxKLGH<Factor>::factor_cost_vecto
     _Vdmu = Vdmu_sum;
     _Vddmu = Vddmu_sum;
 
+
+    // VectorXd theta = this->_precision * this->_mu;
+    // for(int i = 0; i < n_nonlinear; i++){
+    //     if (nonlinear_fac_cost(i) > nonlinear_fac_cost.maxCoeff() / 2){
+    //         std::cout << "Factor " << i+1 << " cost: " << nonlinear_fac_cost(i) << ", dmu: " << -_Vdmu.segment((i+1)*this->_dim_state, this->_dim_state).transpose() / this->_temperature << ", current: " << theta.segment((i+1)*this->_dim_state, this->_dim_state).transpose()/1.35 << std::endl;
+    //     }
+    // }
+
     return std::make_tuple(cost, fac_costs, _Vdmu, _Vddmu);
 }
 
@@ -450,8 +455,8 @@ double ProxKLGH<Factor>::cost_value_cuda(const VectorXd& fill_joint_mean, SpMat&
         value += opt_k->fact_cost_value(fill_joint_mean, joint_cov); 
     }
 
-    std::cout << "Collision Cost: " << nonlinear_fac_cost.sum() << std::endl;
     std::cout << "Prior Cost: " << value << std::endl;
+    std::cout << "Collision Cost: " << nonlinear_fac_cost.sum() << std::endl;
     
     value += nonlinear_fac_cost.sum();
 

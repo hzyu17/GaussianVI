@@ -224,6 +224,7 @@ public:
             Eigen::VectorXd eigenvalues = es.eigenvalues();
             std::cout << "eigenvalues" << std::endl << eigenvalues << std::endl;
             std::cerr << "Error: sqrt Covariance matrix contains NaN values." << std::endl;
+            std::exit(EXIT_FAILURE);
             // Handle the situation where _sqrtP contains NaN values
         }
 
