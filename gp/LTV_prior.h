@@ -90,8 +90,8 @@ class LTV_GP : public LinearFactor{
 
             // \Psi = [\Phi, -I]. When a(t)=0, this part is eliminated.
             _Psi = MatrixXd::Zero(_dim_state, 2*_dim_state);
-            _Psi.block(0, 0, _dim_state, _dim_state) = _Phi;
-            _Psi.block(0, _dim_state, _dim_state, _dim_state) = -MatrixXd::Identity(_dim_state, _dim_state);
+            _Psi.block(0, 0, _dim_state, _dim_state) = -_Phi;
+            _Psi.block(0, _dim_state, _dim_state, _dim_state) = MatrixXd::Identity(_dim_state, _dim_state);
         } 
 
         // MatrixXd compute_Phi(){
