@@ -86,26 +86,27 @@ public:
     }
 
 /// Optimizations related
-    
-    std::tuple<VectorXd, SpMat> compute_gradients_KL();
 
     std::tuple<double, VectorXd, VectorXd, SpMat> factor_cost_vector_cuda(const VectorXd& fill_joint_mean, SpMat& joint_precision);
 
     virtual std::tuple<double, VectorXd, SpMat> onestep_linesearch(const double &step_size, const VectorXd& dmu, const SpMat& dprecision) override;
 
-    inline void update_proposal(const VectorXd& new_mu, const SpMat& new_precision) override;
+    std::tuple<double, VectorXd, SpMat> bisection_update(const VectorXd& dmu, const SpMat& dprecision);
 
-    double cost_value_cuda(const VectorXd& fill_joint_mean, SpMat& joint_precision);
+    inline void update_proposal(const VectorXd& new_mu, const SpMat& new_precision) override;
 
     void optimize(std::optional<bool> verbose=std::nullopt) override;
 
     void optimize_linear(std::optional<bool> verbose=std::nullopt);
+
+    double KL_Divergence(const VectorXd& mean_former, const VectorXd& mean_latter, const SpMat& precision_former, const SpMat& precision_latter);
 
     /**
      * @brief Compute the total cost function value given a state, using current values.
      */
     double cost_value() override;
 
+    double cost_value_cuda(const VectorXd& fill_joint_mean, SpMat& joint_precision);
 
     double cost_value_linear(const VectorXd& fill_joint_mean, const SpMat& joint_precision);
 

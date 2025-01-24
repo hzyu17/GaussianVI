@@ -48,20 +48,8 @@ std::tuple<double, VectorXd, SpMat> ProxKLGH<Factor>::onestep_linesearch(const d
     new_mu = solver.compute(_precision_prior / temperature + this->_precision / step_size).solve(-dmu / temperature + _precision_prior * _mu_prior / temperature + this->_precision * this->_mu / step_size);
     new_precision = (dprecision / temperature + _precision_prior / temperature + this->_precision / step_size) * step_size / (step_size + 1);
 
-    // std::cout << "New mu: " << new_mu.transpose() << std::endl;
-
-    // The dprecision make the precision matrix not definite positive, which will cause the solver failed when updating GH.
-    // Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> solver_dp(dprecision);
-    // if (solver_dp.info() == Eigen::Success)
-    //     std::cout << "Eigenvaluse: \n" << solver_dp.eigenvalues().transpose() << std::endl;
-
-    // Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> solver_prior(_precision_prior);
-    // if (solver_prior.info() == Eigen::Success)
-    //     std::cout << "Eigenvaluse: \n" << solver_prior.eigenvalues().transpose() << std::endl;
-
-    // Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> solver_joint(this->_precision);
-    // if (solver_joint.info() == Eigen::Success)
-    //     std::cout << "Eigenvaluse: \n" << solver_joint.eigenvalues().transpose() << std::endl;
+    double KL = KL_Divergence(new_mu, this->_mu, new_precision, this->_precision);
+    std::cout << "KL Divergence: " << KL << std::endl << std::endl;
 
     // new cost
     double new_cost = cost_value_cuda(new_mu, new_precision);
@@ -71,6 +59,58 @@ std::tuple<double, VectorXd, SpMat> ProxKLGH<Factor>::onestep_linesearch(const d
         std::exit(EXIT_FAILURE);
     }
 
+    std::cout << "New cost = " << new_cost << std::endl << std::endl;
+    return std::make_tuple(new_cost, new_mu, new_precision);
+}
+
+template <typename Factor>
+std::tuple<double, VectorXd, SpMat> ProxKLGH<Factor>::bisection_update(const VectorXd& dmu, const SpMat& dprecision)
+{   
+    SpMat new_precision; 
+    VectorXd new_mu; 
+    new_mu.setZero(); new_precision.setZero();
+    double temperature = this->_temperature;
+
+    double log_lower = -2;
+    double log_upper = 2;
+    double log_threshold = 0.01; 
+    double epsilon = this->_alpha;
+
+    // update mu and precision matrix
+    Eigen::ConjugateGradient<SpMat> solver;
+
+    while (log_upper - log_lower > log_threshold) 
+    {
+        double log_mid = (log_lower + log_upper) / 2;
+        double step_size = std::exp(log_mid);
+        // std::cout << "Step Size: " << step_size << std::endl;
+
+        new_mu = solver.compute(_precision_prior / temperature + this->_precision / step_size).solve(-dmu / temperature + _precision_prior * _mu_prior / temperature + this->_precision * this->_mu / step_size);
+        new_precision = (dprecision / temperature + _precision_prior / temperature + this->_precision / step_size) * step_size / (step_size + 1);
+
+        // Compute KL divergence and check for PD indirectly
+        double KL = KL_Divergence(new_mu, this->_mu, new_precision, this->_precision);
+
+        if (std::isnan(KL) || KL >= epsilon) {
+            log_upper = log_mid;
+        } else {
+            log_lower = log_mid;
+        }
+    }
+
+    double final_step_size = std::exp((log_lower + log_upper) / 2);
+    new_mu = solver.compute(_precision_prior / temperature + this->_precision / final_step_size).solve(-dmu / temperature + _precision_prior * _mu_prior / temperature + this->_precision * this->_mu / final_step_size);
+    new_precision = (dprecision / temperature + _precision_prior / temperature + this->_precision / final_step_size) * final_step_size / (final_step_size + 1);
+
+    // new cost
+    double new_cost = cost_value_cuda(new_mu, new_precision);
+
+    if (std::isnan(new_cost)) {
+        std::cerr << "Error: Detected NaN in cost calculation. Exiting program." << std::endl;
+        std::exit(EXIT_FAILURE);
+    }
+
+    std::cout << "Final Step Size: " << final_step_size << std::endl;
     std::cout << "New cost = " << new_cost << std::endl << std::endl;
     return std::make_tuple(new_cost, new_mu, new_precision);
 }
@@ -127,7 +167,8 @@ void ProxKLGH<Factor>::optimize(std::optional<bool> verbose)
             // step_size = pow(_step_size_base, B);
             step_size = step_size * 0.75;
 
-            auto onestep_res = onestep_linesearch(step_size, dmu, dprecision);
+            // auto onestep_res = onestep_linesearch(step_size, dmu, dprecision);
+            auto onestep_res = bisection_update(dmu, dprecision);
 
             double new_cost = std::get<0>(onestep_res);
             VectorXd new_mu = std::get<1>(onestep_res);
@@ -587,5 +628,42 @@ double ProxKLGH<Factor>::cost_value_no_entropy()
     }
     return value; // / _temperature;
 }
+
+template <typename Factor>
+double ProxKLGH<Factor>::KL_Divergence(const VectorXd& mean_former, const VectorXd& mean_latter, const SpMat& precision_former, const SpMat& precision_latter)
+{
+    // Compute the KL divergence
+    SparseLDLT ldlt_former(precision_former);
+    SparseLDLT ldlt_latter(precision_latter);
+
+    VectorXd vec_D_former = ldlt_former.vectorD();
+    VectorXd vec_D_latter = ldlt_latter.vectorD();
+
+    SpMat covariance_former = this->inverse_GBP(precision_former);
+
+    SpMat precision_prior_times_Cov = precision_latter * covariance_former;
+    double trace_term = precision_prior_times_Cov.diagonal().sum();
+    // std::cout << "trace_term: " << trace_term << std::endl;
+
+    double quadratic_term = (mean_latter - mean_former).transpose() * precision_latter * (mean_latter - mean_former);
+    // std::cout << "quadratic_term: " << quadratic_term << std::endl;    
+
+    double log_term = vec_D_former.array().log().sum() - vec_D_latter.array().log().sum();
+
+    // std::cout << "vec_D_former min: " << vec_D_former.minCoeff() << std::endl;
+    // std::cout << "vec_D_former max: " << vec_D_former.maxCoeff() << std::endl;
+
+    // std::cout << "new entropy: " << vec_D_former.array().log().sum()/2 << std::endl;
+    // std::cout << "current entropy: " << vec_D_latter.array().log().sum()/2 << std::endl;
+    // std::cout << "log_term: " << log_term << std::endl;
+
+    // std::cout << "k: " << mean_former.size() << std::endl;
+
+    double KL = (trace_term + quadratic_term + log_term - mean_former.size()) / 2;
+    // std::cout << "KL Divergence: " << KL << std::endl << std::endl;
+
+    return KL;
+}
+
 
 }
