@@ -184,6 +184,7 @@ public:
 
     inline void cuda_init() override{
         _cuda -> Cuda_init(this -> _gh -> weights());
+        _cuda -> zeromean_init(this -> _gh ->zeromeanpts());
     }
 
     inline void cuda_free() override{
@@ -204,6 +205,18 @@ public:
         _cuda -> dmuIntegration(sigmapts, mean, dmu_mat, sigmapts_cols);
         _cuda -> ddmuIntegration(ddmu_mat);
         _cuda -> Cuda_free_iter();
+    }
+
+    inline void compute_sigmapts(const MatrixXd& mean, const MatrixXd& covariance, int dim_conf, int num_states, MatrixXd& sigmapts) override{
+        // MatrixXd P_0 = covariance.block(0, 0, dim_conf, dim_conf);
+        // Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> es(P_0);
+        // MatrixXd sqrtP = es.operatorSqrt();
+
+        // MatrixXd eigen_value = es.eigenvalues();
+        // std::cout << "Eigen values" << std::endl << eigen_value.transpose() << std::endl;
+
+        _cuda->update_sigmapts(covariance, mean, dim_conf, num_states, sigmapts);
+        // std::cout << "Cholesky result" << std::endl << sqrtP << std::endl;
     }
 
     double fact_cost_value(const VectorXd& fill_joint_mean, const SpMat& joint_cov) override {
@@ -235,6 +248,8 @@ public:
         vec_sigmapts[_start_index-1] = this -> _gh -> sigmapts();
 
     }
+
+    
     
     VectorXd _mean;
     std::shared_ptr<CudaClass> _cuda;

@@ -10,6 +10,8 @@
 #include <iostream>
 #include <memory>
 #include <math.h>
+#include <cusolverDn.h>
+#include <cublas_v2.h>
 
 #include <gpmp2/obstacle/SignedDistanceField.h>
 #include <gpmp2/kinematics/ArmModel.h>
@@ -421,9 +423,19 @@ public:
 
     virtual void Cuda_free() = 0;
 
+    void zeromean_init(const MatrixXd& zeromean){
+      std::cout << "Row and Col of zeromean: " << zeromean.rows() << " " << zeromean.cols() << std::endl;
+      cudaMalloc(&_zeromean_gpu, zeromean.size() * sizeof(double));
+      cudaMemcpy(_zeromean_gpu, zeromean.data(), zeromean.size() * sizeof(double), cudaMemcpyHostToDevice);
+    }
+
+    void zeromean_free(){
+      cudaFree(_zeromean_gpu);
+    }
+
     void Cuda_init_iter(const MatrixXd& sigmapts, VectorXd& results, const int sigmapts_cols){
       _sigmapts_rows = sigmapts.rows();
-      _dim_state = sigmapts_cols;
+      _dim_conf = sigmapts_cols;
       _n_states = results.size();
 
       cudaMalloc(&_sigmapts_gpu, sigmapts.size() * sizeof(double));
@@ -434,6 +446,8 @@ public:
       cudaFree(_sigmapts_gpu);
       cudaFree(_func_value_gpu); 
     }
+
+    void update_sigmapts(const MatrixXd& covariance, const MatrixXd& mean, int dim_state, int num_states, MatrixXd& sigmapts);
 
     virtual void CudaIntegration(const MatrixXd& sigmapts, const MatrixXd& weights, MatrixXd& results, const MatrixXd& mean, int type){}
 
@@ -446,8 +460,8 @@ public:
   double _epsilon, _radius, _sigma;
   SDFType _sdf; // define sdf in the derived class
 
-  int _sigmapts_rows, _dim_state, _n_states;
-  double *_weight_gpu, *_data_gpu, *_func_value_gpu, *_sigmapts_gpu, *_mu_gpu;
+  int _sigmapts_rows, _dim_conf, _n_states;
+  double *_weight_gpu, *_data_gpu, *_func_value_gpu, *_sigmapts_gpu, *_mu_gpu, *_zeromean_gpu;
 };
 
 

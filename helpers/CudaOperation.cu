@@ -118,16 +118,16 @@ __global__ void cost_function(double* d_sigmapts, double* d_pts, int sigmapts_ro
     }
 }
 
-__global__ void dmu_function(double* d_sigmapts, double* d_mu, double* d_pts, double* d_vec, int sigmapts_rows, int dim_state, int n_states){
+__global__ void dmu_function(double* d_sigmapts, double* d_mu, double* d_pts, double* d_vec, int sigmapts_rows, int dim_conf, int n_states){
     
     int row = blockIdx.y * blockDim.y + threadIdx.y;
     int col = blockIdx.x * blockDim.x + threadIdx.x;
 
-    if (row < sigmapts_rows && col < n_states*dim_state){
-        int idx = col / dim_state;
-        int r = col % dim_state;
+    if (row < sigmapts_rows && col < n_states*dim_conf){
+        int idx = col / dim_conf;
+        int r = col % dim_conf;
 
-        d_vec[col*sigmapts_rows + row] = (d_sigmapts[col*sigmapts_rows + row] - d_mu[idx*dim_state + r]) * d_pts[idx * sigmapts_rows + row];
+        d_vec[col*sigmapts_rows + row] = (d_sigmapts[col*sigmapts_rows + row] - d_mu[idx*dim_conf + r]) * d_pts[idx * sigmapts_rows + row];
     }
 }
 
@@ -183,7 +183,116 @@ __global__ void obtain_ddmu(double* d_vec, double* d_weights, double* d_result, 
 }
 
 
+__global__ void sqrtKernel(double* d_vals, int n) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx < n) {
+        d_vals[idx] = sqrt(d_vals[idx]);
+    }
+}
+
+__global__ void addMeanKernel(double* sigmaPts, const double* mean, int num_rows, int dim_state)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    int total = num_rows * dim_state;
+    if (idx < total)
+    {
+        int j = idx / num_rows;
+        sigmaPts[idx] += mean[j];
+    }
+}
+
+
+
 namespace gvi{
+
+template <typename SDFType>
+void CudaOperation_Base<SDFType>::update_sigmapts(const MatrixXd& covariance, const MatrixXd& mean, int dim_conf, int num_states, MatrixXd& sigmapts){
+    cusolverDnHandle_t cusolverH;
+    cublasHandle_t cublasH;
+
+    cusolverDnCreate(&cusolverH);
+    cublasCreate(&cublasH);
+
+    int state_idx = 0;
+
+    // Compute the Cholesky decomposition of the covariance matrix
+    double *covariance_gpu, *mean_gpu, *d_eigen_values, *d_work, *d_sqrtP, *d_sigmapts;
+    int *d_info, Lwork;
+    cudaMalloc(&covariance_gpu, dim_conf * dim_conf * num_states * sizeof(double));
+    cudaMalloc(&d_info, sizeof(int));
+    cudaMalloc(&d_eigen_values, dim_conf * sizeof(double));
+    cudaMalloc(&d_sqrtP, dim_conf * dim_conf * sizeof(double));
+    cudaMalloc(&d_sigmapts, _sigmapts_rows * dim_conf * sizeof(double));
+
+    cudaMalloc(&mean_gpu, mean.size() * sizeof(double));
+
+    cudaMemcpy(covariance_gpu, covariance.data(), dim_conf * dim_conf * num_states * sizeof(double), cudaMemcpyHostToDevice);
+    cudaMemcpy(mean_gpu, mean.data(), mean.size() * sizeof(double), cudaMemcpyHostToDevice);
+
+    double* d_Pi = covariance_gpu + state_idx * dim_conf * dim_conf;
+    double* d_mi = mean_gpu + 2 * (state_idx+1) * dim_conf;
+    
+    cusolverDnDsyevd_bufferSize(cusolverH, CUSOLVER_EIG_MODE_VECTOR, CUBLAS_FILL_MODE_LOWER,
+                            dim_conf, d_Pi, dim_conf, d_eigen_values, &Lwork);
+    cudaMalloc(&d_work, Lwork * sizeof(double));
+
+    cusolverDnDsyevd(cusolverH, CUSOLVER_EIG_MODE_VECTOR, CUBLAS_FILL_MODE_LOWER,
+                    dim_conf, d_Pi, dim_conf, d_eigen_values, d_work, Lwork, d_info);
+
+    // Check if the Cholesky decomposition was successful
+    int h_info;
+    cudaMemcpy(&h_info, d_info, sizeof(int), cudaMemcpyDeviceToHost);
+    if (h_info != 0) {
+        std::cerr << "Cholesky decomposition failed with info: " << h_info << std::endl;
+    }
+
+    int threadsPerBlock = 16;
+    int blocks = (dim_conf + threadsPerBlock - 1) / threadsPerBlock;
+    sqrtKernel<<<blocks, threadsPerBlock>>>(d_eigen_values, dim_conf);
+    cudaDeviceSynchronize();
+
+    double* d_V_scaled;
+    cudaMalloc(&d_V_scaled, dim_conf * dim_conf * sizeof(double));
+
+    cublasStatus_t stat = cublasDdgmm(cublasH, CUBLAS_SIDE_RIGHT, dim_conf, dim_conf, d_Pi, dim_conf, d_eigen_values, 1, d_V_scaled, dim_conf);
+    if (stat != CUBLAS_STATUS_SUCCESS) {
+        std::cerr << "cublasDdgmm failed" << std::endl;
+    }
+
+    const double alpha = 1.0, beta = 0.0;
+    stat = cublasDgemm(cublasH, CUBLAS_OP_N, CUBLAS_OP_T, dim_conf, dim_conf, dim_conf, &alpha, d_V_scaled, dim_conf,
+                       d_Pi, dim_conf, &beta, d_sqrtP, dim_conf);
+
+    stat = cublasDgemm(cublasH, CUBLAS_OP_N, CUBLAS_OP_T, _sigmapts_rows, dim_conf, dim_conf, &alpha,
+                        _zeromean_gpu, _sigmapts_rows, d_sqrtP, dim_conf, &beta, d_sigmapts, _sigmapts_rows); 
+
+    if (stat != CUBLAS_STATUS_SUCCESS) {
+        std::cerr << "cublasDgemm failed" << std::endl;
+    }
+
+    threadsPerBlock = 256;
+    blocks = (_sigmapts_rows * dim_conf + threadsPerBlock - 1) / threadsPerBlock;
+    addMeanKernel<<<blocks, threadsPerBlock>>>(d_sigmapts, d_mi, _sigmapts_rows, dim_conf);
+    cudaError_t cudaStatus = cudaDeviceSynchronize();
+    if (cudaStatus != cudaSuccess) {
+         std::cerr << "cudaDeviceSynchronize error: " << cudaGetErrorString(cudaStatus) << std::endl;
+    }
+
+    MatrixXd sigma(_sigmapts_rows, dim_conf);
+    cudaMemcpy(sigma.data(), d_sigmapts, _sigmapts_rows * dim_conf * sizeof(double), cudaMemcpyDeviceToHost);
+    sigmapts = sigma;
+    
+
+    // MatrixXd sqrtP(dim_conf, dim_conf);
+    // cudaMemcpy(sqrtP.data(), d_sqrtP, dim_conf * dim_conf * sizeof(double), cudaMemcpyDeviceToHost);
+    // std::cout << "Cuda result: " << std::endl << sqrtP << std::endl;
+
+    cudaFree(d_work);
+    cudaFree(d_info);
+    cudaFree(d_V_scaled);
+    cusolverDnDestroy(cusolverH);
+    // cublasDestroy(cublasH);
+}
 
 void CudaOperation_PlanarPR::CudaIntegration(const MatrixXd& sigmapts, const MatrixXd& weights, MatrixXd& results, const MatrixXd& mean, int type)
 {
@@ -441,7 +550,7 @@ void CudaOperation_Base<SDFType>::dmuIntegration(const MatrixXd& sigmapts, const
     dim3 threadperblock1(32, 32);
     dim3 blockSize1((results.size() + threadperblock1.x - 1) / threadperblock1.x, (_sigmapts_rows + threadperblock1.y - 1) / threadperblock1.y);
 
-    dmu_function<<<blockSize1, threadperblock1>>>(_sigmapts_gpu, _mu_gpu, _func_value_gpu, vec_gpu, _sigmapts_rows, _dim_state, _n_states);
+    dmu_function<<<blockSize1, threadperblock1>>>(_sigmapts_gpu, _mu_gpu, _func_value_gpu, vec_gpu, _sigmapts_rows, _dim_conf, _n_states);
     cudaDeviceSynchronize();
 
     // Kernel 2: Obtain the result by multiplying the pts and the weights
@@ -469,10 +578,10 @@ void CudaOperation_Base<SDFType>::ddmuIntegration(MatrixXd& results){
     cudaMalloc(&result_gpu, results.size() * sizeof(double));
 
     // Kernel 1: Obtain the result of function 
-    dim3 threadperblock(32, 32);
+    dim3 threadperblock(32, 32); //1024
     dim3 blockSize1((results.cols() + threadperblock.x - 1) / threadperblock.x, (_sigmapts_rows * results.rows() + threadperblock.y - 1) / threadperblock.y);
 
-    ddmu_function<<<blockSize1, threadperblock>>>(_sigmapts_gpu, _mu_gpu, _func_value_gpu, vec_gpu, _sigmapts_rows, _dim_state, _n_states);
+    ddmu_function<<<blockSize1, threadperblock>>>(_sigmapts_gpu, _mu_gpu, _func_value_gpu, vec_gpu, _sigmapts_rows, _dim_conf, _n_states);
     cudaDeviceSynchronize();
 
     // Kernel 2: Obtain the result by multiplying the pts and the weights
@@ -572,6 +681,8 @@ void CudaOperation_3dArm::costIntegration(const MatrixXd& sigmapts, VectorXd& re
 
     cudaFree(result_gpu);
 }
+
+
 
 // set m, l, J as input
 __host__ __device__ void function_value(const VectorXd& sigmapt, VectorXd& function_value){

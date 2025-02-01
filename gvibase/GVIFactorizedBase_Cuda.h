@@ -180,6 +180,8 @@ public:
 
     virtual inline void cuda_init(){}
 
+    virtual inline void compute_sigmapts(const MatrixXd& mean, const MatrixXd& covariance, int dim_state, int num_states, MatrixXd& sigmapts){}
+
     virtual inline void cuda_free(){}
 
     virtual inline bool linear_factor(){}
