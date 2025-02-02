@@ -17,14 +17,18 @@
 #include "helpers/CommonDefinitions.h"
 
 #ifdef GVI_SUBDUR_ENV 
-std::string map_file{source_root+"/GaussianVI/quadrature/SparseGHQuadratureWeights.bin"};
+std::string map_file{source_root+"/GaussianVI/quadrature/SparseGHQuadratureWeights_cereal.bin"};
 #else
-std::string map_file{source_root+"/quadrature/SparseGHQuadratureWeights.bin"};
+std::string map_file{source_root+"/quadrature/SparseGHQuadratureWeights_cereal.bin"};
 #endif
 
 namespace gvi{
 template <typename Function>
 class SparseGaussHermite{
+
+    using GHFunction = std::function<MatrixXd(const VectorXd&)>;
+    // using CostFunction = std::function<double(const VectorXd&, const CostClass &)>;
+
 public:
 
     /**
@@ -60,12 +64,10 @@ public:
                             throw std::runtime_error(error_msg);
                         }
 
-                        std::cout << "Opening file for GH weights reading in file: " << map_file << std::endl;
-                        boost::archive::binary_iarchive ia(ifs);
-                        ia >> nodes_weights_map;
+                        // Use cereal for deserialization
+                        cereal::BinaryInputArchive archive(ifs);
+                        archive(nodes_weights_map);
 
-                    } catch (const boost::archive::archive_exception& e) {
-                        std::cerr << "Boost archive exception: " << e.what() << std::endl;
                     } catch (const std::exception& e) {
                         std::cerr << "Standard exception: " << e.what() << std::endl;
                     }
@@ -76,6 +78,46 @@ public:
                 
                 computeSigmaPtsWeights();
             }
+
+    SparseGaussHermite(
+        const int& deg, 
+        const int& dim, 
+        const Eigen::VectorXd& mean, 
+        const Eigen::MatrixXd& P,
+        std::optional<std::shared_ptr<QuadratureWeightsMap>> weight_sigpts_map_option=std::nullopt): 
+            _deg(deg),
+            _dim(dim),
+            _mean(mean),
+            _P(P)
+            {  
+                if (weight_sigpts_map_option.has_value()){
+                    _nodes_weights_map = weight_sigpts_map_option.value();
+                }
+                // Read map from file
+                else{
+                    QuadratureWeightsMap nodes_weights_map;
+                    try {
+                        std::ifstream ifs(map_file, std::ios::binary);
+                        if (!ifs.is_open()) {
+                            std::string error_msg = "Failed to open file for GH weights reading in file: " + map_file;
+                            throw std::runtime_error(error_msg);
+                        }
+
+                        // Use cereal for deserialization
+                        cereal::BinaryInputArchive archive(ifs);
+                        archive(nodes_weights_map);
+
+                    } catch (const std::exception& e) {
+                        std::cerr << "Standard exception: " << e.what() << std::endl;
+                    }
+
+                    _nodes_weights_map = std::make_shared<QuadratureWeightsMap>(nodes_weights_map);
+
+                }
+                
+                computeSigmaPtsWeights();
+            }
+
 
     SparseGaussHermite(
         const int& deg, 
@@ -230,9 +272,11 @@ public:
         // timer.end_mus();
     }
 
+    inline Eigen::VectorXd weights() const { return this->_Weights; }
 
-    inline Eigen::VectorXd weights() const { return this->_W; }
     inline Eigen::MatrixXd sigmapts() const { return this->_sigmapts; }
+
+    inline Eigen::MatrixXd mean() const { return this->_mean; }
 
 protected:
     int _deg;
@@ -248,3 +292,4 @@ protected:
 
 
 } // namespace gvi
+

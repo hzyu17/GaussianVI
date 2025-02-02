@@ -51,6 +51,7 @@ public:
             _dim{dimension},
             _state_dim{state_dim},
             _num_states{num_states},
+            _start_index{start_index},
             _temperature{temperature},
             _high_temperature{high_temperature},
             _mu(_dim),
@@ -153,6 +154,8 @@ public:
 
     virtual inline VectorXd local2joint_dmu(Eigen::VectorXd & dmu_lcl) {}
 
+    virtual inline VectorXd local2joint_dmu_insertion() {}
+
     /**
      * @brief Get the joint Pk.T * V^2 / dmu /dmu * Pk using block insertion
      */
@@ -161,6 +164,8 @@ public:
     virtual inline SpMat local2joint_dcovariance() {}
 
     virtual inline SpMat local2joint_dprecision(Eigen::MatrixXd & dprecision_lcl){}
+
+    virtual inline SpMat local2joint_dprecision_insertion() {}
 
     inline SpMat fill_joint_cov(){
         SpMat joint_cov(_joint_size, _joint_size);
@@ -209,7 +214,7 @@ public:
 public:
 
     /// dimension
-    int _dim, _state_dim, _num_states, _joint_size;
+    int _dim, _state_dim, _num_states, _joint_size, _start_index;
 
     VectorXd _mu;
     

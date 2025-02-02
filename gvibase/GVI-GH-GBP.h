@@ -1,11 +1,11 @@
 /**
- * @file GVI-GH.h
- * @author Hongzhe Yu (hyu419@gatech.edu)
+ * @file GVI-GH-GBP.h
+ * @author Zinuo Chang (zchang40@gatech.edu)
  * @brief The joint optimizer class using Gauss-Hermite quadrature, base class for different algorithms.
  * @version 1.1
- * @date 2024-01-09
+ * @date 2024-06-10
  * 
- * @copyright Copyright (c) 2023
+ * @copyright Copyright (c) 2024
  * 
  */
 
@@ -19,6 +19,7 @@
 
 #include "helpers/EigenWrapper.h"
 #include "helpers/DataRecorder.h"
+#include "helpers/timer.h"
 
 using namespace Eigen;
 
@@ -115,6 +116,8 @@ public:
      */
     VectorXd factor_cost_vector(const VectorXd& x, SpMat& Precision);
 
+    void time_test();
+
     /**
      * @brief Compute the covariances using Gaussian Belief Propagation.
      */
@@ -123,14 +126,15 @@ public:
     /**
      * @brief Compute the message of factors in GBP.
      */
-    Message calculate_factor_message(const Message &input_message, int target, const Message &factor_potential, int dim);
-
+    Message calculate_factor_message(const Message &input_message, int target, const Message &factor_potential);
 
 // ******** Functions that differs in different algorithms ********
     /**
      * @brief Function which computes one step of update.
      */
     virtual std::tuple<VectorXd, SpMat> compute_gradients(std::optional<double>step_size=std::nullopt){};
+
+    virtual std::tuple<VectorXd, SpMat> compute_gradients_time(std::optional<double>step_size=std::nullopt){};
 
     // /**
     //  * @brief The optimizing process.

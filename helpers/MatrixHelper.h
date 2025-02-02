@@ -16,8 +16,8 @@
 
 #include "helpers/CommonDefinitions.h"
 #include <Eigen/Dense>
-#include <boost/archive/binary_oarchive.hpp>
-#include <boost/archive/binary_iarchive.hpp>
+// #include <boost/archive/binary_oarchive.hpp>
+// #include <boost/archive/binary_iarchive.hpp>
 
 using namespace Eigen;
 
@@ -165,56 +165,57 @@ private:
 
 
 using namespace gvi;
-// Define the serialization of iteration data type.
-namespace boost {
-   namespace serialization {        
-        template<class Archive>
-        void save(Archive& ar, 
-                  const Matrix3D& mat3d, 
-                  const unsigned int version) 
-        {   
-            int row = mat3d._row;
-            int col = mat3d._col;
-            int nt = mat3d._nt;
 
-            MatrixXd mat{mat3d};
-            ar & row;
-            ar & col;
-            ar & nt;
-            ar & mat;
-        }
+// // Define the serialization of iteration data type.
+// namespace boost {
+//    namespace serialization {        
+//         template<class Archive>
+//         void save(Archive& ar, 
+//                   const Matrix3D& mat3d, 
+//                   const unsigned int version) 
+//         {   
+//             int row = mat3d._row;
+//             int col = mat3d._col;
+//             int nt = mat3d._nt;
 
-        template<class Archive>
-        void load(Archive& ar, Matrix3D& mat3d, const unsigned int version) {
+//             MatrixXd mat{mat3d};
+//             ar & row;
+//             ar & col;
+//             ar & nt;
+//             ar & mat;
+//         }
+
+//         template<class Archive>
+//         void load(Archive& ar, Matrix3D& mat3d, const unsigned int version) {
             
-            int row = 0;
-            int col = 0;
-            int nt = 0;
+//             int row = 0;
+//             int col = 0;
+//             int nt = 0;
             
 
-            ar & row;
-            ar & col;
-            ar & nt;
+//             ar & row;
+//             ar & col;
+//             ar & nt;
 
-            MatrixXd mat(row*col, nt);
+//             MatrixXd mat(row*col, nt);
 
-            ar & mat;
+//             ar & mat;
 
-            mat3d = mat;
+//             mat3d = mat;
 
-        }
+//         }
 
-        // The serialization is split into save and load here.
-        template<class Archive>
-        inline void serialize(
-            Archive & ar, 
-            Matrix3D& mat3d, 
-            const unsigned int version)
-        {
-            split_free(ar, mat3d, version);
-        }
+//         // The serialization is split into save and load here.
+//         template<class Archive>
+//         inline void serialize(
+//             Archive & ar, 
+//             Matrix3D& mat3d, 
+//             const unsigned int version)
+//         {
+//             split_free(ar, mat3d, version);
+//         }
 
-    }
-}
+//     }
+// }
 
 #endif // MATRIX_HELPER_H

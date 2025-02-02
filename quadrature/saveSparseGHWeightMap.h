@@ -35,14 +35,14 @@ void save_pointweightmaps(){
         }
     }
 
-    // Save the tuple to a binary file
+    // Save the tuple to a binary file with cereal
     {
-        std::string file_name = source_root+"/quadrature/SparseGHQuadratureWeights.bin";
-        std::cout << "Saving the sigma points and weights into the following file: " << std::endl <<
-         file_name << std::endl;
+        std::string file_name = source_root + "/quadrature/SparseGHQuadratureWeights_cereal.bin";
+        std::cout << "Saving the sigma points and weights into the following file: " << std::endl
+                << file_name << std::endl;
         std::ofstream ofs(file_name, std::ios::binary);
-        boost::archive::binary_oarchive oa(ofs);
-        oa << map;
+        cereal::BinaryOutputArchive archive(ofs);
+        archive(map);
     }
 }
     
