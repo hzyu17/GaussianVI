@@ -205,7 +205,7 @@ std::tuple<double, VectorXd, VectorXd, SpMat> GVIGH<Factor>::factor_cost_vector_
         covariance_matrix.block(0, i * sigma_cols, sigma_cols, sigma_cols) = joint_cov.block((i+1)*_dim_state, (i+1)*_dim_state, sigma_cols, sigma_cols);
     }
     _vec_nonlinear_factors[0]->compute_sigmapts(fill_joint_mean, covariance_matrix, sigma_cols, n_nonlinear, sigma);
-    std::cout << "error of sigmapts: " << std::endl << (sigma-sigmapts_vec[0]).norm() << std::endl;
+    std::cout << "error of sigmapts: " << std::endl << (sigma-sigmapts_mat).norm() << std::endl;
 
 
     int cnt = 0;

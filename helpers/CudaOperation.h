@@ -457,11 +457,36 @@ public:
 
     void ddmuIntegration(MatrixXd& results);
 
+    void initializeSigmaptsResources(int dim_conf, int num_states, int sigmapts_rows);
+
+    void update_sigmapts_separate(const MatrixXd& covariance, const MatrixXd& mean, int dim_conf, int num_states, MatrixXd& sigmapts);
+
+    void freeSigmaptsResources(int num_states);
+
+
+
   double _epsilon, _radius, _sigma;
   SDFType _sdf; // define sdf in the derived class
 
   int _sigmapts_rows, _dim_conf, _n_states;
   double *_weight_gpu, *_data_gpu, *_func_value_gpu, *_sigmapts_gpu, *_mu_gpu, *_zeromean_gpu;
+
+  double* covariance_gpu = nullptr;
+  double* mean_gpu = nullptr;
+  double* d_sigmapt_cuda = nullptr;  // size: _sigmapts_rows x (dim_conf * num_states)
+
+  // Pre-allocated per-state resources
+  std::vector<cudaStream_t> streams;
+  std::vector<cusolverDnHandle_t> cusolver_handles;
+  std::vector<cublasHandle_t> cublas_handles;
+
+  std::vector<double*> d_eigen_values_vec; // each: dim_conf
+  std::vector<int*>    d_info_vec;          // each: 1 int
+  std::vector<double*> d_work_vec;          // each: Lwork (query per state)
+  std::vector<int>     Lwork_vec;            // each: workspace size for eigen decomposition
+  std::vector<double*> d_V_scaled_vec;       // each: dim_conf x dim_conf
+  std::vector<double*> d_sqrtP_vec;          // each: dim_conf x dim_conf
+
 };
 
 

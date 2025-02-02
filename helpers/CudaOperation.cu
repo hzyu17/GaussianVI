@@ -6,6 +6,17 @@ using namespace Eigen;
 template class CudaOperation_Base<PlanarSDF>;
 template class CudaOperation_Base<SignedDistanceField>;
 
+void printGPUMemoryInfo() {
+    size_t free_mem = 0, total_mem = 0;
+    cudaError_t err = cudaMemGetInfo(&free_mem, &total_mem);
+    if (err != cudaSuccess) {
+        std::cerr << "cudaMemGetInfo failed: " << cudaGetErrorString(err) << std::endl;
+        return;
+    }
+    std::cout << "GPU Memory: free = " << free_mem / (1024.0 * 1024.0) << " MB" << std::endl;
+}
+
+
 template <typename RobotType>
 __global__ void Sigma_function(double* d_sigmapts, double* d_pts, double* mu,
                                int sigmapts_rows, int sigmapts_cols, int res_rows, int res_cols, int type, 
@@ -207,92 +218,353 @@ namespace gvi{
 
 template <typename SDFType>
 void CudaOperation_Base<SDFType>::update_sigmapts(const MatrixXd& covariance, const MatrixXd& mean, int dim_conf, int num_states, MatrixXd& sigmapts){
-    cusolverDnHandle_t cusolverH;
-    cublasHandle_t cublasH;
-
-    cusolverDnCreate(&cusolverH);
-    cublasCreate(&cublasH);
-
-    int state_idx = 0;
-
     // Compute the Cholesky decomposition of the covariance matrix
-    double *covariance_gpu, *mean_gpu, *d_eigen_values, *d_work, *d_sqrtP, *d_sigmapts;
-    int *d_info, Lwork;
+    double *covariance_gpu, *mean_gpu, *d_sigmapts;
     cudaMalloc(&covariance_gpu, dim_conf * dim_conf * num_states * sizeof(double));
-    cudaMalloc(&d_info, sizeof(int));
-    cudaMalloc(&d_eigen_values, dim_conf * sizeof(double));
-    cudaMalloc(&d_sqrtP, dim_conf * dim_conf * sizeof(double));
-    cudaMalloc(&d_sigmapts, _sigmapts_rows * dim_conf * sizeof(double));
-
+    cudaMalloc(&d_sigmapts, _sigmapts_rows * dim_conf * num_states * sizeof(double));
     cudaMalloc(&mean_gpu, mean.size() * sizeof(double));
 
     cudaMemcpy(covariance_gpu, covariance.data(), dim_conf * dim_conf * num_states * sizeof(double), cudaMemcpyHostToDevice);
     cudaMemcpy(mean_gpu, mean.data(), mean.size() * sizeof(double), cudaMemcpyHostToDevice);
 
-    double* d_Pi = covariance_gpu + state_idx * dim_conf * dim_conf;
-    double* d_mi = mean_gpu + 2 * (state_idx+1) * dim_conf;
-    
-    cusolverDnDsyevd_bufferSize(cusolverH, CUSOLVER_EIG_MODE_VECTOR, CUBLAS_FILL_MODE_LOWER,
-                            dim_conf, d_Pi, dim_conf, d_eigen_values, &Lwork);
-    cudaMalloc(&d_work, Lwork * sizeof(double));
+    // Create a CUDA stream, cuSOLVER, and cuBLAS handle for each state
+    std::vector<cudaStream_t> streams(num_states);
+    std::vector<cusolverDnHandle_t> cusolver_handles(num_states);
+    std::vector<cublasHandle_t> cublas_handles(num_states);
 
-    cusolverDnDsyevd(cusolverH, CUSOLVER_EIG_MODE_VECTOR, CUBLAS_FILL_MODE_LOWER,
-                    dim_conf, d_Pi, dim_conf, d_eigen_values, d_work, Lwork, d_info);
-
-    // Check if the Cholesky decomposition was successful
-    int h_info;
-    cudaMemcpy(&h_info, d_info, sizeof(int), cudaMemcpyDeviceToHost);
-    if (h_info != 0) {
-        std::cerr << "Cholesky decomposition failed with info: " << h_info << std::endl;
-    }
-
-    int threadsPerBlock = 16;
-    int blocks = (dim_conf + threadsPerBlock - 1) / threadsPerBlock;
-    sqrtKernel<<<blocks, threadsPerBlock>>>(d_eigen_values, dim_conf);
-    cudaDeviceSynchronize();
-
-    double* d_V_scaled;
-    cudaMalloc(&d_V_scaled, dim_conf * dim_conf * sizeof(double));
-
-    cublasStatus_t stat = cublasDdgmm(cublasH, CUBLAS_SIDE_RIGHT, dim_conf, dim_conf, d_Pi, dim_conf, d_eigen_values, 1, d_V_scaled, dim_conf);
-    if (stat != CUBLAS_STATUS_SUCCESS) {
-        std::cerr << "cublasDdgmm failed" << std::endl;
-    }
+    // Containers to store temporary device memory for each state
+    std::vector<double*> d_eigen_values_vec(num_states, nullptr);
+    std::vector<int*>    d_info_vec(num_states, nullptr);
+    std::vector<double*> d_work_vec(num_states, nullptr);
+    std::vector<int>     Lwork_vec(num_states, 0);
+    std::vector<double*> d_V_scaled_vec(num_states, nullptr);
+    std::vector<double*> d_sqrtP_vec(num_states, nullptr);
 
     const double alpha = 1.0, beta = 0.0;
-    stat = cublasDgemm(cublasH, CUBLAS_OP_N, CUBLAS_OP_T, dim_conf, dim_conf, dim_conf, &alpha, d_V_scaled, dim_conf,
-                       d_Pi, dim_conf, &beta, d_sqrtP, dim_conf);
 
-    stat = cublasDgemm(cublasH, CUBLAS_OP_N, CUBLAS_OP_T, _sigmapts_rows, dim_conf, dim_conf, &alpha,
-                        _zeromean_gpu, _sigmapts_rows, d_sqrtP, dim_conf, &beta, d_sigmapts, _sigmapts_rows); 
+    // Submit tasks for each state to its corresponding stream
+    for (int state = 0; state < num_states; state++) {
+        // Create stream and handles, then associate them
 
-    if (stat != CUBLAS_STATUS_SUCCESS) {
-        std::cerr << "cublasDgemm failed" << std::endl;
+        cudaStreamCreate(&streams[state]);
+        cusolverDnCreate(&cusolver_handles[state]);
+        cusolverDnSetStream(cusolver_handles[state], streams[state]);
+
+        cublasStatus_t stat = cublasCreate_v2(&cublas_handles[state]);
+        if (stat != CUBLAS_STATUS_SUCCESS) {
+            std::cerr << "cublasCreate failed for state " << state << ": " << stat << std::endl;
+        }
+        cublasSetStream_v2(cublas_handles[state], streams[state]);
+        
+        // Each state's covariance matrix is stored at an offset in covariance_gpu
+        double* d_Pi = covariance_gpu + state * dim_conf * dim_conf;
+        // Assuming mean data occupies two rows per state; adjust offset as necessary
+        double* d_mi = mean_gpu + 2 * (state + 1) * dim_conf;
+        
+        // 3.1 Allocate temporary memory for eigenvalues and info
+        cudaMalloc(&d_eigen_values_vec[state], dim_conf * sizeof(double));
+        cudaMalloc(&d_info_vec[state], sizeof(int));
+        
+        // Query workspace size required for eigen decomposition
+        cusolverDnDsyevd_bufferSize(cusolver_handles[state],
+                                    CUSOLVER_EIG_MODE_VECTOR,
+                                    CUBLAS_FILL_MODE_LOWER,
+                                    dim_conf,
+                                    d_Pi,
+                                    dim_conf,
+                                    d_eigen_values_vec[state],
+                                    &Lwork_vec[state]);
+        cudaMalloc(&d_work_vec[state], Lwork_vec[state] * sizeof(double));
+        
+        // 3.2 Perform symmetric eigenvalue decomposition on d_Pi (d_Pi will store eigenvectors after the operation)
+        cusolverDnDsyevd(cusolver_handles[state],
+                         CUSOLVER_EIG_MODE_VECTOR,
+                         CUBLAS_FILL_MODE_LOWER,
+                         dim_conf,
+                         d_Pi,
+                         dim_conf,
+                         d_eigen_values_vec[state],
+                         d_work_vec[state],
+                         Lwork_vec[state],
+                         d_info_vec[state]);
+        
+        int h_info;
+        cudaMemcpy(&h_info, d_info_vec[state], sizeof(int), cudaMemcpyDeviceToHost);
+        if (h_info != 0) {
+            std::cerr << "Eigen decomposition failed for state " << state << " with info " << h_info << std::endl;
+        }
+        
+        // 3.3 Apply square root to the eigenvalues using a custom kernel (executed on the corresponding stream)
+        int threadsPerBlock = 16;
+        int blocks = (dim_conf + threadsPerBlock - 1) / threadsPerBlock;
+        sqrtKernel<<<blocks, threadsPerBlock, 0, streams[state]>>>(d_eigen_values_vec[state], dim_conf);
+        
+        // 3.4 Use cublasDdgmm to scale the eigenvector matrix by the square-rooted eigenvalues
+        cudaMalloc(&d_V_scaled_vec[state], dim_conf * dim_conf * sizeof(double));
+        stat = cublasDdgmm(cublas_handles[state],
+                                          CUBLAS_SIDE_RIGHT,
+                                          dim_conf,
+                                          dim_conf,
+                                          d_Pi,
+                                          dim_conf,
+                                          d_eigen_values_vec[state],
+                                          1,
+                                          d_V_scaled_vec[state],
+                                          dim_conf);
+        if (stat != CUBLAS_STATUS_SUCCESS) {
+            std::cerr << "cublasDdgmm failed for state " << state << ": " << stat << std::endl;
+        }
+        
+        // 3.5 Compute sqrtP = d_V_scaled * (d_Pi)^T
+        cudaMalloc(&d_sqrtP_vec[state], dim_conf * dim_conf * sizeof(double));
+        stat = cublasDgemm(cublas_handles[state],
+                           CUBLAS_OP_N,
+                           CUBLAS_OP_T,
+                           dim_conf,
+                           dim_conf,
+                           dim_conf,
+                           &alpha,
+                           d_V_scaled_vec[state],
+                           dim_conf,
+                           d_Pi,
+                           dim_conf,
+                           &beta,
+                           d_sqrtP_vec[state],
+                           dim_conf);
+        if (stat != CUBLAS_STATUS_SUCCESS) {
+            std::cerr << "cublasDgemm for sqrtP failed for state " << state << ": " << stat << std::endl;
+        }
+        
+        // 3.6 Compute the current state's portion of sigmapts.
+        // d_sigmapts is allocated contiguously on the device; each state occupies a block of _sigmapts_rows x dim_conf.
+        double* d_sigmapts_state = d_sigmapts + state * _sigmapts_rows * dim_conf;
+        stat = cublasDgemm(cublas_handles[state], CUBLAS_OP_N, CUBLAS_OP_T, _sigmapts_rows, dim_conf, dim_conf, &alpha, _zeromean_gpu, _sigmapts_rows, d_sqrtP_vec[state], dim_conf, &beta, d_sigmapts_state, _sigmapts_rows);
+        if (stat != CUBLAS_STATUS_SUCCESS) {
+            std::cerr << "cublasDgemm for sigmapts failed for state " << state << ": " << stat << std::endl;
+        }
+        
+        // 3.7 Add the mean to sigmapts (for the current state's block)
+        threadsPerBlock = 256;
+        blocks = (_sigmapts_rows * dim_conf + threadsPerBlock - 1) / threadsPerBlock;
+        addMeanKernel<<<blocks, threadsPerBlock, 0, streams[state]>>>(d_sigmapts_state, d_mi, _sigmapts_rows, dim_conf);
     }
 
-    threadsPerBlock = 256;
-    blocks = (_sigmapts_rows * dim_conf + threadsPerBlock - 1) / threadsPerBlock;
-    addMeanKernel<<<blocks, threadsPerBlock>>>(d_sigmapts, d_mi, _sigmapts_rows, dim_conf);
-    cudaError_t cudaStatus = cudaDeviceSynchronize();
-    if (cudaStatus != cudaSuccess) {
-         std::cerr << "cudaDeviceSynchronize error: " << cudaGetErrorString(cudaStatus) << std::endl;
+    for (int state = 0; state < num_states; state++) {
+        cudaStreamSynchronize(streams[state]);
     }
 
-    MatrixXd sigma(_sigmapts_rows, dim_conf);
-    cudaMemcpy(sigma.data(), d_sigmapts, _sigmapts_rows * dim_conf * sizeof(double), cudaMemcpyDeviceToHost);
+    // 5. Copy all states' sigmapts from device to host.
+    // The output matrix sigmapts should have dimensions _sigmapts_rows x (dim_conf * num_states)
+    MatrixXd sigma(_sigmapts_rows, dim_conf * num_states);
+    cudaMemcpy(sigma.data(), d_sigmapts, _sigmapts_rows * dim_conf * num_states * sizeof(double), cudaMemcpyDeviceToHost);
     sigmapts = sigma;
     
-
-    // MatrixXd sqrtP(dim_conf, dim_conf);
-    // cudaMemcpy(sqrtP.data(), d_sqrtP, dim_conf * dim_conf * sizeof(double), cudaMemcpyDeviceToHost);
-    // std::cout << "Cuda result: " << std::endl << sqrtP << std::endl;
-
-    cudaFree(d_work);
-    cudaFree(d_info);
-    cudaFree(d_V_scaled);
-    cusolverDnDestroy(cusolverH);
-    // cublasDestroy(cublasH);
+    // 6. Free temporary memory for each state and destroy handles and streams
+    for (int state = 0; state < num_states; state++) {
+        cudaFree(d_eigen_values_vec[state]);
+        cudaFree(d_info_vec[state]);
+        cudaFree(d_work_vec[state]);
+        cudaFree(d_V_scaled_vec[state]);
+        cudaFree(d_sqrtP_vec[state]);
+        
+        cusolverDnDestroy(cusolver_handles[state]);
+        // if (cublas_handles[state] != nullptr) {
+        //     std::cout << "Destroying cublas handle for state " << state << std::endl;
+        //     cublasStatus_t stat = cublasDestroy_v2(cublas_handles[state]);
+        //     cublas_handles[state] = nullptr;
+        // }
+        cudaStreamDestroy(streams[state]);
+    }
+    
+    // Free global data
+    cudaFree(covariance_gpu);
+    cudaFree(mean_gpu);
+    cudaFree(d_sigmapts);
 }
+
+
+template <typename SDFType>
+void CudaOperation_Base<SDFType>::initializeSigmaptsResources(int dim_conf, int num_states, int sigmapts_rows){
+    printGPUMemoryInfo();
+    // Allocate global device memory for covariance, mean, and sigmapts.
+    cudaMalloc(&covariance_gpu, dim_conf * dim_conf * num_states * sizeof(double));
+    cudaMalloc(&d_sigmapt_cuda, _sigmapts_rows * dim_conf * num_states * sizeof(double));
+    cudaMalloc(&mean_gpu, 2 * dim_conf * (num_states+2) * sizeof(double));
+    
+    // Resize vectors to hold per-state resources.
+    streams.resize(num_states);
+    cusolver_handles.resize(num_states);
+    cublas_handles.resize(num_states);
+
+    d_eigen_values_vec.resize(num_states, nullptr);
+    d_info_vec.resize(num_states, nullptr);
+    d_work_vec.resize(num_states, nullptr);
+    Lwork_vec.resize(num_states, 0);
+    d_V_scaled_vec.resize(num_states, nullptr);
+    d_sqrtP_vec.resize(num_states, nullptr);
+
+    double* d_dummy = nullptr;
+    cudaMalloc(&d_dummy, dim_conf * dim_conf * sizeof(double));
+    
+    // For each state, create stream, create handles, and allocate temporary memory.
+    for (int state = 0; state < num_states; state++) {
+        // Create CUDA stream.
+        cudaStreamCreate(&streams[state]);
+        // Create cuSOLVER and cuBLAS handles and bind them with the stream.
+        cusolverDnCreate(&cusolver_handles[state]);
+        cublasCreate(&cublas_handles[state]);
+        cusolverDnSetStream(cusolver_handles[state], streams[state]);
+        cublasSetStream(cublas_handles[state], streams[state]);
+        
+        // Allocate memory for eigenvalues and info.
+        cudaMalloc(&d_eigen_values_vec[state], dim_conf * sizeof(double));
+        cudaMalloc(&d_info_vec[state], sizeof(int));
+        
+        // Query workspace size for eigen decomposition.
+        cusolverDnDsyevd_bufferSize(cusolver_handles[state],
+                                    CUSOLVER_EIG_MODE_VECTOR,
+                                    CUBLAS_FILL_MODE_LOWER,
+                                    dim_conf,
+                                    d_dummy,
+                                    dim_conf,
+                                    d_eigen_values_vec[state],
+                                    &Lwork_vec[state]);
+        // Allocate workspace memory.
+        cudaMalloc(&d_work_vec[state], Lwork_vec[state] * sizeof(double));
+        
+        // Allocate memory for V_scaled and sqrtP matrices (each size: dim_conf x dim_conf).
+        cudaMalloc(&d_V_scaled_vec[state], dim_conf * dim_conf * sizeof(double));
+        cudaMalloc(&d_sqrtP_vec[state], dim_conf * dim_conf * sizeof(double));
+    }
+    cudaFree(d_dummy);
+
+    printGPUMemoryInfo();
+}
+
+
+template <typename SDFType>
+void CudaOperation_Base<SDFType>::update_sigmapts_separate(const MatrixXd& covariance, const MatrixXd& mean, int dim_conf, int num_states, MatrixXd& sigmapts){
+    printGPUMemoryInfo();
+    const double alpha = 1.0, beta = 0.0;
+    
+    // Copy new covariance and mean data into the pre-allocated device memory.
+    size_t covariance_size = dim_conf * dim_conf * num_states * sizeof(double);
+    size_t mean_size = mean.size() * sizeof(double);
+    cudaMemcpy(covariance_gpu, covariance.data(), covariance_size, cudaMemcpyHostToDevice);
+    cudaMemcpy(mean_gpu, mean.data(), mean_size, cudaMemcpyHostToDevice);
+    
+    // For each state, perform the computation.
+    for (int state = 0; state < num_states; state++) {
+        // Each state's covariance matrix is stored at an offset in covariance_gpu.
+        double* d_Pi = covariance_gpu + state * dim_conf * dim_conf;
+        // Assuming mean data occupies two rows per state; adjust the offset as needed.
+        double* d_mi = mean_gpu + 2 * (state + 1) * dim_conf;
+        
+        // 2.1 Perform symmetric eigenvalue decomposition on d_Pi.
+        cusolverDnDsyevd(cusolver_handles[state],
+                         CUSOLVER_EIG_MODE_VECTOR,
+                         CUBLAS_FILL_MODE_LOWER,
+                         dim_conf,
+                         d_Pi,
+                         dim_conf,
+                         d_eigen_values_vec[state],
+                         d_work_vec[state],
+                         Lwork_vec[state],
+                         d_info_vec[state]);
+        
+        int h_info;
+        cudaMemcpy(&h_info, d_info_vec[state], sizeof(int), cudaMemcpyDeviceToHost);
+        if (h_info != 0) {
+            std::cerr << "Eigen decomposition failed for state " << state << " with info " << h_info << std::endl;
+        }
+        
+        // 2.2 Apply square root to the eigenvalues using a custom kernel.
+        int threadsPerBlock = 16;
+        int blocks = (dim_conf + threadsPerBlock - 1) / threadsPerBlock;
+        sqrtKernel<<<blocks, threadsPerBlock, 0, streams[state]>>>(d_eigen_values_vec[state], dim_conf);
+        
+        // 2.3 Use cublasDdgmm to scale the eigenvector matrix by the square-rooted eigenvalues.
+        cublasStatus_t stat = cublasDdgmm(cublas_handles[state], CUBLAS_SIDE_RIGHT, dim_conf, dim_conf,
+                                          d_Pi, dim_conf,
+                                          d_eigen_values_vec[state], 1,
+                                          d_V_scaled_vec[state], dim_conf);
+        if (stat != CUBLAS_STATUS_SUCCESS) {
+            std::cerr << "cublasDdgmm failed for state " << state << ": " << stat << std::endl;
+        }
+        
+        // 2.4 Compute sqrtP = d_V_scaled * (d_Pi)^T.
+        stat = cublasDgemm(cublas_handles[state], CUBLAS_OP_N, CUBLAS_OP_T, dim_conf, dim_conf, dim_conf,
+                           &alpha, d_V_scaled_vec[state], dim_conf,
+                           d_Pi, dim_conf,
+                           &beta, d_sqrtP_vec[state], dim_conf);
+        if (stat != CUBLAS_STATUS_SUCCESS) {
+            std::cerr << "cublasDgemm for sqrtP failed for state " << state << ": " << stat << std::endl;
+        }
+        
+        cublasCreate(&cublas_handles[state]);
+        cublasSetStream(cublas_handles[state], streams[state]);
+        // 2.5 Compute the current state's portion of sigmapts.
+        // d_sigmapt_cuda is allocated contiguously on the device; each state occupies a block of _sigmapts_rows x dim_conf.
+        double* d_sigmapts_state = d_sigmapt_cuda + state * _sigmapts_rows * dim_conf;
+        stat = cublasDgemm(cublas_handles[state], CUBLAS_OP_N, CUBLAS_OP_T, _sigmapts_rows, dim_conf, dim_conf,
+                           &alpha, _zeromean_gpu, _sigmapts_rows,
+                           d_sqrtP_vec[state], dim_conf,
+                           &beta, d_sigmapts_state, _sigmapts_rows);
+        if (stat != CUBLAS_STATUS_SUCCESS) {
+            std::cerr << "cublasDgemm for sigmapts failed for state " << state << ": " << stat << std::endl;
+        }
+        
+        // 2.6 Add the mean to sigmapts (for the current state's block).
+        threadsPerBlock = 256;
+        blocks = (_sigmapts_rows * dim_conf + threadsPerBlock - 1) / threadsPerBlock;
+        addMeanKernel<<<blocks, threadsPerBlock, 0, streams[state]>>>(d_sigmapts_state, d_mi, _sigmapts_rows, dim_conf);
+    }
+    
+    // Synchronize all streams.
+    for (int state = 0; state < num_states; state++) {
+        cudaStreamSynchronize(streams[state]);
+    }
+    
+    // Copy the computed sigmapts from device to host.
+    MatrixXd sigma(_sigmapts_rows, dim_conf * num_states);
+    size_t sigmapts_size = _sigmapts_rows * dim_conf * num_states * sizeof(double);
+    cudaMemcpy(sigma.data(), d_sigmapt_cuda, sigmapts_size, cudaMemcpyDeviceToHost);
+    sigmapts = sigma;
+}
+
+template <typename SDFType>
+void CudaOperation_Base<SDFType>::freeSigmaptsResources(int num_states)
+{
+    // Free per-state temporary memory and destroy handles/streams.
+    for (int state = 0; state < num_states; state++) {
+        cudaFree(d_eigen_values_vec[state]);
+        cudaFree(d_info_vec[state]);
+        cudaFree(d_work_vec[state]);
+        cudaFree(d_V_scaled_vec[state]);
+        cudaFree(d_sqrtP_vec[state]);
+        
+        cusolverDnDestroy(cusolver_handles[state]);
+        cublasDestroy(cublas_handles[state]);
+        cudaStreamDestroy(streams[state]);
+    }
+    // Free global device memory.
+    cudaFree(covariance_gpu);
+    cudaFree(mean_gpu);
+    cudaFree(d_sigmapt_cuda);
+    
+    // Clear the vectors.
+    streams.clear();
+    cusolver_handles.clear();
+    cublas_handles.clear();
+    d_eigen_values_vec.clear();
+    d_info_vec.clear();
+    d_work_vec.clear();
+    Lwork_vec.clear();
+    d_V_scaled_vec.clear();
+    d_sqrtP_vec.clear();
+}
+
+
 
 void CudaOperation_PlanarPR::CudaIntegration(const MatrixXd& sigmapts, const MatrixXd& weights, MatrixXd& results, const MatrixXd& mean, int type)
 {
