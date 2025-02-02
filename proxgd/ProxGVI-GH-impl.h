@@ -51,66 +51,75 @@ std::tuple<VectorXd, SpMat> ProxGVIGH<Factor>::compute_gradients(std::optional<d
     for (auto &opt_k : Base::_vec_factors)
     {
         opt_k->calculate_partial_V(step_size);
+        _dmu = _dmu + opt_k->local2joint_dmu();
+        _dprecision = _dprecision + opt_k->local2joint_dprecision();
 
-        // _dmu = _dmu + opt_k->local2joint_dmu();
-        // _dprecision = _dprecision + opt_k->local2joint_dprecision();
+        // // For comparison
+        // std::tuple<Eigen::VectorXd, Eigen::MatrixXd> dmu_dprecision_local;
+        // dmu_dprecision_local = opt_k->compute_gradients_linesearch(this->_step_size_base);
 
-        this->_Vdmu = this->_Vdmu + opt_k->local2joint_dmu();
-        this->_Vddmu = this->_Vddmu + opt_k->local2joint_dprecision();
+        // MatrixXd dprecision_k;
+        // VectorXd dmu_k;
+        // dmu_k.setZero(); dprecision_k.setZero();
+        // dmu_k = std::get<0>(dmu_dprecision_local);
+        // dprecision_k = std::get<1>(dmu_dprecision_local);
+
+        // VectorXd dmu_k_joint = opt_k->local2joint_dmu();
+        // VectorXd dmu_k_joint_1 = opt_k->local2joint_dmu(dmu_k);
+
+        // MatrixXd dprecision_k_joint = opt_k->local2joint_dprecision();
+        // MatrixXd dprecision_k_joint_1 = opt_k->local2joint_dprecision(dprecision_k);
+
+        // VectorXd diff_dmu = dmu_k_joint - dmu_k_joint_1;
+        // MatrixXd diff_dprecision = dprecision_k_joint - dprecision_k_joint_1;
+
+        // std::cout << "diff_dmu " << std::endl << diff_dmu.norm() << std::endl;
+        // std::cout << "diff_dprecision " << std::endl << diff_dprecision.norm() << std::endl;
 
     }
 
-    this->_bk = this->_Vdmu;
-    this->_Sk = this->_Vddmu;
+    std::cout << "_dprecision " << std::endl << _dprecision << std::endl;
+    bool is_dprecision_spd = isSymmetricPositiveDefinite(_dprecision);
+    std::cout << "is_dprecision_spd: " << is_dprecision_spd << std::endl;
 
-    Eigen::VectorXd muk_half = this->_mu - this->_step_size_base * this->_bk;
-
-    Eigen::MatrixXd precision_full(this->_dim, this->_dim);
-    precision_full.setZero();
-    precision_full = this->_precision;
-
-    Eigen::MatrixXd Sigk(this->_dim, this->_dim);
-    Sigk.setZero();
-    Sigk = precision_full.inverse();
-
-    // Compute the BW gradient step
-    Eigen::MatrixXd Mk(this->_dim, this->_dim);
-    Mk.setZero();
-
-    Eigen::MatrixXd Identity(this->_dim, this->_dim);
-    Identity = Eigen::MatrixXd::Identity(this->_dim, this->_dim);    
-    
-    Mk = Identity - this->_step_size_base*this->_Sk;
-
-    Eigen::MatrixXd Sigk_half(this->_dim, this->_dim);
-    Sigk_half.setZero();
-    Sigk_half = Mk*Sigk*Mk.transpose();
-
-    SpMat precision_half = Sigk_half.inverse().sparseView();
-
-    // Compute the proximal step
-    Eigen::MatrixXd temp(this->_dim, this->_dim);
-    temp.setZero();
-    temp = gvi::sqrtm(Sigk_half*(Sigk_half + 4.0*this->_step_size_base*Identity));
-
-    // Eigen::MatrixXd temp_2(this->_dim, this->_dim);
-    // temp_2.setZero();
-    // temp_2 = gvi::sqrtm(temp);
-
-    Eigen::VectorXd mk_new = this->_mu - this->_step_size_base * _bk;
-    Eigen::MatrixXd Sigk_new = 0.5*Sigk_half + this->_step_size_base*Identity + 0.5*temp;
-
-    SpMat precision_new = Sigk_new.inverse().sparseView();
-
-    return std::make_tuple(muk_half, precision_new);
-
-    // std::cout << "_dprecision " << std::endl << _dprecision << std::endl;
-    // bool is_dprecision_spd = isSymmetricPositiveDefinite(_dprecision);
-    // std::cout << "is_dprecision_spd: " << is_dprecision_spd << std::endl;
-
-    // return std::make_tuple(_dmu, _dprecision);
+    return std::make_tuple(_dmu, _dprecision);
 }
 
+// template <typename Factor>
+// // std::tuple<double, VectorXd, SpMat> ProxGVIGH<Factor>::onestep_linesearch_prox(const double &step_size)
+// std::tuple<VectorXd, SpMat> ProxGVIGH<Factor>::onestep_linesearch_prox(const double &step_size)
+// {
+    
+//     SpMat dprecision(this->_dim, this->_dim); 
+//     VectorXd dmu(this->_dim); 
+//     dmu.setZero(); dprecision.setZero();
+
+//     for (auto &opt_k : Base::_vec_factors)
+//     {
+//         std::tuple<Eigen::VectorXd, Eigen::MatrixXd> dmu_dprecision_local;
+//         dmu_dprecision_local = opt_k->compute_gradients_linesearch(0.9);
+
+//         MatrixXd dprecision_k;
+//         VectorXd dmu_k;
+//         dmu_k.setZero(); dprecision_k.setZero();
+//         dmu_k = std::get<0>(dmu_dprecision_local);
+//         dprecision_k = std::get<1>(dmu_dprecision_local);
+
+//         Eigen::MatrixXd dprecision_k_full{dprecision_k};
+//         std::cout << "dprecision_k_full " << std::endl << dprecision_k_full << std::endl; 
+
+//         dmu = dmu + opt_k->local2joint_dmu(dmu_k);
+//         dprecision = dprecision + opt_k->local2joint_dprecision(dprecision_k);
+
+//     }
+
+    // Eigen::MatrixXd dprecision_full{dprecision};
+    // std::cout << "dprecision_full " << std::endl << dprecision_full << std::endl;
+
+    // return this->onestep_linesearch(step_size, dmu, dprecision);
+//     return std::make_tuple(dmu, dprecision);
+
+// }
 
 template <typename Factor>
 void ProxGVIGH<Factor>::optimize(std::optional<bool> verbose){
@@ -142,64 +151,53 @@ void ProxGVIGH<Factor>::optimize(std::optional<bool> verbose){
         double step_size = pow(this->_step_size_base, B);
 
         // gradients
-        std::tuple<VectorXd, SpMat> mukhalf_Precisionhalf = compute_gradients(step_size);
+        std::tuple<VectorXd, SpMat> gradients = compute_gradients(step_size);
 
-        VectorXd muk_half = std::get<0>(mukhalf_Precisionhalf);
-        SpMat new_precision = std::get<1>(mukhalf_Precisionhalf);
+        VectorXd dmu = std::get<0>(gradients);
+        SpMat dprecision = std::get<1>(gradients);
 
-        update_proposal(muk_half, new_precision);
+        // backtracking 
+        while (true)
+        {   
+            // new step size
+            step_size = pow(this->_step_size_base, B);
 
+            auto onestep_res = onestep_linesearch(step_size, dmu, dprecision);
+            // auto onestep_res_1 = onestep_linesearch_prox(step_size);
 
-        // update_proposal(new_mu, new_precision);
+            // VectorXd dmu_1 = std::get<0>(onestep_res_1);
+            // SpMat dprecision_1 = std::get<1>(onestep_res_1);
 
-        // // backtracking 
-        // while (true)
-        // {   
-        //     // new step size
-        //     step_size = pow(this->_step_size_base, B);
+            // VectorXd diff_dmu = dmu - dmu_1;
+            // MatrixXd diff_dprecision = dprecision - dprecision_1;
 
-        //     // VectorXd dmu_zero(this->_dim);
-        //     // SpMat dprecision_zero(this->_dim, this->_dim);
+            // std::cout << "diff_dmu " << std::endl << diff_dmu.norm() << std::endl;
+            // std::cout << "diff_dprecision " << std::endl << diff_dprecision.norm() << std::endl;
 
-        //     // dmu_zero.setZero();
-        //     // dprecision_zero.setZero();
+            double new_cost = std::get<0>(onestep_res);
+            VectorXd new_mu = std::get<1>(onestep_res);
+            auto new_precision = std::get<2>(onestep_res);
 
-        //     auto onestep_res = onestep_linesearch(step_size, dmu, dprecision);
-        //     // auto onestep_res_1 = onestep_linesearch_prox(step_size);
+            // accept new cost and update mu and precision matrix
+            if (new_cost < cost_iter){
+                // update mean and covariance
+                this->update_proposal(new_mu, new_precision);
+                break;
+            }else{ 
+                // shrinking the step size
+                B += 1;
+                cnt += 1;
+            }
 
-        //     // VectorXd dmu_1 = std::get<0>(onestep_res_1);
-        //     // SpMat dprecision_1 = std::get<1>(onestep_res_1);
-
-        //     // VectorXd diff_dmu = dmu - dmu_1;
-        //     // MatrixXd diff_dprecision = dprecision - dprecision_1;
-
-        //     // std::cout << "diff_dmu " << std::endl << diff_dmu.norm() << std::endl;
-        //     // std::cout << "diff_dprecision " << std::endl << diff_dprecision.norm() << std::endl;
-
-        //     double new_cost = std::get<0>(onestep_res);
-        //     VectorXd new_mu = std::get<1>(onestep_res);
-        //     auto new_precision = std::get<2>(onestep_res);
-
-        //     // accept new cost and update mu and precision matrix
-        //     if (new_cost < cost_iter){
-        //         // update mean and covariance
-        //         this->update_proposal(new_mu, new_precision);
-        //         break;
-        //     }else{ 
-        //         // shrinking the step size
-        //         B += 1;
-        //         cnt += 1;
-        //     }
-
-        //     if (cnt > Base::_niters_backtrack)
-        //     {
-        //         if (is_verbose){
-        //             std::cout << "Reached the maximum backtracking steps." << std::endl;
-        //         }
-        //         update_proposal(new_mu, new_precision);
-        //         break;
-        //     }                
-        // }
+            if (cnt > Base::_niters_backtrack)
+            {
+                if (is_verbose){
+                    std::cout << "Reached the maximum backtracking steps." << std::endl;
+                }
+                update_proposal(new_mu, new_precision);
+                break;
+            }                
+        }
     }
 
     std::cout << "=========== Saving Data ===========" << std::endl;

@@ -40,29 +40,18 @@ public:
             int num_states,
             int niterations = 5,
             double temperature = 1.0,
-            double high_temperature = 100.0):
+            double high_temperature = 100.0) :
             GVIGH<FactorizedOptimizer>(vec_fact_optimizers, dim_state, num_states, niterations, temperature, high_temperature),
             _dmu(VectorXd::Zero(Base::_dim)),
-            _dprecision(SpMat(Base::_dim, Base::_dim)),
-            _Vdmu(VectorXd::Zero(Base::_dim)),
-            _bk(VectorXd::Zero(Base::_dim)),
-            _Sk(MatrixXd(Base::_dim, Base::_dim)),
-            _Vddmu(MatrixXd(Base::_dim, Base::_dim))
+            _dprecision(SpMat(Base::_dim, Base::_dim))
         {
             _dmu.setZero();
             _dprecision.setZero();
-            _Vdmu.setZero();
-            _Vddmu.setZero();
-            _bk.setZero();
-            _Sk.setZero();
         }
 
 protected:
     VectorXd _dmu;
     SpMat _dprecision;    
-
-    VectorXd _Vdmu, _bk;
-    MatrixXd _Vddmu, _Sk;    
 
 public:
 /// ************************* Override functions for Prox-GVI algorithm *************************************

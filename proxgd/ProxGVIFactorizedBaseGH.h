@@ -46,38 +46,18 @@ public:
      */
     void calculate_partial_V(std::optional<double> stepsize_option=std::nullopt) override{
 
-        // this->compute_BW_grads();
-        // std::tuple<Eigen::VectorXd, Eigen::MatrixXd> gradients;
+        this->compute_BW_grads();
+        std::tuple<Eigen::VectorXd, Eigen::MatrixXd> gradients;
 
-        // if (stepsize_option.has_value()){
-        //     gradients = BW_JKO(stepsize_option.value());
-        // }else{
-        //     std::cout << "no step size input, using the default value in the class!" << std::endl;
-        //     gradients = BW_JKO(this->_step_size);
-        // }
+        if (stepsize_option.has_value()){
+            gradients = BW_JKO(stepsize_option.value());
+        }else{
+            std::cout << "no step size input, using the default value in the class!" << std::endl;
+            gradients = BW_JKO(this->_step_size);
+        }
         
-        // this->_Vdmu = std::get<0>(gradients);
-        // this->_Vddmu = std::get<1>(gradients);
-
-        // update the mu and sigma inside the gauss-hermite integrator
-        updateGH(this->_mu, this->_covariance);
-
-        this->_Vdmu.setZero();
-        this->_Vddmu.setZero();
-
-        /// Integrate for E_q{_Vdmu} 
-        this->_Vdmu = this->_precision * this->_gh->Integrate(this->_func_Vmu) / this->temperature();
-
-        /// Integrate for E_q{phi(x)}
-        double E_phi = this->_gh->Integrate(this->_func_phi)(0, 0);
-        
-        /// Integrate for partial V^2 / ddmu_ 
-        MatrixXd E_xxphi{this->_gh->Integrate(this->_func_Vmumu)};
-
-        this->_Vddmu.triangularView<Upper>() = (this->_precision * E_xxphi * this->_precision - this->_precision * E_phi).triangularView<Upper>();
-        this->_Vddmu.triangularView<StrictlyLower>() = this->_Vddmu.triangularView<StrictlyUpper>().transpose();
-        this->_Vddmu = this->_Vddmu / this->temperature();
-        
+        this->_Vdmu = std::get<0>(gradients);
+        this->_Vddmu = std::get<1>(gradients);
     }
 
 
@@ -98,37 +78,76 @@ public:
         bool Sk_symm = isSymmetric(this->_Sk);
         bool Mk_symm = isSymmetric(Mk);
 
+        std::cout << "Sk_symm: " << Sk_symm << std::endl;
+        std::cout << "Mk_symm: " << Mk_symm << std::endl;
+
         Eigen::MatrixXd Sigk_half(this->_dim, this->_dim);
         Sigk_half.setZero();
         Sigk_half = Mk*Sigk*Mk.transpose();
         
-        // Eigen::MatrixXd temp(this->_dim, this->_dim);
-        // temp.setZero();
-        // temp = Sigk_half*(Sigk_half + 4.0*step_size*Identity);
+        Eigen::MatrixXd temp(this->_dim, this->_dim);
+        temp.setZero();
+        temp = Sigk_half*(Sigk_half + 4.0*step_size*Identity);
 
-        // bool is_temp_spd = isSymmetricPositiveDefinite(temp);
-        // std::cout << "is_temp_spd: " << is_temp_spd << std::endl;
+        bool is_temp_spd = isSymmetricPositiveDefinite(temp);
+        std::cout << "is_temp_spd: " << is_temp_spd << std::endl;
 
-        // temp = this->sqrtm(temp);
+        temp = this->sqrtm(temp);
 
         Eigen::VectorXd mk_new = this->_mu - step_size * this->_bk;
         Eigen::MatrixXd Sigk_new(this->_dim, this->_dim);
         Sigk_new.setZero();
-        Sigk_new = Sigk_half;
+        Sigk_new = 0.5*Sigk_half + step_size*Identity + 0.5*temp;
 
-        // Sigk_new = 0.5*Sigk_half + step_size*Identity + 0.5*temp;
-
-        // bool is_Sigk_new_spd = isSymmetricPositiveDefinite(Sigk_new);
-        // std::cout << "is_inv_Sigk_new_spd: " << is_Sigk_new_spd << std::endl;
+        bool is_Sigk_new_spd = isSymmetricPositiveDefinite(Sigk_new);
+        std::cout << "is_inv_Sigk_new_spd: " << is_Sigk_new_spd << std::endl;
 
         Eigen::MatrixXd Precision_new(this->_dim, this->_dim);
         Precision_new.setZero();
         Precision_new = Sigk_new.inverse();
 
-        Eigen::VectorXd Vdmu = mk_new - this->_mu;
-        Eigen::MatrixXd Vddmu = Precision_new - this->_precision;
+        Eigen::VectorXd Vdmu = (mk_new - this->_mu) / step_size;
+        Eigen::MatrixXd Vddmu = (Precision_new - this->_precision) / step_size;
         
         return std::make_tuple(Vdmu, Vddmu);
+    }
+
+    std::tuple<Eigen::VectorXd, Eigen::MatrixXd> compute_gradients_linesearch(const double & step_size){
+
+        this->compute_BW_grads();
+
+        Eigen::MatrixXd Identity(this->_dim, this->_dim);
+        Identity.setZero();
+        Identity = Eigen::MatrixXd::Identity(this->_dim, this->_dim);
+        
+        // Compute the proximal step
+        Eigen::MatrixXd Mk(this->_dim, this->_dim);
+        Mk.setZero();
+        Eigen::MatrixXd Sigk(this->_dim, this->_dim);
+        Sigk.setZero();
+
+        Mk = Identity - this->_step_size*_Sk;
+        Sigk = this->_covariance;
+
+        Eigen::MatrixXd Sigk_half(this->_dim, this->_dim);
+        Sigk_half.setZero();
+        Sigk_half = Mk*Sigk*Mk;
+        
+        Eigen::MatrixXd temp = Identity;
+        temp = Sigk_half*(Sigk_half + 4.0*this->_step_size*Identity);
+
+        Eigen::MatrixXd temp_2(this->_dim, this->_dim);
+        temp_2.setZero();
+        temp_2 = this->sqrtm(temp);
+
+        Eigen::VectorXd mk_new = this->_mu - this->_step_size * _bk;
+        Eigen::MatrixXd inv_Sigk_new = (0.5*Sigk_half + this->_step_size*Identity + 0.5*temp_2).inverse();
+
+        Eigen::VectorXd dmu = (mk_new - this->_mu) / this->_step_size;
+        Eigen::MatrixXd dprecision = (inv_Sigk_new - this->_precision) / this->_step_size;
+
+        return std::make_tuple(dmu, dprecision);
+
     }
 
     void compute_BW_grads(){
@@ -195,6 +214,38 @@ public:
         return true;
     }
 
+    Eigen::MatrixXd sqrtm(const Eigen::MatrixXd& mat){
+        assert(mat.rows() == mat.cols());
+
+        Eigen::RealSchur<Eigen::MatrixXd> schur(mat.rows());
+        schur.compute(mat);
+
+        const Eigen::MatrixXd& T = schur.matrixT();
+        const Eigen::MatrixXd& U = schur.matrixU();
+
+        Eigen::MatrixXd T_sqrt = T;
+        
+        int n = T.rows();
+        for (int i = 0; i < n;) {
+            if (i == n - 1 || T(i + 1, i) == 0) {
+                // Diagonal block is 1x1
+                T_sqrt(i, i) = std::sqrt(T(i, i));
+                i++;
+            } else {
+                // Diagonal block is 2x2
+                Eigen::Matrix2d block = T.block<2, 2>(i, i);
+                Eigen::SelfAdjointEigenSolver<Eigen::Matrix2d> es(block);
+                Eigen::Matrix2d D_sqrt = es.eigenvalues().cwiseSqrt().asDiagonal();
+                Eigen::Matrix2d S = es.eigenvectors();
+                Eigen::Matrix2d S_inv = S.inverse();
+                T_sqrt.block<2, 2>(i, i) = S * D_sqrt * S_inv;
+                i += 2;
+            }
+        }
+
+        Eigen::MatrixXd mat_sqrt = U * T_sqrt * U.transpose();
+        return mat_sqrt;
+    }
 
     double fact_cost_value(const VectorXd& fill_joint_mean, const SpMat& joint_cov) override {
         VectorXd mean_k = extract_mu_from_joint(fill_joint_mean);

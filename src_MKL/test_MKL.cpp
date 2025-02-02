@@ -164,11 +164,10 @@ BENCHMARK(EigenSolver_Eigen);
 
 // }
 // BENCHMARK(EigenSolver_Eigen_MKL);
-
+std::vector<double> matrix_AAT(N * N);
 static void EigenSolver_MKL(benchmark::State& state) {
   for (auto _ : state)
 
-    std::vector<double> matrix_AAT(N * N);
     AMultiplyBT(matrix, matrix, matrix_AAT, N);
 
     std::cout << "AAT" << std::endl;

@@ -181,8 +181,8 @@ public:
             
             pts_weights = weights_map.at(dim_deg);
 
-            _zeromeanpts = std::move(std::get<0>(pts_weights));
-            _Weights = std::move(std::get<1>(pts_weights));
+            _zeromeanpts = std::get<0>(pts_weights);
+            _Weights = std::get<1>(pts_weights);
 
             update_sigmapoints();
         } else {
@@ -226,13 +226,13 @@ public:
      * Update member variables
      * */
     inline void update_mean(const Eigen::VectorXd& mean){ 
-        _mean = std::move(mean); 
+        _mean = mean; 
         
     }
 
     inline void update_sigmapoints(){
         Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> es(_P);
-        _sqrtP = std::move(es.operatorSqrt());
+        _sqrtP = es.operatorSqrt();
 
         if (_sqrtP.hasNaN()) {
             Eigen::VectorXd eigenvalues = es.eigenvalues();
@@ -241,7 +241,7 @@ public:
             // Handle the situation where _sqrtP contains NaN values
         }
 
-        _sigmapts = std::move((_zeromeanpts*_sqrtP.transpose()).rowwise() + _mean.transpose()); 
+        _sigmapts = (_zeromeanpts*_sqrtP.transpose()).rowwise() + _mean.transpose(); 
     }
 
     inline void update_P(const Eigen::MatrixXd& P){ 
@@ -261,8 +261,8 @@ public:
     inline void update_parameters(const int& deg, const int& dim, const Eigen::VectorXd& mean, const Eigen::MatrixXd& P){ 
         _deg = deg;
         _dim = dim;
-        _mean = std::move(mean);
-        _P = std::move(P);
+        _mean = mean;
+        _P = P;
 
         // Timer timer;
         // timer.start();

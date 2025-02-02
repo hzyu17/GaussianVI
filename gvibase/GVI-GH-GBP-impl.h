@@ -90,9 +90,9 @@ void GVIGH<Factor>::optimize(std::optional<bool> verbose)
 
             auto onestep_res = onestep_linesearch(step_size, dmu, dprecision);
 
-            double new_cost = std::move(std::get<0>(onestep_res));
-            VectorXd new_mu = std::move(std::get<1>(onestep_res));
-            auto new_precision = std::move(std::get<2>(onestep_res));
+            double new_cost = std::get<0>(onestep_res);
+            VectorXd new_mu = std::get<1>(onestep_res);
+            auto new_precision = std::get<2>(onestep_res);
 
             // accept new cost and update mu and precision matrix
             if (new_cost < cost_iter){
@@ -130,41 +130,41 @@ void GVIGH<Factor>::optimize(std::optional<bool> verbose)
 }
 
 
-template <typename Factor>
-void GVIGH<Factor>::time_test()
-{
-    // std::cout << "========== Optimization Start: ==========" << std::endl << std::endl;
+// template <typename Factor>
+// void GVIGH<Factor>::time_test()
+// {
+//     // std::cout << "========== Optimization Start: ==========" << std::endl << std::endl;
 
-    Timer timer;
-    std::vector<double> times;
-    times.reserve(_niters);
+//     // Timer timer;
+//     std::vector<double> times;
+//     times.reserve(_niters);
 
-    for (int i=0; i < _niters+1; i++){
-        timer.start();
-        double cost_iter = this->cost_value();
-        VectorXd fact_costs_iter = this->factor_cost_vector();
-        std::tuple<VectorXd, SpMat> gradients = compute_gradients_time();
-        double time = timer.end_mis();
-        if (i != 0)
-            times.push_back(time);  
-    }
+//     for (int i=0; i < _niters+1; i++){
+//         // timer.start();
+//         double cost_iter = this->cost_value();
+//         VectorXd fact_costs_iter = this->factor_cost_vector();
+//         std::tuple<VectorXd, SpMat> gradients = compute_gradients_time();
+//         double time = timer.end_mis();
+//         if (i != 0)
+//             times.push_back(time);  
+//     }
 
-    double average_time = std::accumulate(times.begin(), times.end(), 0.0) / _niters;
+//     double average_time = std::accumulate(times.begin(), times.end(), 0.0) / _niters;
 
-    double min_time = *std::min_element(times.begin(), times.end());
-    double max_time = *std::max_element(times.begin(), times.end());
+//     double min_time = *std::min_element(times.begin(), times.end());
+//     double max_time = *std::max_element(times.begin(), times.end());
 
-    std::cout << "% CPU average: " << average_time << " ms" << std::endl;
-    std::cout << "% CPU min: " << min_time << " ms" << std::endl;
-    std::cout << "% CPU max: " << max_time << " ms" << std::endl;
+//     std::cout << "% CPU average: " << average_time << " ms" << std::endl;
+//     std::cout << "% CPU min: " << min_time << " ms" << std::endl;
+//     std::cout << "% CPU max: " << max_time << " ms" << std::endl;
 
-    std::cout << "% [ " << times[0];
-    for (int i = 1; i < times.size(); ++i) {
-        std::cout << ", " << times[i];
-    }
-    std::cout << " ]" << std::endl;
+//     std::cout << "% [ " << times[0];
+//     for (int i = 1; i < times.size(); ++i) {
+//         std::cout << ", " << times[i];
+//     }
+//     std::cout << " ]" << std::endl;
     
-}
+// }
 
 template <typename Factor>
 inline void GVIGH<Factor>::set_precision(const SpMat &new_precision)
