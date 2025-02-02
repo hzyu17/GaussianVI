@@ -74,9 +74,15 @@ void GVIGH<Factor>::optimize(std::optional<bool> verbose)
         // gradients
         std::tuple<VectorXd, SpMat> gradients = compute_gradients(); //Used calculate partial V here
 
+<<<<<<< HEAD
         VectorXd dmu = std::get<0>(gradients);
         SpMat dprecision = std::get<1>(gradients);
 
+=======
+        VectorXd dmu = std::move(std::get<0>(gradients));
+        SpMat dprecision = std::move(std::get<1>(gradients));
+        
+>>>>>>> db6b50360b391ba6dafd29dbf6f789be7b84b5ca
         int cnt = 0;
         int B = 1;
         double step_size = _step_size_base;
@@ -90,9 +96,9 @@ void GVIGH<Factor>::optimize(std::optional<bool> verbose)
 
             auto onestep_res = onestep_linesearch(step_size, dmu, dprecision);
 
-            double new_cost = std::get<0>(onestep_res);
-            VectorXd new_mu = std::get<1>(onestep_res);
-            auto new_precision = std::get<2>(onestep_res);
+            double new_cost = std::move(std::get<0>(onestep_res));
+            VectorXd new_mu = std::move(std::get<1>(onestep_res));
+            auto new_precision = std::move(std::get<2>(onestep_res));
 
             // accept new cost and update mu and precision matrix
             if (new_cost < cost_iter){
