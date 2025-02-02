@@ -126,7 +126,7 @@ void GVIGH<Factor>::optimize(std::optional<bool> verbose)
 template <typename Factor>
 inline void GVIGH<Factor>::set_precision(const SpMat &new_precision)
 {
-    _precision = new_precision;
+    _precision = std::move(new_precision);
     // sparse inverse
     inverse_inplace();
 
@@ -176,7 +176,7 @@ template <typename Factor>
 double GVIGH<Factor>::cost_value(const VectorXd &mean, SpMat &Precision)
 {
 
-    SpMat Cov = inverse(Precision);
+    SpMat Cov = std::move(inverse(Precision));
 
     double value = 0.0;
 
@@ -190,7 +190,7 @@ double GVIGH<Factor>::cost_value(const VectorXd &mean, SpMat &Precision)
     }
 
     SparseLDLT ldlt(Precision);
-    VectorXd vec_D = ldlt.vectorD();
+    VectorXd vec_D = std::move(ldlt.vectorD());
 
     // std::cout << "entropy cost" << std::endl << vec_D.array().log().sum() / 2 << std::endl;
     return value + vec_D.array().log().sum() / 2;

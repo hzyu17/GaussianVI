@@ -3,7 +3,8 @@ cmake_minimum_required(VERSION 3.0)
 enable_testing()
 project(GaussianVI CXX C CUDA)
 set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -w")
+
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -w -O3")
 
 set(gvi_subdirs 
     quadrature 
@@ -55,6 +56,13 @@ add_definitions(-DEIGEN_DONT_VECTORIZE)
 # OpenMP
 find_package(OpenMP)
 
+# MKL
+find_package(MKL REQUIRED)
+
+# google benchmark
+find_package(benchmark REQUIRED)
+# add_subdirectory(benchmark)
+
 # Cereal
 set(CEREAL_INCLUDE_DIR "${CMAKE_SOURCE_DIR}/include/cereal/include")
 include_directories(${CEREAL_INCLUDE_DIR})
@@ -94,6 +102,21 @@ foreach(gvi_source ${gvi_SOURCES})
                         #   ${Matlab_MX_LIBRARY} 
                           ${libSpGH_LIBRARY} ${MCR_LIBRARY_PATH}/libmwmclmcrrt.so.9.9)
     target_include_directories(${gvi_name} PRIVATE ${Matlab_INCLUDE_DIRS})
+endforeach()
+
+file(GLOB_RECURSE mkl_SOURCES src_MKL/*.cpp)
+foreach(mkl_source ${mkl_SOURCES})
+    get_filename_component(mkl_name ${mkl_source} NAME_WE)
+    add_executable(${mkl_name} ${mkl_source})
+    set_target_properties(${mkl_name} PROPERTIES LINKER_LANGUAGE CXX)
+    set_target_properties(${mkl_name} PROPERTIES
+                            RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/src"
+                            )   
+    target_link_libraries(${mkl_name} ${EIGEN3_LIBRARIES} ${Matlab_MEX_LIBRARY} 
+                            ${CUDA_LIBRARIES} benchmark::benchmark MKL::MKL ${MKL_LIBRARIES}
+                            ${libSpGH_LIBRARY} ${MCR_LIBRARY_PATH}/libmwmclmcrrt.so.9.9)
+
+    target_include_directories(${mkl_name} PRIVATE ${Matlab_INCLUDE_DIRS})
 endforeach()
 
 # include(FetchContent)

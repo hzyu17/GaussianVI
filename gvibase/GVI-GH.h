@@ -180,14 +180,14 @@ public:
     inline void set_max_iter_backtrack(double max_backtrack_iter){ _niters_backtrack = max_backtrack_iter; }
 
     inline void set_mu(const VectorXd& mean){
-        _mu = mean; 
+        _mu = std::move(mean); 
         for (std::shared_ptr<FactorizedOptimizer> & opt_fact : _vec_factors){
             opt_fact->update_mu_from_joint(_mu);
         }
     }
 
     inline void set_initial_precision_factor(double initial_precision_factor){
-        _initial_precision_factor = initial_precision_factor;
+        _initial_precision_factor = std::move(initial_precision_factor);
     }
 
     inline void initilize_precision_matrix(){
@@ -199,7 +199,7 @@ public:
         set_initial_precision_factor(initial_precision_factor);
 
         MatrixXd init_precision(_dim, _dim);
-        init_precision = MatrixXd::Identity(_dim, _dim)*initial_precision_factor;
+        init_precision = std::move(MatrixXd::Identity(_dim, _dim)*initial_precision_factor);
         
         set_precision(init_precision.sparseView());
     }

@@ -156,64 +156,12 @@ public:
         return std::make_tuple(Vdmu, Vddmu);
     }
 
-    std::tuple<Eigen::VectorXd, Eigen::MatrixXd> compute_gradients_linesearch(const double & step_size){
-
-        // compute_BW_grads();
-
-        Eigen::MatrixXd Identity(this->_dim, this->_dim);
-        Identity.setZero();
-        Identity = Eigen::MatrixXd::Identity(this->_dim, this->_dim);
-        
-        // Compute the proximal step
-        Eigen::MatrixXd Mk(this->_dim, this->_dim);
-        Mk.setZero();
-        Eigen::MatrixXd Sigk(this->_dim, this->_dim);
-        Sigk.setZero();
-
-        Mk = Identity - this->_step_size*this->_Sk;
-
-        bool Sk_symm = isSymmetric(this->_Sk);
-        bool Mk_symm = isSymmetric(Mk);
-
-        std::cout << "Sk_symm: " << Sk_symm << std::endl;
-        std::cout << "Mk_symm: " << Mk_symm << std::endl;
-
-        Sigk = this->_covariance;
-
-        Eigen::MatrixXd Sigk_half(this->_dim, this->_dim);
-        Sigk_half.setZero();
-        Sigk_half = Mk*Sigk*Mk.transpose();
-        
-        Eigen::MatrixXd temp = Identity;
-        temp = Sigk_half*(Sigk_half + 4.0*this->_step_size*Identity);
-
-        Eigen::MatrixXd temp_2(this->_dim, this->_dim);
-        temp_2.setZero();
-        temp_2 = this->sqrtm(temp);
-
-        Eigen::VectorXd mk_new = this->_mu - this->_step_size * this->_bk;
-        Eigen::MatrixXd inv_Sigk_new(this->_dim, this->_dim);
-        inv_Sigk_new.setZero();
-        inv_Sigk_new = 0.5*Sigk_half + step_size*Identity + 0.5*temp;
-
-        bool is_inv_Sigk_new_spd = isSymmetricPositiveDefinite(inv_Sigk_new);
-        std::cout << "is_inv_Sigk_new_spd: " << is_inv_Sigk_new_spd << std::endl;
-
-        inv_Sigk_new = inv_Sigk_new.inverse();
-
-        Eigen::VectorXd dmu = (mk_new - this->_mu) / this->_step_size;
-        Eigen::MatrixXd dprecision = (inv_Sigk_new - this->_precision) / this->_step_size;
-
-        return std::make_tuple(dmu, dprecision);
-
-    }
-
     double fact_cost_value(const VectorXd& fill_joint_mean, const SpMat& joint_cov) override {
         VectorXd mean_k = Base::extract_mu_from_joint(fill_joint_mean);
         MatrixXd Cov_k = Base::extract_cov_from_joint(joint_cov);
 
-        _E_Phi = ((_Lambda.transpose()*_target_precision*_Lambda * Cov_k).trace() + 
-                    (_Lambda*mean_k-_Psi*_target_mean).transpose() * _target_precision * (_Lambda*mean_k-_Psi*_target_mean)) * constant() / this->temperature();
+        _E_Phi = std::move(((_Lambda.transpose()*_target_precision*_Lambda * Cov_k).trace() + 
+                            (_Lambda*mean_k-_Psi*_target_mean).transpose() * _target_precision * (_Lambda*mean_k-_Psi*_target_mean)) * constant() / this->temperature());
         return _E_Phi;
     }
 
