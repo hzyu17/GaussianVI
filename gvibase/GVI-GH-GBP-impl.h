@@ -74,15 +74,9 @@ void GVIGH<Factor>::optimize(std::optional<bool> verbose)
         // gradients
         std::tuple<VectorXd, SpMat> gradients = compute_gradients(); //Used calculate partial V here
 
-<<<<<<< HEAD
         VectorXd dmu = std::get<0>(gradients);
         SpMat dprecision = std::get<1>(gradients);
 
-=======
-        VectorXd dmu = std::move(std::get<0>(gradients));
-        SpMat dprecision = std::move(std::get<1>(gradients));
-        
->>>>>>> db6b50360b391ba6dafd29dbf6f789be7b84b5ca
         int cnt = 0;
         int B = 1;
         double step_size = _step_size_base;

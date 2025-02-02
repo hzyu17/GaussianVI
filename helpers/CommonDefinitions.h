@@ -31,7 +31,6 @@ typedef std::pair <Eigen::VectorXd, Eigen::MatrixXd> Message;
 //https://eigen.tuxfamily.org/dox/structEigen_1_1IOFormat.html
 static Eigen::IOFormat CSVFormat(Eigen::FullPrecision, Eigen::DontAlignCols, ", ", "\n");
 
-
 Eigen::MatrixXd sqrtm(const Eigen::MatrixXd& mat){
     assert(mat.rows() == mat.cols());
 
