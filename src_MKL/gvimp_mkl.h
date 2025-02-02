@@ -6,7 +6,7 @@
 #include <vector>
 
 
-void printMatrix(const std::vector<double>& mat, int n) {
+void printMatrix(const std::vector<double>& mat, const int & n) {
     for (int i = 0; i < n; ++i) {
         for (int j = 0; j < n; ++j) {
             std::cout << mat[i * n + j] << " ";
@@ -16,7 +16,7 @@ void printMatrix(const std::vector<double>& mat, int n) {
 }
 
 
-void EigenToMKL(const Eigen::MatrixXd& eigen_matrix, std::vector<double>& mkl_matrix, const int N) {
+void EigenToMKL(const Eigen::MatrixXd& eigen_matrix, std::vector<double>& mkl_matrix, const int & N) {
     for (int i = 0; i < N; ++i) {
         for (int j = 0; j < N; ++j) {
             mkl_matrix[i * N + j] = eigen_matrix(i, j);
@@ -25,7 +25,7 @@ void EigenToMKL(const Eigen::MatrixXd& eigen_matrix, std::vector<double>& mkl_ma
 }
 
 
-void SqrtEigenSolverMKL(std::vector<double>& mkl_matrix, std::vector<double>& result, const int N) {
+void SqrtEigenSolverMKL(std::vector<double>& mkl_matrix, std::vector<double>& result, const int & N) {
     char transa = 'N';  // No transpose for M
     char transb = 'T';  // Transpose for M^T
     double alpha = 1.0; // Scaling factor for M * M^T
@@ -67,18 +67,30 @@ void SqrtEigenSolverMKL(std::vector<double>& mkl_matrix, std::vector<double>& re
 
 
 void squareMatrixMultiplication(const std::vector<double>& m1, const std::vector<double>& m2, std::vector<double>& result, const int N) {
-    double alpha = 1.0; // Scaling factor for M * M^T
-    double beta = 0.0;  // No scaling for the result matrix (A)
-
     // Perform matrix multiplication using cblas_dgemm
-    cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, N, N, N, alpha, m1.data(), N, m2.data(), N, beta, result.data(), N);
+    cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, N, N, N, 1.0, m1.data(), N, m2.data(), N, 0.0, result.data(), N);
 }
 
 
 void AMultiplyBT(const std::vector<double>& m1, const std::vector<double>& m2, std::vector<double>& result, const int N) {
-    double alpha = 1.0; // Scaling factor for M * M^T
-    double beta = 0.0;  // No scaling for the result matrix (A)
-
     // Perform matrix multiplication using cblas_dgemm
-    cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasTrans, N, N, N, alpha, m1.data(), N, m2.data(), N, beta, result.data(), N);
+    cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasTrans, N, N, N, 1.0, m1.data(), N, m2.data(), N, 0.0, result.data(), N);
+}
+
+
+void LLTDecomposition(std::vector<double>& matrix_L, const int& N){
+    
+    // Cholesky decomposition using dpotrf (double precision)
+    char uplo = 'U';  // 'L' for lower triangular matrix
+    long long int info;
+    long long int N_long = static_cast<long long int>(N);
+    // Call MKL's dpotrf function for Cholesky decomposition
+    dpotrf_(&uplo, &N_long, matrix_L.data(), &N_long, &info);
+
+    // Make the upper triangular part of L to be zero
+    for (int i = 0; i < N; ++i) {
+        for (int j = i + 1; j < N; ++j) {
+            matrix_L[i * N + j] = 0.0;
+        }
+    }
 }
