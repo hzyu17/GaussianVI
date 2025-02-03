@@ -52,6 +52,7 @@ public:
                 else{
                     QuadratureWeightsMap nodes_weights_map;
                     try {
+                        std::cout << "Opening file for GH weights reading in file: " + map_file << std::endl;
                         std::ifstream ifs(map_file, std::ios::binary);
                         if (!ifs.is_open()) {
                             std::string error_msg = "Failed to open file for GH weights reading in file: " + map_file;

@@ -15,10 +15,10 @@ void printMatrix_MKL(const std::vector<double>& mat, const int & n) {
 }
 
 
-void EigenToMKL(const Eigen::MatrixXd& eigen_matrix, std::vector<double>& mkl_matrix, const int & N) {
-    for (int i = 0; i < N; ++i) {
-        for (int j = 0; j < N; ++j) {
-            mkl_matrix[i * N + j] = eigen_matrix(i, j);
+void EigenToMKL(const Eigen::MatrixXd& eigen_matrix, std::vector<double>& mkl_matrix, const int & rows, const int & cols) {
+    for (int i = 0; i < rows; ++i) {
+        for (int j = 0; j < cols; ++j) {
+            mkl_matrix[i * rows + j] = eigen_matrix(i, j);
         }
     }
 }

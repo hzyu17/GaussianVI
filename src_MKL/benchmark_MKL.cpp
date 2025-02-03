@@ -151,7 +151,7 @@ BENCHMARK(SQRTM_EigenSolver_Eigen);
 
 //     // Convert Eigen matrix to MKL-compatible format
 //     std::vector<double> matrix_A(N * N, 0.0); 
-//     EigenToMKL(m, matrix_A, N);
+//     EigenToMKL(m, matrix_A, N, N);
 
 //     std::vector<double> matrix_AAT(N * N, 0.0);
 

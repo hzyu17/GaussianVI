@@ -3,9 +3,9 @@
  * @author Hongzhe Yu (hyu419@gatech.edu)
  * @brief Sparse Gauss-Hermite approximation of integrations implemented as tabulated form.
  * @version 0.1
- * @date 2024-01-26
+ * @date 2025-02-02
  * 
- * @copyright Copyright (c) 2022
+ * @copyright Copyright (c) 2025
  * 
  */
 
@@ -105,10 +105,10 @@ public:
                     try {
                         std::ifstream ifs(map_file, std::ios::binary);
                         if (!ifs.is_open()) {
-                            std::string error_msg = "Failed to open file for GH weights reading in file: " + map_file;
+                            std::string error_msg = "Failed to open file for GH weights reading in file: " + map_mkl_file;
                             throw std::runtime_error(error_msg);
                         }
-                        std::cout << "Opening file for GH weights reading in file: " + map_file << std::endl;
+                        std::cout << "Opening file for GH weights reading in file: " + map_mkl_file << std::endl;
                         // Use cereal for deserialization
                         cereal::BinaryInputArchive archive(ifs);
                         archive(nodes_weights_map);
@@ -120,11 +120,11 @@ public:
                     _nodes_weights_map = std::make_shared<QuadratureWeightsMap_MKL>(nodes_weights_map);
 
                     // Print out all the keys in the weight map
-                    std::cout << "Keys in the quadrature weight map:" << std::endl;
-                    for (const auto& entry : nodes_weights_map) {
-                        const DimDegTuple& key = entry.first; // Extract the key
-                        std::cout << "dim: " << std::get<0>(key) << ", deg: " << std::get<1>(key) << std::endl;
-                    }
+                    // std::cout << "Keys in the quadrature weight map:" << std::endl;
+                    // for (const auto& entry : nodes_weights_map) {
+                    //     const DimDegTuple& key = entry.first; // Extract the key
+                    //     std::cout << "dim: " << std::get<0>(key) << ", deg: " << std::get<1>(key) << std::endl;
+                    // }
 
                 }
                 
@@ -152,6 +152,7 @@ public:
      */
     void computeSigmaPtsWeights(){
         
+        std::cout << "Computing sigma points and weights" << std::endl;
         DimDegTuple dim_deg;
         dim_deg = std::make_tuple(_dim, _deg);;
 
@@ -162,7 +163,7 @@ public:
             _zeromeanpts = std::get<0>(pts_weights);
             _Weights = std::get<1>(pts_weights);
 
-            _num_sigmapoints = _zeromeanpts.size();
+            _num_sigmapoints = _zeromeanpts.size() / _dim;
             
             // // Eigenvalue decomposition
             // Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> eigensolver(_P);
@@ -170,8 +171,11 @@ public:
             //     std::cerr << "Eigenvalue decomposition failed!" << std::endl;
             //     return;
             // }
+            std::cout << "Computing sigma points and weights" << std::endl;
 
             update_sigmapoints();
+
+            std::cout << "Computing sigma points and weights" << std::endl;
 
         } else {
             std::cout << "(dimension, degree) " << "(" << _dim << ", " << _deg << ") " <<
@@ -212,13 +216,14 @@ public:
      */
     std::vector<double> Integrate(const Function_MKL& function, const int& m, const int& n){
         
+        std::cout << "Starting Integration... " << std::endl;
         std::vector<double> res(m*n, 0.0);
 
         // Create a private copy of the res matrix for each thread
         std::vector<double> private_res(m*n, 0.0);
         std::vector<double> pt(_dim, 0.0);
         std::vector<double> func_pt(_dim, 0.0);
-        std::vector<double> weights_i(_dim, 0.0);
+        std::vector<double> weights_i(1, 0.0);
         std::vector<double> res_i(_dim, 0.0);
 
         for (int i = 0; i < _num_sigmapoints; i++) {
@@ -246,9 +251,9 @@ public:
         // Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> es(_P);
         // _sqrtP = es.operatorSqrt();
 
-        std::vector<double> result(_deg * _deg, 0.0);
+        std::vector<double> result(_dim * _dim, 0.0);
         _sqrtP = result;
-        SqrtEigenSolverMKL(_P, _sqrtP, _deg);
+        SqrtEigenSolverMKL(_P, _sqrtP, _dim);
 
         // if (_sqrtP.hasNaN()) {
         //     Eigen::VectorXd eigenvalues = es.eigenvalues();
@@ -256,9 +261,13 @@ public:
         //     std::cerr << "Error: sqrt Covariance matrix contains NaN values." << std::endl;
         //     // Handle the situation where _sqrtP contains NaN values
         // }
-        std::vector<double> temp(_deg*_deg, 0.0);
-        AMultiplyBT(_zeromeanpts, _sqrtP, temp, _deg);
-        AddTransposeToRows(temp, _mean, _deg);
+
+        std::vector<double> temp(_num_sigmapoints*_dim, 0.0);
+        printMatrix_MKL(_zeromeanpts, _num_sigmapoints);
+        
+        AMultiplyBT(_zeromeanpts, _sqrtP, temp, _num_sigmapoints);
+        AddTransposeToRows(temp, _mean, _num_sigmapoints);
+
         // _sigmapts = (_zeromeanpts*_sqrtP.transpose()).rowwise() + _mean.transpose(); 
     }
 

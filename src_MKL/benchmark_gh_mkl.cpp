@@ -3,9 +3,9 @@
  * @author Hongzhe Yu (hyu419@gatech.edu)
  * @brief use known integrations to test the Gausse-Hermite approximated integrations.
  * @version 0.1
- * @date 2022-05-11
+ * @date 2025-02-02
  * 
- * @copyright Copyright (c) 2022
+ * @copyright Copyright (c) 2025
  * 
  */
 
@@ -68,11 +68,11 @@ static void sparseGH(benchmark::State& state){
     for (auto _ : state)
         MatrixXd integral1_sp{gausshermite_sp.Integrate(gx_1d)};    
         // MatrixXd integral_expected{MatrixXd::Constant(1, 1, 4.0)};
-        // std::cout << "ground truth expected value: " << std::endl << integral_expected[0] << std::endl;
+        // std::cout << "SparseGH Integration value: " << std::endl << integral1_sp[0] << std::endl;
 
 }
 
-// BENCHMARK(sparseGH);
+BENCHMARK(sparseGH);
 
 static void sparseGH_MKL(benchmark::State& state){
     int dim = 4;
@@ -82,7 +82,9 @@ static void sparseGH_MKL(benchmark::State& state){
         P_mkl[j*dim+j] = 0.0001;
     }
 
-    SparseGaussHermite_MKL<Function_MKL> gausshermite_mkl(10, dim, m_mkl, P_mkl, weight_sigpts_map_option_mkl);
+    SparseGaussHermite_MKL<Function_MKL> gausshermite_mkl(3, dim, m_mkl, P_mkl, weight_sigpts_map_option_mkl);
+
+    std::cout << "GH MKL class created." << std::endl;
 
     std::vector<double> integral1_sp_mkl(1, 0.0);
     
