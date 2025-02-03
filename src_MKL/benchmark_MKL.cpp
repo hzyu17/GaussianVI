@@ -1,4 +1,5 @@
 #include "gvimp_mkl.h"
+#include<benchmark/benchmark.h>
 
 const int N = 4;
 
@@ -162,7 +163,7 @@ BENCHMARK(SQRTM_EigenSolver_Eigen);
 
 
 //     std::cout << "Matrix Sqrt MKL:" << std::endl;
-//     printMatrix(result, N);
+//     printMatrix_MKL(result, N);
 
 
 // }

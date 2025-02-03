@@ -34,4 +34,10 @@ static Eigen::IOFormat CSVFormat(Eigen::FullPrecision, Eigen::DontAlignCols, ", 
 } // namespace gvi
 
 
+#ifdef GVI_SUBDUR_ENV 
+std::string map_file{source_root+"/GaussianVI/quadrature/SparseGHQuadratureWeights_cereal.bin"};
+#else
+std::string map_file{source_root+"/quadrature/SparseGHQuadratureWeights_cereal.bin"};
+#endif
+
 #endif // COMMON_DEFINITIONS_H

@@ -16,12 +16,6 @@
 #include "quadrature/SparseGHQuadratureWeights.h"
 #include "helpers/CommonDefinitions.h"
 
-#ifdef GVI_SUBDUR_ENV 
-std::string map_file{source_root+"/GaussianVI/quadrature/SparseGHQuadratureWeights_cereal.bin"};
-#else
-std::string map_file{source_root+"/quadrature/SparseGHQuadratureWeights_cereal.bin"};
-#endif
-
 namespace gvi{
 template <typename Function>
 class SparseGaussHermite{

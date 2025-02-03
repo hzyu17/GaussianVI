@@ -1,12 +1,11 @@
 #include<iostream>
 #include<Eigen/Dense>
-#include<benchmark/benchmark.h>
 #include<mkl.h>
 #include <mkl_vsl.h>
 #include <vector>
 
 
-void printMatrix(const std::vector<double>& mat, const int & n) {
+void printMatrix_MKL(const std::vector<double>& mat, const int & n) {
     for (int i = 0; i < n; ++i) {
         for (int j = 0; j < n; ++j) {
             std::cout << mat[i * n + j] << " ";
@@ -71,12 +70,57 @@ void squareMatrixMultiplication(const std::vector<double>& m1, const std::vector
     cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, N, N, N, 1.0, m1.data(), N, m2.data(), N, 0.0, result.data(), N);
 }
 
+void matrix_addition(const std::vector<double>& A, const std::vector<double>& B, std::vector<double>& C, int N) {
+    // Add matrix A and B and store the result in C
+    for (int i = 0; i < N; ++i) {
+        // Use cblas_daxpy to add B to A (C = A + B)
+        // N is the number of elements, 1.0 is the scaling factor, B is added to A (no scaling)
+        cblas_daxpy(N * N, 1.0, B.data(), 1, C.data(), 1);
+        cblas_daxpy(N * N, 1.0, A.data(), 1, C.data(), 1);
+    }
+}
+
+void AMultiplyB(const std::vector<double>& m1, const std::vector<double>& m2, std::vector<double>& result, const int N) {
+    // Perform matrix multiplication using cblas_dgemm
+    cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, N, N, N, 1.0, m1.data(), N, m2.data(), N, 0.0, result.data(), N);
+}
+
+void ATMultiplyB(const std::vector<double>& m1, const std::vector<double>& m2, std::vector<double>& result, const int N) {
+    // Perform matrix multiplication using cblas_dgemm
+    cblas_dgemm(CblasRowMajor, CblasTrans, CblasNoTrans, N, N, N, 1.0, m1.data(), N, m2.data(), N, 0.0, result.data(), N);
+}
+
+void ATMultiplyBT(const std::vector<double>& m1, const std::vector<double>& m2, std::vector<double>& result, const int N) {
+    // Perform matrix multiplication using cblas_dgemm
+    cblas_dgemm(CblasRowMajor, CblasTrans, CblasTrans, N, N, N, 1.0, m1.data(), N, m2.data(), N, 0.0, result.data(), N);
+}
 
 void AMultiplyBT(const std::vector<double>& m1, const std::vector<double>& m2, std::vector<double>& result, const int N) {
     // Perform matrix multiplication using cblas_dgemm
     cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasTrans, N, N, N, 1.0, m1.data(), N, m2.data(), N, 0.0, result.data(), N);
 }
 
+void AMultiplyBTPlusC(const std::vector<double>& m1, const std::vector<double>& m2, std::vector<double>& m3, const int N) {
+    // Perform matrix multiplication using cblas_dgemm
+    // C <- \alpha AB^T + \beta C
+    cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasTrans, N, N, N, 1.0, m1.data(), N, m2.data(), N, 1.0, m3.data(), N);
+}
+
+void AddTransposeToRows(std::vector<double>& A, const std::vector<double>& a, int N) {
+    // Loop over each row of A
+    for (int i = 0; i < N; ++i) {
+        // Use cblas_daxpy to add a to the i-th row of A
+        // A[i*N + j] is the element at row i, column j in A
+        cblas_daxpy(N, 1.0, a.data(), 1, &A[i * N], 1);
+    }
+}
+
+void get_row_i(const std::vector<double>& matrix, const int& row_i, const int& N, std::vector<double>& result){
+    result = std::vector<double>(N, 0.0);
+    for (int j=0; j<N; j++){
+        result[j] = matrix[row_i*N + j];
+    }
+}
 
 void LLTDecomposition(std::vector<double>& matrix_L, const int& N){
     
