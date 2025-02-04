@@ -163,7 +163,7 @@ BENCHMARK(SQRTM_EigenSolver_Eigen);
 
 
 //     std::cout << "Matrix Sqrt MKL:" << std::endl;
-//     printMatrix_MKL(result, N);
+//     printMatrix_MKL(result, N, N);
 
 
 // }

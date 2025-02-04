@@ -103,7 +103,7 @@ public:
                 else{
                     QuadratureWeightsMap_MKL nodes_weights_map;
                     try {
-                        std::ifstream ifs(map_file, std::ios::binary);
+                        std::ifstream ifs(map_mkl_file, std::ios::binary);
                         if (!ifs.is_open()) {
                             std::string error_msg = "Failed to open file for GH weights reading in file: " + map_mkl_file;
                             throw std::runtime_error(error_msg);
@@ -119,7 +119,7 @@ public:
 
                     _nodes_weights_map = std::make_shared<QuadratureWeightsMap_MKL>(nodes_weights_map);
 
-                    // Print out all the keys in the weight map
+                    // // Print out all the keys in the weight map
                     // std::cout << "Keys in the quadrature weight map:" << std::endl;
                     // for (const auto& entry : nodes_weights_map) {
                     //     const DimDegTuple& key = entry.first; // Extract the key
@@ -216,7 +216,7 @@ public:
      */
     std::vector<double> Integrate(const Function_MKL& function, const int& m, const int& n){
         
-        std::cout << "Starting Integration... " << std::endl;
+        // std::cout << "Starting Integration... " << std::endl;
         std::vector<double> res(m*n, 0.0);
 
         // Create a private copy of the res matrix for each thread
@@ -255,6 +255,12 @@ public:
         _sqrtP = result;
         SqrtEigenSolverMKL(_P, _sqrtP, _dim);
 
+        std::cout << "_P " << std::endl;
+        printMatrix_MKL(_P, _dim, _dim);
+
+        std::cout << "_sqrtP " << std::endl;
+        printMatrix_MKL(_sqrtP, _dim, _dim);
+
         // if (_sqrtP.hasNaN()) {
         //     Eigen::VectorXd eigenvalues = es.eigenvalues();
         //     std::cout << "eigenvalues" << std::endl << eigenvalues << std::endl;
@@ -263,10 +269,21 @@ public:
         // }
 
         std::vector<double> temp(_num_sigmapoints*_dim, 0.0);
-        printMatrix_MKL(_zeromeanpts, _num_sigmapoints);
-        
+
+        std::cout << "_mean " << std::endl;
+        printVector_MKL(_mean, _dim);
+
+        std::cout << "_zeromeanpts times _sqrtP.T" << std::endl;
         AMultiplyBT(_zeromeanpts, _sqrtP, temp, _num_sigmapoints);
-        AddTransposeToRows(temp, _mean, _num_sigmapoints);
+
+        printMatrix_MKL(temp, _num_sigmapoints, _dim);
+
+        std::cout << "Add _mean to the rows " << std::endl;
+        AddTransposeToRows(temp, _mean, _num_sigmapoints, _dim);
+
+        printMatrix_MKL(temp, _num_sigmapoints, _dim);
+
+        std::cout << "Done updating sigma points" << std::endl;
 
         // _sigmapts = (_zeromeanpts*_sqrtP.transpose()).rowwise() + _mean.transpose(); 
     }

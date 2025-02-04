@@ -27,7 +27,11 @@ void save_pointweightmaps(){
             // DimDegTuple dim_k= std::make_tuple(dim, k);
             double dim = std::get<0>(dim_maxk);
             double max_k = std::get<1>(dim_maxk);
+
         for (double k=1.0; k<=max_k; k++){
+
+            std::cout << "Reading dim: " << dim << ", k: " << k <<std::endl;
+
             PointsWeightsTuple pt_wts;
             pt_wts = get_sigmapts_weights(dim, k);
 
@@ -60,17 +64,12 @@ void save_pointweightmaps_mkl(){
     }
 
     // DimDegTuple dim_k= std::make_tuple(dim, k);
-    double dim = std::get<0>(dim_degs[0]);
-    double max_k = std::get<1>(dim_degs[0]);
-
     PointsWeightsTuple_MKL pt_wts;
     DimDegTuple dim_k;
 
     for (DimDegTuple& dim_maxk: dim_degs){
-        dim = std::get<0>(dim_maxk);
-        max_k = std::get<1>(dim_maxk);
-
-        std::cout << "max_k: " << max_k << std::endl;
+        double dim = std::get<0>(dim_maxk);
+        double max_k = std::get<1>(dim_maxk);
 
         for (double k=1.0; k<=max_k; k++){
 
@@ -78,6 +77,13 @@ void save_pointweightmaps_mkl(){
 
             get_sigmapts_weights_mkl(dim, k, pt_wts);
             dim_k = std::make_tuple(dim, k);
+
+            // std::vector<double> pts = std::get<0>(pt_wts);
+            // std::vector<double> weights = std::get<1>(pt_wts);
+
+            // int num_points = pts.size() / dim;
+            // std::cout << "weights " << std::endl;
+            // printMatrix_MKL(weights, num_points, dim);
 
             map[dim_k] = pt_wts;
         }

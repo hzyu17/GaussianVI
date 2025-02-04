@@ -91,7 +91,7 @@ static void sparseGH_MKL(benchmark::State& state){
     for (auto _ : state)        
         integral1_sp_mkl = gausshermite_mkl.Integrate(gx_1d_mkl, 1, 1);
         std::cout << "integration MKL: " << std::endl;
-        printMatrix_MKL(integral1_sp_mkl, 1);
+        printMatrix_MKL(integral1_sp_mkl, 1, 1);
 }
 
 BENCHMARK(sparseGH_MKL);

@@ -4,14 +4,24 @@
 #include <mkl_vsl.h>
 #include <vector>
 
+#ifndef GVIMP_MKL_H
+#define GVIMP_MKL_H
 
-void printMatrix_MKL(const std::vector<double>& mat, const int & n) {
-    for (int i = 0; i < n; ++i) {
+void printMatrix_MKL(const std::vector<double>& mat, const int & m, const int & n) {
+    for (int i = 0; i < m; ++i) {
         for (int j = 0; j < n; ++j) {
             std::cout << mat[i * n + j] << " ";
         }
         std::cout << std::endl;
     }
+}
+
+
+void printVector_MKL(const std::vector<double>& mat, const int & n) {
+    for (int i = 0; i < n; ++i) {
+            std::cout << mat[i] << std::endl;
+        }
+        std::cout << std::endl;
 }
 
 
@@ -48,11 +58,17 @@ void SqrtEigenSolverMKL(std::vector<double>& mkl_matrix, std::vector<double>& re
 
     dsyev_(&jobz, &uplo, &N_long, mkl_matrix.data(), &N_long, w.data(), work.data(), &lwork, &info);
 
+    std::cout << "Eigen Values " << std::endl;
+    printVector_MKL(w, N);
+
     // Create D^(1/2) as a diagonal matrix (stored in a vector)
     std::vector<double> D_sqrt_matrix(N * N, 0.0);
     for (int i = 0; i < N; ++i) {
         D_sqrt_matrix[i * N + i] = std::sqrt(w[i]); // Diagonal matrix with square roots of eigenvalues
     }
+
+    std::cout << "D_sqrt_matrix " << std::endl;
+    printMatrix_MKL(D_sqrt_matrix, N, N);
 
     // Multiply V * D^(1/2) to get intermediate result
     // V's rows are the transposed eigen vectors!!
@@ -106,12 +122,12 @@ void AMultiplyBTPlusC(const std::vector<double>& m1, const std::vector<double>& 
     cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasTrans, N, N, N, 1.0, m1.data(), N, m2.data(), N, 1.0, m3.data(), N);
 }
 
-void AddTransposeToRows(std::vector<double>& A, const std::vector<double>& a, int N) {
+void AddTransposeToRows(std::vector<double>& A, const std::vector<double>& a, int numRows, int numCols) {
     // Loop over each row of A
-    for (int i = 0; i < N; ++i) {
+    for (int i = 0; i < numRows; ++i) {
         // Use cblas_daxpy to add a to the i-th row of A
         // A[i*N + j] is the element at row i, column j in A
-        cblas_daxpy(N, 1.0, a.data(), 1, &A[i * N], 1);
+        cblas_daxpy(numCols, 1.0, a.data(), 1, &A[i * numCols], 1);
     }
 }
 
@@ -138,3 +154,5 @@ void LLTDecomposition(std::vector<double>& matrix_L, const int& N){
         }
     }
 }
+
+#endif
