@@ -95,6 +95,11 @@ public:
             _mean(mean),
             _P(P)
             {  
+                for (int ii=0; ii<dim; ii++){
+                    _P[ii*dim+ii] = P[ii*dim+ii];
+                    _mean[ii] = mean[ii];
+                }
+
                 if (weight_sigpts_map_option.has_value()){
                     std::cout << "weight_sigpts_map_option has value. Taking into the SparseGH class" << std::endl;
                     _nodes_weights_map = weight_sigpts_map_option.value();
@@ -143,6 +148,10 @@ public:
             _mean(mean),
             _P(P)
             {  
+                for (int ii=0; ii<dim; ii++){
+                    _P[ii*dim+ii] = P[ii*dim+ii];
+                    _mean[ii] = mean[ii];
+                }
                 computeSigmaPtsWeights(weights_map);
             }
             
@@ -226,14 +235,14 @@ public:
         std::vector<double> weights_i(1, 0.0);
         std::vector<double> res_i(_dim, 0.0);
 
-        for (int i = 0; i < _num_sigmapoints; i++) {
-            get_row_i(_sigmapts, i, _dim, pt);
-            get_row_i(_Weights, i, _dim, weights_i);
-            func_pt = function(pt);
+        // for (int i = 0; i < _num_sigmapoints; i++) {
+        //     get_row_i(_sigmapts, i, _dim, pt);
+        //     get_row_i(_Weights, i, _dim, weights_i);
+        //     func_pt = function(pt);
 
-            AMultiplyB(func_pt, weights_i, res_i, _dim);
-            matrix_addition(res_i, res, res, _dim);
-        }
+        //     AMultiplyB(func_pt, weights_i, res_i, m, _dim);
+        //     matrix_addition(res_i, res, res, _dim);
+        // }
         
         return res;
         
@@ -253,39 +262,19 @@ public:
 
         std::vector<double> result(_dim * _dim, 0.0);
         _sqrtP = result;
+
         SqrtEigenSolverMKL(_P, _sqrtP, _dim);
 
-        std::cout << "_P " << std::endl;
-        printMatrix_MKL(_P, _dim, _dim);
-
-        std::cout << "_sqrtP " << std::endl;
-        printMatrix_MKL(_sqrtP, _dim, _dim);
-
-        // if (_sqrtP.hasNaN()) {
-        //     Eigen::VectorXd eigenvalues = es.eigenvalues();
-        //     std::cout << "eigenvalues" << std::endl << eigenvalues << std::endl;
-        //     std::cerr << "Error: sqrt Covariance matrix contains NaN values." << std::endl;
-        //     // Handle the situation where _sqrtP contains NaN values
-        // }
+        // _sigmapts = (_zeromeanpts*_sqrtP.transpose()).rowwise() + _mean.transpose(); 
 
         std::vector<double> temp(_num_sigmapoints*_dim, 0.0);
+        
+        AMultiplyB(_zeromeanpts, _sqrtP, temp, _num_sigmapoints, _dim, _dim);
 
-        std::cout << "_mean " << std::endl;
-        printVector_MKL(_mean, _dim);
-
-        std::cout << "_zeromeanpts times _sqrtP.T" << std::endl;
-        AMultiplyBT(_zeromeanpts, _sqrtP, temp, _num_sigmapoints);
-
-        printMatrix_MKL(temp, _num_sigmapoints, _dim);
-
-        std::cout << "Add _mean to the rows " << std::endl;
         AddTransposeToRows(temp, _mean, _num_sigmapoints, _dim);
-
-        printMatrix_MKL(temp, _num_sigmapoints, _dim);
 
         std::cout << "Done updating sigma points" << std::endl;
 
-        // _sigmapts = (_zeromeanpts*_sqrtP.transpose()).rowwise() + _mean.transpose(); 
     }
 
     inline void update_P(const std::vector<double>& P){ 

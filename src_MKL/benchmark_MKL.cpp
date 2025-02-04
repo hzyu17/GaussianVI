@@ -187,7 +187,7 @@ static void SQRTM_EigenSolver_MKL(benchmark::State& state) {
 
   
   for (auto _ : state)    
-    AMultiplyBT(matrix, matrix, matrix_AAT, N);    
+    AMultiplyBT(matrix, matrix, matrix_AAT, N, N, N);    
     std::vector<double> result(N * N, 0.0);
     SqrtEigenSolverMKL(matrix_AAT, result, N);
 

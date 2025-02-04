@@ -32,7 +32,7 @@ std::vector<double> gx_1d_mkl(const std::vector<double>& x){
         precision[j*dim+j] = 10000;
     }
     std::vector<double> result(dim, 0.0);
-    ATMultiplyB(x, precision, result, dim);
+    ATMultiplyB(x, precision, result, dim, dim, dim);
 
     return result;
 }
