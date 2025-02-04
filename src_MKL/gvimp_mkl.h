@@ -77,9 +77,15 @@ void SqrtEigenSolverMKL(std::vector<double>& mkl_matrix, std::vector<double>& re
 }
 
 
-void squareMatrixMultiplication(const std::vector<double>& m1, const std::vector<double>& m2, std::vector<double>& result, const int N) {
+void squareMatrixMultiplication(const std::vector<double>& m1, const std::vector<double>& m2, std::vector<double>& result, const int rows, const int cols) {
     // Perform matrix multiplication using cblas_dgemm
-    cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, N, N, N, 1.0, m1.data(), N, m2.data(), N, 0.0, result.data(), N);
+    cblas_dgemm(CblasRowMajor, 
+                CblasNoTrans, CblasNoTrans, 
+                rows, cols, cols, 1.0, 
+                m1.data(), cols, 
+                m2.data(), cols, 
+                0.0, 
+                result.data(), cols);
 }
 
 void matrix_addition(const std::vector<double>& A, const std::vector<double>& B, std::vector<double>& C, int N) {

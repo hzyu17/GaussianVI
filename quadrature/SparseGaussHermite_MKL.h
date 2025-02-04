@@ -223,26 +223,26 @@ public:
     /**
      * @brief Compute the approximated integration using Gauss-Hermite.
      */
-    std::vector<double> Integrate(const Function_MKL& function, const int& m, const int& n){
+    std::vector<double> Integrate(const Function_MKL& function, const int& output_rows, const int& output_cols){
         
         // std::cout << "Starting Integration... " << std::endl;
-        std::vector<double> res(m*n, 0.0);
+        std::vector<double> res(output_rows*output_cols, 0.0);
 
         // Create a private copy of the res matrix for each thread
-        std::vector<double> private_res(m*n, 0.0);
+        std::vector<double> private_res(output_rows*output_cols, 0.0);
         std::vector<double> pt(_dim, 0.0);
         std::vector<double> func_pt(_dim, 0.0);
         std::vector<double> weights_i(1, 0.0);
         std::vector<double> res_i(_dim, 0.0);
 
-        // for (int i = 0; i < _num_sigmapoints; i++) {
-        //     get_row_i(_sigmapts, i, _dim, pt);
-        //     get_row_i(_Weights, i, _dim, weights_i);
-        //     func_pt = function(pt);
+        for (int i = 0; i < _num_sigmapoints; i++) {
+            get_row_i(_sigmapts, i, _dim, pt);
+            get_row_i(_Weights, i, _dim, weights_i);
+            func_pt = function(pt);
 
-        //     AMultiplyB(func_pt, weights_i, res_i, m, _dim);
-        //     matrix_addition(res_i, res, res, _dim);
-        // }
+            AMultiplyB(func_pt, weights_i, res_i, output_rows, output_cols, _dim);
+            matrix_addition(res_i, res, res, _dim);
+        }
         
         return res;
         
