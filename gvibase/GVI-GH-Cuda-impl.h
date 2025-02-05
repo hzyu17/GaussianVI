@@ -157,6 +157,14 @@ std::tuple<double, VectorXd, VectorXd, SpMat> GVIGH<Factor>::factor_cost_vector_
     nonlinear_fac_cost.setZero();
 
     SpMat joint_cov = inverse_GBP(joint_precision);
+    SpMat joint_cov_splash = chain_splash_GBP(joint_precision);
+
+    double norm_joint_cov = joint_cov.toDense().norm();
+    double norm_error = (joint_cov_splash - joint_cov).toDense().norm();
+
+    std::cout << "Norm of joint covariance: " << norm_joint_cov << std::endl;
+    std::cout << "Norm of error: " << norm_error << std::endl;
+    std::cout << "Error: " << norm_error / norm_joint_cov * 100 << "%" << std::endl;
 
     std::vector<MatrixXd> sigmapts_vec(n_nonlinear);
     std::vector<VectorXd> mean_vec(n_nonlinear);
@@ -204,8 +212,8 @@ std::tuple<double, VectorXd, VectorXd, SpMat> GVIGH<Factor>::factor_cost_vector_
         auto &opt_k = _vec_nonlinear_factors[i];
         covariance_matrix.block(0, i * sigma_cols, sigma_cols, sigma_cols) = joint_cov.block((i+1)*_dim_state, (i+1)*_dim_state, sigma_cols, sigma_cols);
     }
-    _vec_nonlinear_factors[0]->compute_sigmapts(fill_joint_mean, covariance_matrix, sigma_cols, n_nonlinear, sigma);
-    std::cout << "error of sigmapts: " << std::endl << (sigma-sigmapts_mat).norm() << std::endl;
+    // _vec_nonlinear_factors[0]->compute_sigmapts(fill_joint_mean, covariance_matrix, sigma_cols, n_nonlinear, sigma);
+    // std::cout << "error of sigmapts: " << std::endl << (sigma-sigmapts_mat).norm() << std::endl;
 
 
     int cnt = 0;
@@ -547,6 +555,7 @@ inline void GVIGH<Factor>::set_precision(const SpMat &new_precision)
     // // sparse inverse
     // inverse_inplace();
     _covariance = inverse_GBP(_precision);
+    // _covariance = chain_splash_GBP(_precision);
 
     #pragma omp parallel
     {
@@ -595,7 +604,7 @@ double GVIGH<Factor>::cost_value_cuda(const VectorXd& fill_joint_mean, SpMat& jo
     VectorXd nonlinear_fac_cost(n_nonlinear);
     nonlinear_fac_cost.setZero();
 
-    SpMat joint_cov = inverse_GBP(joint_precision);
+    SpMat joint_cov = chain_splash_GBP(joint_precision);
 
     std::vector<MatrixXd> sigmapts_vec(n_nonlinear);
     std::vector<VectorXd> mean_vec(n_nonlinear);
@@ -662,6 +671,290 @@ double GVIGH<Factor>::cost_value(const VectorXd &mean, SpMat &Precision)
 
     return value + vec_D.array().log().sum() / 2;
 }
+
+/**
+ * @brief Compute the covariances using Residual Splash based Gaussian Belief Propagation.
+ *
+ * This implementation initializes all messages to zero (for the second component only).
+ * Each message's residual is maintained as the maximum of the forward and backward residuals.
+ * In each iteration, the algorithm selects the node with the largest residual and updates a splash
+ * region centered at that node. The algorithm terminates when all residuals fall below the tolerance
+ * or the maximum number of iterations is reached.
+ */
+template <typename Factor>
+SpMat GVIGH<Factor>::residual_splash_GBP(const SpMat &Precision)
+{
+    std::vector<Message> factors(2 * _num_states - 1);
+    std::vector<Message> joint_factors(_num_states - 1);
+    Message variable_message;
+    MatrixXd covariance(_dim, _dim);
+    covariance.setZero();
+
+    // Construct factors: variable factors and edge factors; and joint factors for marginal computation
+    for (int i = 0; i < 2*_num_states-1; i++) {
+        int var = i / 2;
+        if (i % 2 == 0) {
+            VectorXd variable(1);
+            variable << var;
+            MatrixXd lambda = Precision.block(_dim_state * var, _dim_state * var, _dim_state, _dim_state);
+            factors[i] = {variable, lambda};
+        }
+        else {
+            VectorXd variable(2);
+            variable << var, var + 1;
+            MatrixXd lambda = MatrixXd::Zero(2 * _dim_state, 2 * _dim_state);
+            lambda.block(0, _dim_state, _dim_state, _dim_state) = Precision.block(_dim_state * var, _dim_state * (var + 1), _dim_state, _dim_state);
+            lambda.block(_dim_state, 0, _dim_state, _dim_state) = Precision.block(_dim_state * (var + 1), _dim_state * var, _dim_state, _dim_state);
+            factors[i] = {variable, lambda};
+            joint_factors[var] = {variable, Precision.block(_dim_state * var, _dim_state * var, 2 * _dim_state, 2 * _dim_state)};
+        }
+    }
+    
+    // Initialize messages and residuals
+    std::vector<Message> forward_messages(_num_states);
+    std::vector<Message> backward_messages(_num_states);
+    for (int i = 0; i < _num_states; i++) {
+        forward_messages[i].first = VectorXd::Constant(1, i);
+        forward_messages[i].second = MatrixXd::Zero(_dim_state, _dim_state);
+        backward_messages[i].first = VectorXd::Constant(1, i);
+        backward_messages[i].second = MatrixXd::Zero(_dim_state, _dim_state);
+    }
+    
+    // Initialize residuals to a large value to ensure initial updates.
+    const double INF = std::numeric_limits<double>::max();
+    std::vector<double> res(_num_states, INF);
+    
+    // Residual Splash Iterative Updates
+    // Parameters: tolerance, maximum iterations, splash region radius
+    const double tol = 1e-5;
+    const int max_iter = 100;
+    const int splash_radius = 7;
+    int iter = 0;
+    
+    while (iter < max_iter)
+    {
+        // Find the node with the maximum residual over all nodes
+        double max_residual = 0.0;
+        int max_index = 0;
+        for (int i = 0; i < _num_states; i++) {
+            if (res[i] > max_residual) {
+                max_residual = res[i];
+                max_index = i;
+            }
+        }
+        std::cout << "Iteration " << iter << ", max residual: " << max_residual << ", index = " << max_index << std::endl;
+        
+        // If the maximum residual is below tolerance, the algorithm has converged.
+        if (max_residual < tol){
+            std::cout << "Converged after " << iter << " iterations." << std::endl;
+            break;
+        }
+        
+        // Determine the splash region based on the max_index and splash_radius
+        int region_start = std::max(0, max_index - splash_radius);
+        int region_end   = std::min(_num_states - 1, max_index + splash_radius);
+        
+        // Save current messages in the splash region to compute residuals after updates
+        std::vector<MatrixXd> old_forward(region_end - region_start + 1);
+        std::vector<MatrixXd> old_backward(region_end - region_start + 1);
+        for (int i = region_start; i <= region_end; i++) {
+            old_forward[i - region_start] = forward_messages[i].second;
+            old_backward[i - region_start] = backward_messages[i].second;
+        }
+
+        // std::cout << "region center: " << max_index << ", region start: " << region_start << ", region end: " << region_end << std::endl;
+        
+        // Update messages in the splash region:
+        // Forward update: update forward messages from region_start to region_end
+        for (int i = region_start; i < region_end; i++) {
+            // Compute message from variable i to factor and then from factor to variable i+1
+            Message var_msg = calculate_variable_message(forward_messages[i], factors[2 * i]);
+            Message fac_msg = calculate_factor_message(var_msg, i + 1, factors[2 * i + 1]);
+            forward_messages[i + 1] = fac_msg;
+        }
+
+        // Backward update: update backward messages from region_end to region_start
+        for (int i = region_end; i > region_start; i--) {
+            Message var_msg = calculate_variable_message(backward_messages[i], factors[2 * i]);
+            Message fac_msg = calculate_factor_message(var_msg, i - 1, factors[2 * i - 1]);
+            backward_messages[i - 1] = fac_msg;
+        }
+        
+        // Recompute the residual for each node in the splash region as the maximum of the forward and backward residuals
+        for (int i = region_start; i <= region_end; i++) {
+            double diff_forward = (forward_messages[i].second - old_forward[i - region_start]).norm();
+            double diff_backward = (backward_messages[i].second - old_backward[i - region_start]).norm();
+            res[i] = std::max(diff_forward, diff_backward);
+            // std::cout << "residual[" << i << "]: " << res[i] << "  ";
+        }
+        // std::cout << std::endl;
+        
+        iter++;
+    }
+    
+    // Compute marginal covariance using the final messages
+    if (_num_states == 1) {
+        MatrixXd lambda = forward_messages[0].second + backward_messages[0].second + factors[0].second;
+        MatrixXd variance = lambda.inverse();
+        covariance.block(0, 0, _dim_state, _dim_state) = variance;
+    }
+    else {
+        for (int i = 0; i < _num_states - 1; ++i) {
+            MatrixXd lambda_joint = joint_factors[i].second;
+            lambda_joint.block(0, 0, _dim_state, _dim_state) += forward_messages[i].second;
+            lambda_joint.block(_dim_state, _dim_state, _dim_state, _dim_state) += backward_messages[i + 1].second;
+            MatrixXd variance_joint = lambda_joint.inverse();
+            covariance.block(i * _dim_state, i * _dim_state, 2 * _dim_state, 2 * _dim_state) = variance_joint;
+        }
+    }
+    
+    return covariance.sparseView();
+}
+
+
+// ChainSplash based Gaussian Belief Propagation with OpenMP parallelization.
+// The number of threads is chosen as approximately sqrt(_num_states).
+template <typename Factor>
+SpMat GVIGH<Factor>::chain_splash_GBP(const SpMat &Precision)
+{
+    std::vector<Message> factors(2*_num_states-1);
+    std::vector<Message> joint_factors(_num_states-1);
+    Message variable_message;
+    MatrixXd covariance(_dim, _dim);
+    covariance.setZero();
+
+    // Construct factors: variable factors and edge factors; and joint factors for marginal computation
+    for (int i = 0; i < 2*_num_states-1; i++) {
+        int var = i / 2;
+        if (i % 2 == 0) {
+            VectorXd variable(1);
+            variable << var;
+            MatrixXd lambda = Precision.block(_dim_state * var, _dim_state * var, _dim_state, _dim_state);
+            factors[i] = {variable, lambda};
+        }
+        else {
+            VectorXd variable(2);
+            variable << var, var + 1;
+            MatrixXd lambda = MatrixXd::Zero(2 * _dim_state, 2 * _dim_state);
+            lambda.block(0, _dim_state, _dim_state, _dim_state) = Precision.block(_dim_state * var, _dim_state * (var + 1), _dim_state, _dim_state);
+            lambda.block(_dim_state, 0, _dim_state, _dim_state) = Precision.block(_dim_state * (var + 1), _dim_state * var, _dim_state, _dim_state);
+            factors[i] = {variable, lambda};
+            joint_factors[var] = {variable, Precision.block(_dim_state * var, _dim_state * var, 2 * _dim_state, 2 * _dim_state)};
+        }
+    }
+    
+    // Initialize messages and residuals
+    std::vector<Message> forward_messages(_num_states);
+    std::vector<Message> backward_messages(_num_states);
+    for (int i = 0; i < _num_states; i++) {
+        forward_messages[i].first = VectorXd::Constant(1, i);
+        forward_messages[i].second = MatrixXd::Zero(_dim_state, _dim_state);
+        backward_messages[i].first = VectorXd::Constant(1, i);
+        backward_messages[i].second = MatrixXd::Zero(_dim_state, _dim_state);
+    }
+    
+    // ChainSplash Iterative Updates with Block Boundary Exchange and Convergence Check
+    const int max_iter = 100;  // maximum number of iterations
+    const double tol = 1e-5;   // convergence tolerance
+    // Set the number of threads approximately to sqrt(n)
+    int num_threads = static_cast<int>(std::sqrt(static_cast<double>(_num_states)));
+    // Partition the chain into blocks: block_size = ceil(n / num_threads)
+    int block_size = (_num_states + num_threads - 1) / num_threads;
+    
+    // std::cout << "ChainSplash: Using " << num_threads << " threads, block size = " << block_size << std::endl;
+    
+    // Containers to store previous iteration messages for residual computation.
+    std::vector<MatrixXd> old_forward(_num_states);
+    std::vector<MatrixXd> old_backward(_num_states);
+    
+    double global_residual = std::numeric_limits<double>::max();
+    for (int iter = 0; iter < max_iter; iter++) {
+        // Save current messages for residual computation.
+        for (int i = 0; i < _num_states; i++) {
+            old_forward[i] = forward_messages[i].second;
+            old_backward[i] = backward_messages[i].second;
+        }
+
+        #pragma omp parallel num_threads(num_threads) shared(forward_messages, backward_messages, factors)
+        {
+            // Each thread compute its own block（Assume thread b compute block [b * block_size, min((b+1)*block_size-1, _num_states-1)]）
+            int b = omp_get_thread_num();
+            int block_start = b * block_size;
+            int block_end = std::min(_num_states - 1, block_start + block_size - 1);
+
+            // --- Block internal forward update ---
+            for (int i = block_start; i < block_end; i++) {
+                Message var_msg = calculate_variable_message(forward_messages[i], factors[2 * i]);
+                Message fac_msg = calculate_factor_message(var_msg, i + 1, factors[2 * i + 1]);
+                forward_messages[i + 1] = fac_msg;
+            }
+            // --- Block internal backward update ---
+            for (int i = block_end; i > block_start; i--) {
+                Message var_msg = calculate_variable_message(backward_messages[i], factors[2 * i]);
+                Message fac_msg = calculate_factor_message(var_msg, i - 1, factors[2 * i - 1]);
+                backward_messages[i - 1] = fac_msg;
+            }
+
+            // --- Barrier: ensure all threads have finished block internal updates ---
+            #pragma omp barrier
+
+            if (b < num_threads - 1) {
+                int block_end_current = std::min(_num_states - 1, (b + 1) * block_size - 1);
+                int block_start_next = block_end_current + 1;
+                
+                // Forward message exchange: update the first message of the next block.
+                Message var_msg_fwd = calculate_variable_message(forward_messages[block_end_current], factors[2 * block_end_current]);
+                Message fac_msg_fwd = calculate_factor_message(var_msg_fwd, block_start_next, factors[2 * block_end_current + 1]);
+                forward_messages[block_start_next] = fac_msg_fwd;
+                
+                // Backward message exchange: update the last message of the current block.
+                Message var_msg_bwd = calculate_variable_message(backward_messages[block_start_next], factors[2 * block_start_next]);
+                Message fac_msg_bwd = calculate_factor_message(var_msg_bwd, block_end_current, factors[2 * block_start_next - 1]);
+                backward_messages[block_end_current] = fac_msg_bwd;
+            }
+            // Barrier: wait for all boundary exchanges to finish before leaving the parallel region.
+            #pragma omp barrier
+        } // end of parallel region
+
+        
+        // -------------------------------
+        // Compute global residual (max difference over all messages)
+        // -------------------------------
+        global_residual = 0.0;
+        for (int i = 0; i < _num_states; i++) {
+            double diff_forward = (forward_messages[i].second - old_forward[i]).norm();
+            double diff_backward = (backward_messages[i].second - old_backward[i]).norm();
+            double local_res = std::max(diff_forward, diff_backward);
+            if (local_res > global_residual)
+                global_residual = local_res;
+        }
+        
+        // std::cout << "Iteration " << iter << ", global residual = " << global_residual << std::endl;
+        if (global_residual < tol) {
+            // std::cout << "Converged after " << iter+1 << " iterations." << std::endl;
+            break;
+        }
+    } 
+    
+    // Compute marginal covariance using final messages
+    if (_num_states == 1) {
+        MatrixXd lambda = forward_messages[0].second + backward_messages[0].second + factors[0].second;
+        MatrixXd variance = lambda.inverse();
+        covariance.block(0, 0, _dim_state, _dim_state) = variance;
+    }
+    else {
+        for (int i = 0; i < _num_states - 1; ++i) {
+            MatrixXd lambda_joint = joint_factors[i].second;
+            lambda_joint.block(0, 0, _dim_state, _dim_state) += forward_messages[i].second;
+            lambda_joint.block(_dim_state, _dim_state, _dim_state, _dim_state) += backward_messages[i + 1].second;
+            MatrixXd variance_joint = lambda_joint.inverse();
+            covariance.block(i * _dim_state, i * _dim_state, 2 * _dim_state, 2 * _dim_state) = variance_joint;
+        }
+    }
+    
+    return covariance.sparseView();
+}
+
 
 
 /**

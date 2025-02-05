@@ -144,6 +144,10 @@ public:
      */
     SpMat inverse_GBP(const SpMat &Precision);
 
+    SpMat residual_splash_GBP(const SpMat &Precision);
+
+    SpMat chain_splash_GBP(const SpMat &Precision);
+
     /**
      * @brief Compute the message of factors in GBP.
      */
