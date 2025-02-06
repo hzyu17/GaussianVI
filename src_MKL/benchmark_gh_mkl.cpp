@@ -31,8 +31,11 @@ std::vector<double> gx_1d_mkl(const std::vector<double>& x){
     for (int j=0; j<dim; j++){
         precision[j*dim+j] = 10000;
     }
-    std::vector<double> result(dim, 0.0);
-    ATMultiplyB(x, precision, result, dim, dim, dim);
+    std::vector<double> temp(dim, 0.0);
+    ATMultiplyB(x, precision, temp, dim, 1, dim);
+
+    std::vector<double> result(1, 0.0);
+    AMultiplyB(temp, x, result, dim, 1, 1);
 
     return result;
 }
@@ -52,29 +55,30 @@ MatrixXd gx_3d(const VectorXd& x){
 using Function = std::function<MatrixXd(const VectorXd&)>;
 using Function_MKL = std::function<std::vector<double>(const std::vector<double>&)>;
 
-std::optional<std::shared_ptr<QuadratureWeightsMap>> weight_sigpts_map_option=std::nullopt;
-std::optional<std::shared_ptr<QuadratureWeightsMap_MKL>> weight_sigpts_map_option_mkl=std::nullopt;
 
 /**
  * @brief test the case where the cost function is 1 dimensional.
  */
 static void sparseGH(benchmark::State& state){
+    std::optional<std::shared_ptr<QuadratureWeightsMap>> weight_sigpts_map_option=std::nullopt;
     int dim = 4;
     VectorXd m = VectorXd::Zero(dim);
     MatrixXd P = MatrixXd::Identity(dim, dim)*0.0001;
     // GaussHermite<Function> gausshermite(3, dim, m, P);
-    SparseGaussHermite<Function> gausshermite_sp(3, dim, m, P, weight_sigpts_map_option);
+    SparseGaussHermite<Function> gausshermite_sp(2, dim, m, P, weight_sigpts_map_option);
 
     for (auto _ : state)
-        MatrixXd integral1_sp{gausshermite_sp.Integrate(gx_1d)};    
-        // MatrixXd integral_expected{MatrixXd::Constant(1, 1, 4.0)};
-        // std::cout << "SparseGH Integration value: " << std::endl << integral1_sp[0] << std::endl;
+    {
+        MatrixXd integral1_sp{gausshermite_sp.Integrate(gx_1d)};   
+        // std::cout << "SparseGH Integration value: " << std::endl << integral1_sp(0,0) << std::endl; 
+    }  
 
 }
 
 BENCHMARK(sparseGH);
 
 static void sparseGH_MKL(benchmark::State& state){
+    std::optional<std::shared_ptr<QuadratureWeightsMap_MKL>> weight_sigpts_map_option_mkl=std::nullopt;
     int dim = 4;
     std::vector<double> m_mkl(dim, 0.0);
     std::vector<double> P_mkl(dim*dim, 0.0);
@@ -82,16 +86,14 @@ static void sparseGH_MKL(benchmark::State& state){
         P_mkl[j*dim+j] = 0.0001;
     }
 
-    SparseGaussHermite_MKL<Function_MKL> gausshermite_mkl(3, dim, m_mkl, P_mkl, weight_sigpts_map_option_mkl);
-
-    std::cout << "GH MKL class created." << std::endl;
-
-    std::vector<double> integral1_sp_mkl(1, 0.0);
+    SparseGaussHermite_MKL<Function_MKL> gausshermite_mkl(2, dim, m_mkl, P_mkl, weight_sigpts_map_option_mkl);
     
-    for (auto _ : state)        
+    std::vector<double> integral1_sp_mkl(1, 0.0);
+    for (auto _ : state){
         integral1_sp_mkl = gausshermite_mkl.Integrate(gx_1d_mkl, 1, 1);
-        std::cout << "integration MKL: " << std::endl;
-        printMatrix_MKL(integral1_sp_mkl, 1, 1);
+    }
+    std::cout << "SparseGH Integration value: " << std::endl << integral1_sp_mkl[0] << std::endl; 
+    // printMatrix_MKL(integral1_sp_mkl, 1, 1);
 }
 
 BENCHMARK(sparseGH_MKL);

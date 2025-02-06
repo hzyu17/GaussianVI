@@ -88,14 +88,13 @@ void squareMatrixMultiplication(const std::vector<double>& m1, const std::vector
                 result.data(), cols);
 }
 
-void matrix_addition(const std::vector<double>& A, const std::vector<double>& B, std::vector<double>& C, int N) {
-    // Add matrix A and B and store the result in C
-    for (int i = 0; i < N; ++i) {
-        // Use cblas_daxpy to add B to A (C = A + B)
+void matrix_addition(const std::vector<double>& A, 
+                    std::vector<double>& B, 
+                    int NumElements) {
+    
+        // Use cblas_daxpy to add B to A (B = \alpha*A + B)
         // N is the number of elements, 1.0 is the scaling factor, B is added to A (no scaling)
-        cblas_daxpy(N * N, 1.0, B.data(), 1, C.data(), 1);
-        cblas_daxpy(N * N, 1.0, A.data(), 1, C.data(), 1);
-    }
+        cblas_daxpy(NumElements, 1.0, A.data(), 1, B.data(), 1);
 }
 
 void AMultiplyB(const std::vector<double>& m1, 
@@ -151,10 +150,12 @@ void AddTransposeToRows(std::vector<double>& A, const std::vector<double>& a, in
     }
 }
 
-void get_row_i(const std::vector<double>& matrix, const int& row_i, const int& N, std::vector<double>& result){
-    result = std::vector<double>(N, 0.0);
-    for (int j=0; j<N; j++){
-        result[j] = matrix[row_i*N + j];
+void get_row_i(const std::vector<double>& matrix, 
+                const int& row_i, 
+                const int& numCols, 
+                std::vector<double>& result){
+    for (int j=0; j<numCols; j++){
+        result[j] = matrix[row_i*numCols + j];
     }
 }
 

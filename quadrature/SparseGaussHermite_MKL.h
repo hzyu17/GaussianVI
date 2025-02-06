@@ -160,8 +160,6 @@ public:
      * @brief Compute the Sigma Pts
      */
     void computeSigmaPtsWeights(){
-        
-        std::cout << "Computing sigma points and weights" << std::endl;
         DimDegTuple dim_deg;
         dim_deg = std::make_tuple(_dim, _deg);;
 
@@ -180,18 +178,15 @@ public:
             //     std::cerr << "Eigenvalue decomposition failed!" << std::endl;
             //     return;
             // }
-            std::cout << "Computing sigma points and weights" << std::endl;
-
             update_sigmapoints();
-
-            std::cout << "Computing sigma points and weights" << std::endl;
 
         } else {
             std::cout << "(dimension, degree) " << "(" << _dim << ", " << _deg << ") " <<
              "key does not exist in the GH weight map." << std::endl;
         }
 
-        return ;
+        std::cout << "Finished ine initial computing of sigma points and weights." << std::endl;
+
     }
 
     /**
@@ -224,29 +219,89 @@ public:
      * @brief Compute the approximated integration using Gauss-Hermite.
      */
     std::vector<double> Integrate(const Function_MKL& function, const int& output_rows, const int& output_cols){
+       
+        // std::cout << "Starting Integration... " << std::endl;       
+        std::vector<double> integration_result(output_rows*output_cols, 0.0);
+        std::vector<std::vector<double>> row_results(_num_sigmapoints, std::vector<double>(output_rows*output_cols, 0.0));
         
-        // std::cout << "Starting Integration... " << std::endl;
-        std::vector<double> res(output_rows*output_cols, 0.0);
-
-        // Create a private copy of the res matrix for each thread
-        std::vector<double> private_res(output_rows*output_cols, 0.0);
-        std::vector<double> pt(_dim, 0.0);
-        std::vector<double> func_pt(_dim, 0.0);
-        std::vector<double> weights_i(1, 0.0);
-        std::vector<double> res_i(_dim, 0.0);
-
         for (int i = 0; i < _num_sigmapoints; i++) {
-            get_row_i(_sigmapts, i, _dim, pt);
-            get_row_i(_Weights, i, _dim, weights_i);
-            func_pt = function(pt);
 
-            AMultiplyB(func_pt, weights_i, res_i, output_rows, output_cols, _dim);
-            matrix_addition(res_i, res, res, _dim);
+            // std::cout << "------------- sigmapoint number " << i << " -----------------" << std::endl;
+
+            // std::cout << "integration_result: " << std::endl;
+            // for (double val : integration_result){
+            //     std::cout << val << std::endl;
+            // }
+            
+            std::vector<double> pt(_dim, 0.0);
+            get_row_i(_sigmapts, i, _dim, pt);
+            
+            double weight_i = _Weights[i];
+
+            std::vector<double> res_i = function(pt);
+            
+            // cblas_dscal(output_rows*output_cols, weight_i, res_i.data(), 1);
+
+            for (size_t j = 0; j < res_i.size(); ++j) {
+                res_i[j] = res_i[j]*weight_i;
+            }
+
+            row_results[i] = res_i;
+
+            // std::cout << "res_i: " << std::endl;
+            // for (double val : res_i){
+            //     std::cout << val << std::endl;
+            // }
+
+            // matrix_addition(res_i, integration_result, output_rows*output_cols);
+
+            // std::cout << "integration_result: " << std::endl;
+            // for (double val : integration_result){
+            //     std::cout << val << std::endl;
+            // }
+            
+        }
+
+        std::cout << "_num_sigmapoints " << std::endl << _num_sigmapoints << std::endl;
+        for (int i = 0; i < _num_sigmapoints; i++) {
+
+            // std::cout << "integration_result: " << std::endl;
+            // for (double val : integration_result){
+            //     std::cout << val << std::endl;
+            // }
+            
+            std::vector<double> pt(_dim, 0.0);
+            get_row_i(_sigmapts, i, _dim, pt);
+            
+            double weight_i = _Weights[i];
+
+            std::vector<double> res_i = function(pt);
+            
+            // cblas_dscal(output_rows*output_cols, weight_i, res_i.data(), 1);
+
+            for (size_t j = 0; j < res_i.size(); ++j) {
+                res_i[j] = res_i[j]*weight_i;
+            }
+
+            row_results[i] = res_i;
+
+            // std::cout << "pt " << std::endl;
+            // printVector_MKL(pt, _dim);
+            // std::cout << "_Weights(i) " << std::endl << _Weights[i] << std::endl;
+            // std::cout << "function(pt) " << std::endl << function(pt)[0] << std::endl;
+            
+        }
+
+        for (size_t ii = 0; ii<_num_sigmapoints; ++ii){
+            std::vector<double>res_i = row_results[ii];
+            for (size_t j = 0; j < integration_result.size(); ++j) {
+                integration_result[j] += res_i[j];
+            }
         }
         
-        return res;
+        return integration_result;
         
-    };
+    }
 
     /**
      * Update member variables
@@ -268,12 +323,11 @@ public:
         // _sigmapts = (_zeromeanpts*_sqrtP.transpose()).rowwise() + _mean.transpose(); 
 
         std::vector<double> temp(_num_sigmapoints*_dim, 0.0);
-        
-        AMultiplyB(_zeromeanpts, _sqrtP, temp, _num_sigmapoints, _dim, _dim);
+        _sigmapts = temp;
 
-        AddTransposeToRows(temp, _mean, _num_sigmapoints, _dim);
+        AMultiplyB(_zeromeanpts, _sqrtP, _sigmapts, _num_sigmapoints, _dim, _dim);
 
-        std::cout << "Done updating sigma points" << std::endl;
+        AddTransposeToRows(_sigmapts, _mean, _num_sigmapoints, _dim);
 
     }
 
