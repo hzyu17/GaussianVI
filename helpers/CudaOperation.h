@@ -424,7 +424,7 @@ public:
     virtual void Cuda_free() = 0;
 
     void zeromean_init(const MatrixXd& zeromean){
-      std::cout << "Row and Col of zeromean: " << zeromean.rows() << " " << zeromean.cols() << std::endl;
+      // std::cout << "Row and Col of zeromean: " << zeromean.rows() << " " << zeromean.cols() << std::endl;
       cudaMalloc(&_zeromean_gpu, zeromean.size() * sizeof(double));
       cudaMemcpy(_zeromean_gpu, zeromean.data(), zeromean.size() * sizeof(double), cudaMemcpyHostToDevice);
     }
@@ -471,21 +471,22 @@ public:
   int _sigmapts_rows, _dim_conf, _n_states;
   double *_weight_gpu, *_data_gpu, *_func_value_gpu, *_sigmapts_gpu, *_mu_gpu, *_zeromean_gpu;
 
-  double* covariance_gpu = nullptr;
-  double* mean_gpu = nullptr;
-  double* d_sigmapt_cuda = nullptr;  // size: _sigmapts_rows x (dim_conf * num_states)
+  double* covariance_gpu, *mean_gpu, *d_sigmapt_cuda;  // sigmapts size: _sigmapts_rows x (dim_conf * num_states)
 
   // Pre-allocated per-state resources
   std::vector<cudaStream_t> streams;
   std::vector<cusolverDnHandle_t> cusolver_handles;
   std::vector<cublasHandle_t> cublas_handles;
 
-  std::vector<double*> d_eigen_values_vec; // each: dim_conf
-  std::vector<int*>    d_info_vec;          // each: 1 int
-  std::vector<double*> d_work_vec;          // each: Lwork (query per state)
-  std::vector<int>     Lwork_vec;            // each: workspace size for eigen decomposition
-  std::vector<double*> d_V_scaled_vec;       // each: dim_conf x dim_conf
-  std::vector<double*> d_sqrtP_vec;          // each: dim_conf x dim_conf
+  std::vector<double*> d_eigen_values_vec;    // each: dim_conf
+  std::vector<int*>    d_info_vec;            // each: 1 int
+  std::vector<double*> d_work_vec;            // each: Lwork (query per state)
+  std::vector<int>     Lwork_vec;             // each: workspace size for eigen decomposition
+  std::vector<double*> d_V_scaled_vec;        // each: dim_conf x dim_conf
+  std::vector<double*> d_sqrtP_vec;           // each: dim_conf x dim_conf
+
+  cusolverDnHandle_t cusolver_handle; // cusolverDnHandle_t
+  cublasHandle_t cublas_handle;       // cublasHandle_t
 
 };
 

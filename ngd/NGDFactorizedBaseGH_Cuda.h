@@ -185,13 +185,13 @@ public:
     inline void cuda_init() override{
         _cuda -> Cuda_init(this -> _gh -> weights());
         _cuda -> zeromean_init(this -> _gh ->zeromeanpts());
-        // _cuda -> initializeSigmaptsResources(2, 48, 89);
+        _cuda -> initializeSigmaptsResources(2, 48, 89);
     }
 
     inline void cuda_free() override{
         _cuda -> Cuda_free();
         _cuda -> zeromean_free();
-        // _cuda -> freeSigmaptsResources(48);
+        _cuda -> freeSigmaptsResources(48);
     }
 
     inline bool linear_factor() override { return _isLinear; }
@@ -218,7 +218,7 @@ public:
         // MatrixXd eigen_value = es.eigenvalues();
         // std::cout << "Eigen values" << std::endl << eigen_value.transpose() << std::endl;
 
-        _cuda->update_sigmapts(covariance, mean, dim_conf, num_states, sigmapts);
+        _cuda->update_sigmapts_separate(covariance, mean, dim_conf, num_states, sigmapts);
         // std::cout << "Cholesky result" << std::endl << sqrtP << std::endl;
     }
 
