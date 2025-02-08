@@ -157,14 +157,14 @@ std::tuple<double, VectorXd, VectorXd, SpMat> GVIGH<Factor>::factor_cost_vector_
     nonlinear_fac_cost.setZero();
 
     SpMat joint_cov = inverse_GBP(joint_precision);
-    SpMat joint_cov_splash = chain_splash_GBP(joint_precision);
+    // SpMat joint_cov_splash = chain_splash_GBP(joint_precision);
 
-    double norm_joint_cov = joint_cov.toDense().norm();
-    double norm_error = (joint_cov_splash - joint_cov).toDense().norm();
+    // double norm_joint_cov = joint_cov.toDense().norm();
+    // double norm_error = (joint_cov_splash - joint_cov).toDense().norm();
 
-    std::cout << "Norm of joint covariance: " << norm_joint_cov << std::endl;
-    std::cout << "Norm of error: " << norm_error << std::endl;
-    std::cout << "Error: " << norm_error / norm_joint_cov * 100 << "%" << std::endl;
+    // std::cout << "Norm of joint covariance: " << norm_joint_cov << std::endl;
+    // std::cout << "Norm of error: " << norm_error << std::endl;
+    // std::cout << "Error: " << norm_error / norm_joint_cov * 100 << "%" << std::endl;
 
     std::vector<MatrixXd> sigmapts_vec(n_nonlinear);
     std::vector<VectorXd> mean_vec(n_nonlinear);
@@ -212,8 +212,8 @@ std::tuple<double, VectorXd, VectorXd, SpMat> GVIGH<Factor>::factor_cost_vector_
         auto &opt_k = _vec_nonlinear_factors[i];
         covariance_matrix.block(0, i * sigma_cols, sigma_cols, sigma_cols) = joint_cov.block((i+1)*_dim_state, (i+1)*_dim_state, sigma_cols, sigma_cols);
     }
-    // _vec_nonlinear_factors[0]->compute_sigmapts(fill_joint_mean, covariance_matrix, sigma_cols, n_nonlinear, sigma);
-    // std::cout << "error of sigmapts: " << std::endl << (sigma-sigmapts_mat).norm() << std::endl;
+    _vec_nonlinear_factors[0]->compute_sigmapts(fill_joint_mean, covariance_matrix, sigma_cols, n_nonlinear, sigma);
+    std::cout << "error of sigmapts: " << std::endl << (sigma-sigmapts_mat).norm() << std::endl;
 
 
     int cnt = 0;
@@ -604,7 +604,7 @@ double GVIGH<Factor>::cost_value_cuda(const VectorXd& fill_joint_mean, SpMat& jo
     VectorXd nonlinear_fac_cost(n_nonlinear);
     nonlinear_fac_cost.setZero();
 
-    SpMat joint_cov = chain_splash_GBP(joint_precision);
+    SpMat joint_cov = inverse_GBP(joint_precision);
 
     std::vector<MatrixXd> sigmapts_vec(n_nonlinear);
     std::vector<VectorXd> mean_vec(n_nonlinear);
@@ -822,6 +822,7 @@ SpMat GVIGH<Factor>::chain_splash_GBP(const SpMat &Precision)
     Message variable_message;
     MatrixXd covariance(_dim, _dim);
     covariance.setZero();
+    Timer timer;
 
     // Construct factors: variable factors and edge factors; and joint factors for marginal computation
     for (int i = 0; i < 2*_num_states-1; i++) {
@@ -846,95 +847,133 @@ SpMat GVIGH<Factor>::chain_splash_GBP(const SpMat &Precision)
     // Initialize messages and residuals
     std::vector<Message> forward_messages(_num_states);
     std::vector<Message> backward_messages(_num_states);
+
+    std::vector<Message> forward_messages_GBP(_num_states);
+    std::vector<Message> backward_messages_GBP(_num_states);
     for (int i = 0; i < _num_states; i++) {
         forward_messages[i].first = VectorXd::Constant(1, i);
         forward_messages[i].second = MatrixXd::Zero(_dim_state, _dim_state);
         backward_messages[i].first = VectorXd::Constant(1, i);
         backward_messages[i].second = MatrixXd::Zero(_dim_state, _dim_state);
+
+        forward_messages_GBP[i].first = VectorXd::Constant(1, i);
+        forward_messages_GBP[i].second = MatrixXd::Zero(_dim_state, _dim_state);
+        backward_messages_GBP[i].first = VectorXd::Constant(1, i);
+        backward_messages_GBP[i].second = MatrixXd::Zero(_dim_state, _dim_state);
     }
     
     // ChainSplash Iterative Updates with Block Boundary Exchange and Convergence Check
     const int max_iter = 100;  // maximum number of iterations
     const double tol = 1e-5;   // convergence tolerance
     // Set the number of threads approximately to sqrt(n)
-    int num_threads = static_cast<int>(std::sqrt(static_cast<double>(_num_states)));
+    int num_threads = 4;
     // Partition the chain into blocks: block_size = ceil(n / num_threads)
     int block_size = (_num_states + num_threads - 1) / num_threads;
-    
-    // std::cout << "ChainSplash: Using " << num_threads << " threads, block size = " << block_size << std::endl;
     
     // Containers to store previous iteration messages for residual computation.
     std::vector<MatrixXd> old_forward(_num_states);
     std::vector<MatrixXd> old_backward(_num_states);
-    
-    double global_residual = std::numeric_limits<double>::max();
-    for (int iter = 0; iter < max_iter; iter++) {
-        // Save current messages for residual computation.
-        for (int i = 0; i < _num_states; i++) {
-            old_forward[i] = forward_messages[i].second;
-            old_backward[i] = backward_messages[i].second;
-        }
+    std::vector<double> residuals(_num_states, 0.0);
+    double global_residual;
+    bool converged = false;
 
-        #pragma omp parallel num_threads(num_threads) shared(forward_messages, backward_messages, factors)
-        {
-            // Each thread compute its own block（Assume thread b compute block [b * block_size, min((b+1)*block_size-1, _num_states-1)]）
+    timer.start();
+
+    // Begin a single parallel region for all iterations.
+    #pragma omp parallel num_threads(num_threads) \
+        shared(forward_messages, backward_messages, factors, old_forward, old_backward, residuals, global_residual, converged)
+    {
+        int iter = 0;
+        while (iter < max_iter && !converged) {
+            // --- Save current messages for residual computation in parallel ---
+            #pragma omp for
+            for (int i = 0; i < _num_states; i++) {
+                old_forward[i] = forward_messages[i].second;
+                old_backward[i] = backward_messages[i].second;
+            }
+            #pragma omp barrier  // Ensure all threads see the saved messages
+
+            // --- Each thread processes its assigned block ---
             int b = omp_get_thread_num();
             int block_start = b * block_size;
             int block_end = std::min(_num_states - 1, block_start + block_size - 1);
 
-            // --- Block internal forward update ---
+            // Block internal forward update
             for (int i = block_start; i < block_end; i++) {
                 Message var_msg = calculate_variable_message(forward_messages[i], factors[2 * i]);
                 Message fac_msg = calculate_factor_message(var_msg, i + 1, factors[2 * i + 1]);
                 forward_messages[i + 1] = fac_msg;
             }
-            // --- Block internal backward update ---
+            // Block internal backward update
             for (int i = block_end; i > block_start; i--) {
                 Message var_msg = calculate_variable_message(backward_messages[i], factors[2 * i]);
                 Message fac_msg = calculate_factor_message(var_msg, i - 1, factors[2 * i - 1]);
                 backward_messages[i - 1] = fac_msg;
             }
 
-            // --- Barrier: ensure all threads have finished block internal updates ---
-            #pragma omp barrier
-
+            // --- Boundary exchange ---
+            // Each thread updates the right boundary if not the last block.
             if (b < num_threads - 1) {
-                int block_end_current = std::min(_num_states - 1, (b + 1) * block_size - 1);
-                int block_start_next = block_end_current + 1;
-                
-                // Forward message exchange: update the first message of the next block.
-                Message var_msg_fwd = calculate_variable_message(forward_messages[block_end_current], factors[2 * block_end_current]);
-                Message fac_msg_fwd = calculate_factor_message(var_msg_fwd, block_start_next, factors[2 * block_end_current + 1]);
-                forward_messages[block_start_next] = fac_msg_fwd;
-                
-                // Backward message exchange: update the last message of the current block.
-                Message var_msg_bwd = calculate_variable_message(backward_messages[block_start_next], factors[2 * block_start_next]);
-                Message fac_msg_bwd = calculate_factor_message(var_msg_bwd, block_end_current, factors[2 * block_start_next - 1]);
-                backward_messages[block_end_current] = fac_msg_bwd;
+                Message var_msg_fwd = calculate_variable_message(forward_messages[block_end], factors[2 * block_end]);
+                Message fac_msg_fwd = calculate_factor_message(var_msg_fwd, block_end + 1, factors[2 * block_end + 1]);
+                forward_messages[block_end + 1] = fac_msg_fwd;
             }
-            // Barrier: wait for all boundary exchanges to finish before leaving the parallel region.
-            #pragma omp barrier
-        } // end of parallel region
+            // Each thread updates the left boundary if not the first block.
+            if (b > 0) {
+                Message var_msg_bwd = calculate_variable_message(backward_messages[block_start], factors[2 * block_start]);
+                Message fac_msg_bwd = calculate_factor_message(var_msg_bwd, block_start - 1, factors[2 * block_start - 1]);
+                backward_messages[block_start - 1] = fac_msg_bwd;
+            }
+            #pragma omp barrier  // Ensure all block internal updates and boundary exchanges are completed
 
-        
-        // -------------------------------
-        // Compute global residual (max difference over all messages)
-        // -------------------------------
-        global_residual = 0.0;
-        for (int i = 0; i < _num_states; i++) {
-            double diff_forward = (forward_messages[i].second - old_forward[i]).norm();
-            double diff_backward = (backward_messages[i].second - old_backward[i]).norm();
-            double local_res = std::max(diff_forward, diff_backward);
-            if (local_res > global_residual)
-                global_residual = local_res;
+            // --- Compute global residual in parallel ---
+            #pragma omp for
+            for (int i = 0; i < _num_states; i++) {
+                double diff_forward = (forward_messages[i].second - old_forward[i]).norm();
+                double diff_backward = (backward_messages[i].second - old_backward[i]).norm();
+                residuals[i] = std::max(diff_forward, diff_backward);
+            }
+            #pragma omp barrier  // Ensure all residuals are computed
+
+            // Compute maximum residual (single thread)
+            #pragma omp single
+            {
+                global_residual = 0.0;
+                for (int i = 0; i < _num_states; i++) {
+                    global_residual = std::max(global_residual, residuals[i]);
+                }
+                if (global_residual < tol) {
+                    std::cout << "Converged after " << iter+1 << " iterations, residual = " << global_residual << std::endl;
+                    converged = true;
+                }
+            }
+            #pragma omp barrier  // Ensure all threads see the updated global_residual and converged flag
+
+            iter++;
         }
-        
-        // std::cout << "Iteration " << iter << ", global residual = " << global_residual << std::endl;
-        if (global_residual < tol) {
-            // std::cout << "Converged after " << iter+1 << " iterations." << std::endl;
-            break;
-        }
-    } 
+    } // end parallel region
+
+    std::cout << "ChainSplash: " << timer.end_mis() << " ms" << std::endl;
+    timer.start();
+
+    // Calculate messages between factors and variables
+    for (int i = 0; i < _num_states - 1; i++) {
+        variable_message = calculate_variable_message(forward_messages_GBP[i], factors[2 * i]);
+        forward_messages_GBP[i + 1] = calculate_factor_message(variable_message, i + 1, factors[2 * i + 1]);
+        int index = _num_states - 1 - i;
+        variable_message = calculate_variable_message(backward_messages_GBP[index], factors[2 * index]);
+        backward_messages_GBP[index - 1] = calculate_factor_message(variable_message, index - 1, factors[2 * index - 1]);
+    }
+    std::cout << "GBP: " << timer.end_mis() << " ms" << std::endl;
+
+    // std::vector<double> forward_messages_error(_num_states);
+    // std::vector<double> backward_messages_error(_num_states);
+    // for (int i = 0; i < _num_states; i++) {
+    //     forward_messages_error[i] = (forward_messages[i].second - forward_messages_GBP[i].second).norm();
+    //     backward_messages_error[i] = (backward_messages[i].second - backward_messages_GBP[i].second).norm();
+    // }
+    // std::cout << "Sum of forward message errors: " << std::accumulate(forward_messages_error.begin(), forward_messages_error.end(), 0.0) << std::endl;
+    // std::cout << "Sum of backward message errors: " << std::accumulate(backward_messages_error.begin(), backward_messages_error.end(), 0.0) << std::endl;
     
     // Compute marginal covariance using final messages
     if (_num_states == 1) {
