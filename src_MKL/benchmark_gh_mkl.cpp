@@ -78,21 +78,21 @@ static void sparseGH(benchmark::State& state){
 BENCHMARK(sparseGH);
 
 static void sparseGH_MKL(benchmark::State& state){
-    std::optional<std::shared_ptr<QuadratureWeightsMap_MKL>> weight_sigpts_map_option_mkl=std::nullopt;
+    
     int dim = 4;
     std::vector<double> m_mkl(dim, 0.0);
     std::vector<double> P_mkl(dim*dim, 0.0);
     for (int j=0; j<dim; j++){
         P_mkl[j*dim+j] = 0.0001;
     }
-
-    SparseGaussHermite_MKL<Function_MKL> gausshermite_mkl(2, dim, m_mkl, P_mkl, weight_sigpts_map_option_mkl);
     
-    std::vector<double> integral1_sp_mkl(1, 0.0);
+    // std::vector<double> integral1_sp_mkl(1, 0.0);
     for (auto _ : state){
-        integral1_sp_mkl = gausshermite_mkl.Integrate(gx_1d_mkl, 1, 1);
+        std::optional<std::shared_ptr<QuadratureWeightsMap_MKL>> weight_sigpts_map_option_mkl=std::nullopt;
+        SparseGaussHermite_MKL<Function_MKL> gausshermite_mkl(2, dim, m_mkl, P_mkl, weight_sigpts_map_option_mkl);
+        std::vector<double> integral1_sp_mkl = gausshermite_mkl.Integrate(gx_1d_mkl, 1, 1);
+        std::cout << "SparseGH MKL Integration value: " << std::endl << integral1_sp_mkl[0] << std::endl; 
     }
-    std::cout << "SparseGH Integration value: " << std::endl << integral1_sp_mkl[0] << std::endl; 
     // printMatrix_MKL(integral1_sp_mkl, 1, 1);
 }
 
