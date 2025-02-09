@@ -1,4 +1,3 @@
 build/*
 .vscode/*
-quadrature/SparseGHQuadratureWeights.bin
 **/**.bin

@@ -31,11 +31,13 @@ std::vector<double> gx_1d_mkl(const std::vector<double>& x){
     for (int j=0; j<dim; j++){
         precision[j*dim+j] = 10000;
     }
+
+    
     std::vector<double> temp(dim, 0.0);
-    ATMultiplyB(x, precision, temp, dim, 1, dim);
+    AMultiplyB(precision, x, temp, dim, dim, 1);
 
     std::vector<double> result(1, 0.0);
-    AMultiplyB(temp, x, result, dim, 1, 1);
+    ATMultiplyB(x, temp, result, dim, 1, 1);
 
     return result;
 }
@@ -62,15 +64,14 @@ using Function_MKL = std::function<std::vector<double>(const std::vector<double>
 static void sparseGH(benchmark::State& state){
     std::optional<std::shared_ptr<QuadratureWeightsMap>> weight_sigpts_map_option=std::nullopt;
     int dim = 4;
+    
     VectorXd m = VectorXd::Zero(dim);
     MatrixXd P = MatrixXd::Identity(dim, dim)*0.0001;
-    // GaussHermite<Function> gausshermite(3, dim, m, P);
+    
     SparseGaussHermite<Function> gausshermite_sp(2, dim, m, P, weight_sigpts_map_option);
-
     for (auto _ : state)
-    {
+    {   
         MatrixXd integral1_sp{gausshermite_sp.Integrate(gx_1d)};   
-        // std::cout << "SparseGH Integration value: " << std::endl << integral1_sp(0,0) << std::endl; 
     }  
 
 }
@@ -86,17 +87,15 @@ static void sparseGH_MKL(benchmark::State& state){
         P_mkl[j*dim+j] = 0.0001;
     }
     
-    // std::vector<double> integral1_sp_mkl(1, 0.0);
+    std::optional<std::shared_ptr<QuadratureWeightsMap_MKL>> weight_sigpts_map_option_mkl=std::nullopt;
+    SparseGaussHermite_MKL<Function_MKL> gausshermite_mkl(2, dim, m_mkl, P_mkl, weight_sigpts_map_option_mkl);
+    
     for (auto _ : state){
-        std::optional<std::shared_ptr<QuadratureWeightsMap_MKL>> weight_sigpts_map_option_mkl=std::nullopt;
-        SparseGaussHermite_MKL<Function_MKL> gausshermite_mkl(2, dim, m_mkl, P_mkl, weight_sigpts_map_option_mkl);
-        std::vector<double> integral1_sp_mkl = gausshermite_mkl.Integrate(gx_1d_mkl, 1, 1);
-        std::cout << "SparseGH MKL Integration value: " << std::endl << integral1_sp_mkl[0] << std::endl; 
+        std::vector<double> integral1_sp_mkl{gausshermite_mkl.Integrate(gx_1d_mkl, 1, 1)};
     }
-    // printMatrix_MKL(integral1_sp_mkl, 1, 1);
 }
 
-BENCHMARK(sparseGH_MKL);
+// BENCHMARK(sparseGH_MKL);
 
 BENCHMARK_MAIN();
 

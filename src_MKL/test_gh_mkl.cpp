@@ -90,10 +90,21 @@ void sparseGH(){
     int dim = 4;
     VectorXd m = VectorXd::Zero(dim);
     MatrixXd P = MatrixXd::Identity(dim, dim)*0.0001;
-    // GaussHermite<Function> gausshermite(3, dim, m, P);
+
     SparseGaussHermite<Function> gausshermite_sp(2, dim, m, P, weight_sigpts_map_option);
 
-    MatrixXd integral1_sp{gausshermite_sp.Integrate(gx_1d)};   
+    MatrixXd integral1_sp(1,1);
+
+    Timer timer;
+    timer.start();
+   
+    for (int j_iter=0; j_iter<10000; j_iter++){
+        integral1_sp = gausshermite_sp.Integrate(gx_1d);   
+    }
+    
+    std::cout << "========== Integration 1D time ===========" << std::endl;
+    timer.end_mus();
+    
     std::cout << "SparseGH Integration value, 1D: " << std::endl << integral1_sp(0,0) << std::endl; 
 
 }
@@ -110,9 +121,17 @@ void sparseGH_MKL(){
     SparseGaussHermite_MKL<Function_MKL> gausshermite_mkl(2, dim, m_mkl, P_mkl, weight_sigpts_map_option_mkl);
     
     std::vector<double> integral1_sp_mkl(1, 0.0);
-    integral1_sp_mkl = gausshermite_mkl.Integrate(gx_1d_mkl, 1, 1);
+    Timer timer;
+    timer.start();
+    for (int j_iter=0; j_iter<10000; j_iter++){
+        integral1_sp_mkl = gausshermite_mkl.Integrate(gx_1d_mkl, 1, 1);
+    }
+    std::cout << "========== Integration 1D MKL time ===========" << std::endl;
+    timer.end_mus();
+
+    
     std::cout << "SparseGH MKL Integration value, 1D: " << std::endl << integral1_sp_mkl[0] << std::endl; 
-    // printMatrix_MKL(integral1_sp_mkl, 1, 1);
+
 }
 
 /**
@@ -123,10 +142,20 @@ void sparseGH_2D(){
     int dim = 4;
     VectorXd m = VectorXd::Zero(dim);
     MatrixXd P = MatrixXd::Identity(dim, dim)*0.0001;
-    // GaussHermite<Function> gausshermite(3, dim, m, P);
+
     SparseGaussHermite<Function> gausshermite_sp(2, dim, m, P, weight_sigpts_map_option);
 
-    MatrixXd integral1_sp{gausshermite_sp.Integrate(gx_2d)};   
+    MatrixXd integral1_sp(2,1);
+
+    Timer timer;
+    timer.start();
+    
+    for (int j_iter=0; j_iter<10000; j_iter++){
+        integral1_sp = gausshermite_sp.Integrate(gx_2d);   
+    }
+    std::cout << "========== Integration 2D time ===========" << std::endl;
+    timer.end_mus();
+
     std::cout << "SparseGH Integration value, 2D: " << std::endl << integral1_sp << std::endl; 
 
 }
@@ -144,8 +173,17 @@ void sparseGH_MKL_2D(){
     
     int output_rows = 2;
     int output_cols = 1;
-    std::vector<double> integral1_sp_mkl(output_rows, 0.0);
-    integral1_sp_mkl = gausshermite_mkl.Integrate(gx_2d_mkl, output_rows, output_cols);
+    std::vector<double> integral1_sp_mkl(output_rows*output_cols, 0.0);
+
+    Timer timer;
+    timer.start();
+    for (int j_iter=0; j_iter<10000; j_iter++){
+        integral1_sp_mkl = gausshermite_mkl.Integrate(gx_2d_mkl, output_rows, output_cols);
+    }
+    std::cout << "========== Integration 2D MKL time ===========" << std::endl;
+    timer.end_mus();
+
+    
     std::cout << "SparseGH MKL Integration value, 2D: " << std::endl; 
     printMatrix_MKL(integral1_sp_mkl, output_rows, output_cols);
 }
@@ -159,12 +197,22 @@ void sparseGH_3D(){
     int dim = 3;
     VectorXd m = VectorXd::Zero(dim);
     MatrixXd P = MatrixXd::Identity(dim, dim)*0.0001;
-    // GaussHermite<Function> gausshermite(3, dim, m, P);
 
     int gh_deg = 2;
     SparseGaussHermite<Function> gausshermite_sp(gh_deg, dim, m, P, weight_sigpts_map_option);
 
-    MatrixXd integral1_sp{gausshermite_sp.Integrate(gx_3d)};   
+    MatrixXd integral1_sp(3,3);
+
+    Timer timer;
+    timer.start();
+    for (int j_iter=0; j_iter<10000; j_iter++){
+        integral1_sp = gausshermite_sp.Integrate(gx_3d);  
+    }
+
+    std::cout << "========== Integration 3D time ===========" << std::endl;
+    timer.end_mus();
+
+     
     std::cout << "SparseGH Integration value, 3D: " << std::endl << integral1_sp << std::endl; 
 
 }
@@ -184,10 +232,21 @@ void sparseGH_MKL_3D(){
     
     int output_rows = 3;
     int output_cols = 3;
-    std::vector<double> integral1_sp_mkl(output_rows, 0.0);
-    integral1_sp_mkl = gausshermite_mkl.Integrate(gx_3d_mkl, output_rows, output_cols);
+    std::vector<double> integral1_sp_mkl(output_rows*output_cols, 0.0);
+
+    Timer timer;
+    timer.start();
+    for (int j_iter=0; j_iter<10000; j_iter++){
+        integral1_sp_mkl = gausshermite_mkl.Integrate(gx_3d_mkl, output_rows, output_cols);
+    }
+
+    std::cout << "========== Integration 3D MKL time ===========" << std::endl;
+    timer.end_mus();
+
+    
     std::cout << "SparseGH MKL Integration value, 3D: " << std::endl; 
     printMatrix_MKL(integral1_sp_mkl, output_rows, output_cols);
+
 }
 
 

@@ -20,7 +20,7 @@ namespace gvi{
 template <typename Function>
 class SparseGaussHermite{
 
-    using GHFunction = std::function<MatrixXd(const VectorXd&)>;
+    // using GHFunction = std::function<MatrixXd(const VectorXd&)>;
     // using CostFunction = std::function<double(const VectorXd&, const CostClass &)>;
 
 public:
@@ -46,6 +46,7 @@ public:
             _mean(mean),
             _P(P)
             {  
+                std::cout << "Opening file for GH weights reading in file: " + map_file << std::endl;
                 // If input has a loaded map
                 if (weight_sigpts_map_option.has_value()){
                     _nodes_weights_map = std::make_shared<QuadratureWeightsMap>(weight_sigpts_map_option.value());

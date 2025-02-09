@@ -17,6 +17,8 @@
 #include "helpers/CommonDefinitions.h"
 #include "src_MKL/gvimp_mkl.h"
 
+#include "helpers/timer.h"
+
 
 // #ifdef GVI_SUBDUR_ENV 
 // std::string map_file{source_root+"/GaussianVI/quadrature/SparseGHQuadratureWeights_cereal.bin"};
@@ -37,6 +39,8 @@ class SparseGaussHermite_MKL{
 
 public:
 
+    virtual ~SparseGaussHermite_MKL(){}
+
     /**
      * @brief Constructor
      * 
@@ -45,44 +49,44 @@ public:
      * @param mean mean 
      * @param P covariance matrix
      */
-    // SparseGaussHermite_MKL(
-    //     int deg, 
-    //     int dim, 
-    //     const std::vector<double>& mean, 
-    //     const std::vector<double>& P): 
-    //         _deg(deg),
-    //         _dim(dim),
-    //         _mean(mean),
-    //         _P(P)
-    //         {  
-    //             // If input has a loaded map
-    //             if (weight_sigpts_map_option.has_value()){
-    //                 _nodes_weights_map = std::make_shared<QuadratureWeightsMap_MKL>(weight_sigpts_map_option.value());
-    //             }
-    //             // Read map from file
-    //             else{
-    //                 QuadratureWeightsMap_MKL nodes_weights_map;
-    //                 try {
-    //                     std::ifstream ifs(map_file, std::ios::binary);
-    //                     if (!ifs.is_open()) {
-    //                         std::string error_msg = "Failed to open file for GH weights reading in file: " + map_file;
-    //                         throw std::runtime_error(error_msg);
-    //                     }
+    SparseGaussHermite_MKL(
+        int deg, 
+        int dim, 
+        const std::vector<double>& mean, 
+        const std::vector<double>& P,
+        std::optional<QuadratureWeightsMap> weight_sigpts_map_option=std::nullopt): 
+            _deg(deg),
+            _dim(dim),
+            _mean(mean),
+            _P(P){  
+                // If input has a loaded map
+                if (weight_sigpts_map_option.has_value()){
+                    _nodes_weights_map = std::make_shared<QuadratureWeightsMap_MKL>(weight_sigpts_map_option.value());
+                }
+                // Read map from file
+                else{
+                    QuadratureWeightsMap_MKL nodes_weights_map;
+                    try {
+                        std::ifstream ifs(map_file, std::ios::binary);
+                        if (!ifs.is_open()) {
+                            std::string error_msg = "Failed to open file for GH weights reading in file: " + map_file;
+                            throw std::runtime_error(error_msg);
+                        }
 
-    //                     // Use cereal for deserialization
-    //                     cereal::BinaryInputArchive archive(ifs);
-    //                     archive(nodes_weights_map);
+                        // Use cereal for deserialization
+                        cereal::BinaryInputArchive archive(ifs);
+                        archive(nodes_weights_map);
 
-    //                 } catch (const std::exception& e) {
-    //                     std::cerr << "Standard exception: " << e.what() << std::endl;
-    //                 }
+                    } catch (const std::exception& e) {
+                        std::cerr << "Standard exception: " << e.what() << std::endl;
+                    }
 
-    //                 _nodes_weights_map = std::make_shared<QuadratureWeightsMap_MKL>(nodes_weights_map);
+                    _nodes_weights_map = std::make_shared<QuadratureWeightsMap_MKL>(nodes_weights_map);
 
-    //             }
+                }
                 
-    //             computeSigmaPtsWeights();
-    //         }
+                computeSigmaPtsWeights();
+            }
 
     SparseGaussHermite_MKL(
         const int& deg, 
@@ -108,12 +112,13 @@ public:
                 else{
                     QuadratureWeightsMap_MKL nodes_weights_map;
                     try {
+                        std::cout << "Opening file for GH weights reading in file: " + map_mkl_file << std::endl;
                         std::ifstream ifs(map_mkl_file, std::ios::binary);
                         if (!ifs.is_open()) {
                             std::string error_msg = "Failed to open file for GH weights reading in file: " + map_mkl_file;
                             throw std::runtime_error(error_msg);
                         }
-                        std::cout << "Opening file for GH weights reading in file: " + map_mkl_file << std::endl;
+                        
                         // Use cereal for deserialization
                         cereal::BinaryInputArchive archive(ifs);
                         archive(nodes_weights_map);
@@ -123,13 +128,6 @@ public:
                     }
 
                     _nodes_weights_map = std::make_shared<QuadratureWeightsMap_MKL>(nodes_weights_map);
-
-                    // // Print out all the keys in the weight map
-                    // std::cout << "Keys in the quadrature weight map:" << std::endl;
-                    // for (const auto& entry : nodes_weights_map) {
-                    //     const DimDegTuple& key = entry.first; // Extract the key
-                    //     std::cout << "dim: " << std::get<0>(key) << ", deg: " << std::get<1>(key) << std::endl;
-                    // }
 
                 }
                 
@@ -172,12 +170,6 @@ public:
 
             _num_sigmapoints = _zeromeanpts.size() / _dim;
             
-            // // Eigenvalue decomposition
-            // Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> eigensolver(_P);
-            // if (eigensolver.info() != Eigen::Success) {
-            //     std::cerr << "Eigenvalue decomposition failed!" << std::endl;
-            //     return;
-            // }
             update_sigmapoints();
 
         } else {
@@ -185,7 +177,7 @@ public:
              "key does not exist in the GH weight map." << std::endl;
         }
 
-        std::cout << "Finished ine initial computing of sigma points and weights." << std::endl;
+        std::cout << "Finished the computing of sigma points and weights." << std::endl;
 
     }
 
@@ -226,13 +218,6 @@ public:
         
         for (int i = 0; i < _num_sigmapoints; i++) {
 
-            // std::cout << "------------- sigmapoint number " << i << " -----------------" << std::endl;
-
-            // std::cout << "integration_result: " << std::endl;
-            // for (double val : integration_result){
-            //     std::cout << val << std::endl;
-            // }
-            
             std::vector<double> pt(_dim, 0.0);
             get_row_i(_sigmapts, i, _dim, pt);
             
@@ -240,36 +225,16 @@ public:
 
             std::vector<double> res_i = function(pt);
             
-            // cblas_dscal(output_rows*output_cols, weight_i, res_i.data(), 1);
-
             for (size_t j = 0; j < res_i.size(); ++j) {
                 res_i[j] = res_i[j]*weight_i;
             }
 
             row_results[i] = res_i;
 
-            // std::cout << "res_i: " << std::endl;
-            // for (double val : res_i){
-            //     std::cout << val << std::endl;
-            // }
-
-            // matrix_addition(res_i, integration_result, output_rows*output_cols);
-
-            // std::cout << "integration_result: " << std::endl;
-            // for (double val : integration_result){
-            //     std::cout << val << std::endl;
-            // }
-            
         }
 
-        std::cout << "_num_sigmapoints " << std::endl << _num_sigmapoints << std::endl;
         for (int i = 0; i < _num_sigmapoints; i++) {
 
-            // std::cout << "integration_result: " << std::endl;
-            // for (double val : integration_result){
-            //     std::cout << val << std::endl;
-            // }
-            
             std::vector<double> pt(_dim, 0.0);
             get_row_i(_sigmapts, i, _dim, pt);
             
@@ -277,19 +242,12 @@ public:
 
             std::vector<double> res_i = function(pt);
             
-            // cblas_dscal(output_rows*output_cols, weight_i, res_i.data(), 1);
 
             for (size_t j = 0; j < res_i.size(); ++j) {
                 res_i[j] = res_i[j]*weight_i;
             }
 
             row_results[i] = res_i;
-
-            // std::cout << "pt " << std::endl;
-            // printVector_MKL(pt, _dim);
-            // std::cout << "_Weights(i) " << std::endl << _Weights[i] << std::endl;
-            // std::cout << "function(pt) " << std::endl << function(pt)[0] << std::endl;
-            
         }
 
         for (size_t ii = 0; ii<_num_sigmapoints; ++ii){
