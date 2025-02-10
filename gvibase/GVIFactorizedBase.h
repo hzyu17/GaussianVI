@@ -137,6 +137,12 @@ public:
      */
     virtual void compute_BW_grads(){}
 
+    /**
+     * @brief Place holder for proximal GVI algorithm line search.
+     * 
+     */
+    virtual std::tuple<Eigen::VectorXd, Eigen::MatrixXd> compute_gradients_linesearch(const double & step_size){}
+
     // /**
     //  * @brief Compute the cost function. V(x) = E_q(\phi(x)) using the current values.
     //  */

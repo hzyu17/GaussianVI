@@ -15,5 +15,7 @@ using DimDegTuple = std::tuple<double, double>;
 using PointsWeightsTuple = std::tuple<Eigen::MatrixXd, Eigen::VectorXd>;
 using QuadratureWeightsMap = std::unordered_map<DimDegTuple, PointsWeightsTuple>;
 
+using PointsWeightsTuple_MKL = std::tuple<std::vector<double>, std::vector<double>>;
+using QuadratureWeightsMap_MKL = std::unordered_map<DimDegTuple, PointsWeightsTuple_MKL>;
 
 }

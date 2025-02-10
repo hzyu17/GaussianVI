@@ -16,22 +16,18 @@
 #include "quadrature/SparseGHQuadratureWeights.h"
 #include "helpers/CommonDefinitions.h"
 
-#ifdef GVI_SUBDUR_ENV 
-std::string map_file{source_root+"/GaussianVI/quadrature/SparseGHQuadratureWeights_cereal.bin"};
-#else
-std::string map_file{source_root+"/quadrature/SparseGHQuadratureWeights_cereal.bin"};
-#endif
-
 namespace gvi{
 template <typename Function>
 class SparseGaussHermite{
 
-    using GHFunction = std::function<MatrixXd(const VectorXd&)>;
+    // using GHFunction = std::function<MatrixXd(const VectorXd&)>;
     // using CostFunction = std::function<double(const VectorXd&, const CostClass &)>;
 
 public:
 
-    /**
+    virtual ~SparseGaussHermite(){}
+
+    /** 
      * @brief Constructor
      * 
      * @param deg degree of GH polynomial
@@ -50,6 +46,7 @@ public:
             _mean(mean),
             _P(P)
             {  
+                std::cout << "Opening file for GH weights reading in file: " + map_file << std::endl;
                 // If input has a loaded map
                 if (weight_sigpts_map_option.has_value()){
                     _nodes_weights_map = std::make_shared<QuadratureWeightsMap>(weight_sigpts_map_option.value());
@@ -58,6 +55,7 @@ public:
                 else{
                     QuadratureWeightsMap nodes_weights_map;
                     try {
+                        std::cout << "Opening file for GH weights reading in file: " + map_file << std::endl;
                         std::ifstream ifs(map_file, std::ios::binary);
                         if (!ifs.is_open()) {
                             std::string error_msg = "Failed to open file for GH weights reading in file: " + map_file;
@@ -181,8 +179,8 @@ public:
             
             pts_weights = weights_map.at(dim_deg);
 
-            _zeromeanpts = std::move(std::get<0>(pts_weights));
-            _Weights = std::move(std::get<1>(pts_weights));
+            _zeromeanpts = std::get<0>(pts_weights);
+            _Weights = std::get<1>(pts_weights);
 
             update_sigmapoints();
         } else {
@@ -208,11 +206,11 @@ public:
             Eigen::VectorXd pt(_dim);
 
             #pragma omp for nowait  // The 'nowait' clause can be used if there is no need for synchronization after the loop
+
             for (int i = 0; i < _sigmapts.rows(); i++) {
                 pt = _sigmapts.row(i);
                 private_res += function(pt) * _Weights(i);
             }
-
             // Use a critical section to sum up results from all threads
             #pragma omp critical
             res += private_res;
@@ -226,13 +224,13 @@ public:
      * Update member variables
      * */
     inline void update_mean(const Eigen::VectorXd& mean){ 
-        _mean = std::move(mean); 
+        _mean = mean; 
         
     }
 
     inline void update_sigmapoints(){
         Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> es(_P);
-        _sqrtP = std::move(es.operatorSqrt());
+        _sqrtP = es.operatorSqrt();
 
         if (_sqrtP.hasNaN()) {
             Eigen::VectorXd eigenvalues = es.eigenvalues();
@@ -241,7 +239,7 @@ public:
             // Handle the situation where _sqrtP contains NaN values
         }
 
-        _sigmapts = std::move((_zeromeanpts*_sqrtP.transpose()).rowwise() + _mean.transpose()); 
+        _sigmapts = (_zeromeanpts*_sqrtP.transpose()).rowwise() + _mean.transpose(); 
     }
 
     inline void update_P(const Eigen::MatrixXd& P){ 
@@ -261,8 +259,8 @@ public:
     inline void update_parameters(const int& deg, const int& dim, const Eigen::VectorXd& mean, const Eigen::MatrixXd& P){ 
         _deg = deg;
         _dim = dim;
-        _mean = std::move(mean);
-        _P = std::move(P);
+        _mean = mean;
+        _P = P;
 
         // Timer timer;
         // timer.start();

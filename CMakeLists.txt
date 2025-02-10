@@ -3,7 +3,6 @@ cmake_minimum_required(VERSION 3.0)
 enable_testing()
 project(GaussianVI CXX C CUDA)
 set(CMAKE_CXX_STANDARD 17)
-
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -w -O3")
 
 set(gvi_subdirs 
@@ -63,6 +62,7 @@ find_package(MKL REQUIRED)
 find_package(benchmark REQUIRED)
 # add_subdirectory(benchmark)
 
+
 # Cereal
 set(CEREAL_INCLUDE_DIR "${CMAKE_SOURCE_DIR}/include/cereal/include")
 include_directories(${CEREAL_INCLUDE_DIR})
@@ -98,7 +98,8 @@ foreach(gvi_source ${gvi_SOURCES})
     set_target_properties(${gvi_name} PROPERTIES
                             RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/src"
                             )   
-    target_link_libraries(${gvi_name} ${EIGEN3_LIBRARIES} ${Matlab_MEX_LIBRARY} ${CUDA_LIBRARIES} OpenMP::OpenMP_CXX 
+    target_link_libraries(${gvi_name} ${EIGEN3_LIBRARIES} ${Matlab_MEX_LIBRARY} 
+                            ${CUDA_LIBRARIES} OpenMP::OpenMP_CXX MKL::MKL ${MKL_LIBRARIES}
                         #   ${Matlab_MX_LIBRARY} 
                           ${libSpGH_LIBRARY} ${MCR_LIBRARY_PATH}/libmwmclmcrrt.so.9.9)
     target_include_directories(${gvi_name} PRIVATE ${Matlab_INCLUDE_DIRS})

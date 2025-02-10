@@ -58,19 +58,19 @@ void calculate_partial_V(std::optional<double> step_size=std::nullopt) override{
         this->_Vddmu.setZero();
 
         /// Integrate for E_q{_Vdmu} 
-        this->_Vdmu = std::move(this->_gh->Integrate(this->_func_Vmu));
-        this->_Vdmu = std::move(this->_precision * this->_Vdmu);
-        this->_Vdmu = std::move(this->_Vdmu / this->temperature());
+        this->_Vdmu = this->_gh->Integrate(this->_func_Vmu);
+        this->_Vdmu = this->_precision * this->_Vdmu;
+        this->_Vdmu = this->_Vdmu / this->temperature();
 
         /// Integrate for E_q{phi(x)}
-        double E_phi = std::move(this->_gh->Integrate(this->_func_phi)(0, 0));
+        double E_phi = this->_gh->Integrate(this->_func_phi)(0, 0);
         
         /// Integrate for partial V^2 / ddmu_ 
-        MatrixXd E_xxphi = std::move(this->_gh->Integrate(this->_func_Vmumu));
+        MatrixXd E_xxphi{this->_gh->Integrate(this->_func_Vmumu)};
 
-        this->_Vddmu.triangularView<Upper>() = std::move((this->_precision * E_xxphi * this->_precision - this->_precision * E_phi).triangularView<Upper>());
-        this->_Vddmu.triangularView<StrictlyLower>() = std::move(this->_Vddmu.triangularView<StrictlyUpper>().transpose());
-        this->_Vddmu = std::move(this->_Vddmu / this->temperature());
+        this->_Vddmu.triangularView<Upper>() = (this->_precision * E_xxphi * this->_precision - this->_precision * E_phi).triangularView<Upper>();
+        this->_Vddmu.triangularView<StrictlyLower>() = this->_Vddmu.triangularView<StrictlyUpper>().transpose();
+        this->_Vddmu = this->_Vddmu / this->temperature();
     }
     
 

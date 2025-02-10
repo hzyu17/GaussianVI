@@ -17,7 +17,7 @@
 #include <utility>
 #include <memory>
 
-#include "gvibase/GVI-GH.h"
+#include "gvibase/GVI-GH-GBP.h"
 
 using namespace Eigen;
 namespace gvi{

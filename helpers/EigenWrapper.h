@@ -256,14 +256,12 @@ public:
     }
 
     
-
-    using vec_1d = std::vector<double>;
-    using vec_2d = std::vector<vec_1d>;
+    using vec_2d = std::vector<std::vector<double>>;
 
     vec_2d eigen_to_vector(const Eigen::MatrixXd& mat){
         vec_2d vec(mat.rows());
         for (int i=0; i<mat.rows(); i++){
-            vec_1d row_i(mat.cols());
+            std::vector<double> row_i(mat.cols());
             for (int j=0; j<mat.cols(); j++){
                 row_i[j] = mat.coeffRef(i, j);
             }
