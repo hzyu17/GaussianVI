@@ -142,7 +142,7 @@ void AMultiplyBTPlusC(const std::vector<double>& m1, const std::vector<double>& 
 }
 
 void AddTransposeToRows(std::vector<double>& A, const std::vector<double>& a, int numRows, int numCols) {
-    // Loop over each row of A
+    #pragma omp parallel for
     for (int i = 0; i < numRows; ++i) {
         // Use cblas_daxpy to add a to the i-th row of A
         // A[i*N + j] is the element at row i, column j in A
@@ -154,9 +154,10 @@ void get_row_i(const std::vector<double>& matrix,
                 const int& row_i, 
                 const int& numCols, 
                 std::vector<double>& result){
-    for (int j=0; j<numCols; j++){
-        result[j] = matrix[row_i*numCols + j];
-    }
+    // Copy elements from the row row_i of 'matrix' into 'result'.
+    std::copy(matrix.begin() + row_i * numCols, 
+              matrix.begin() + (row_i + 1) * numCols,
+              result.begin());
 }
 
 void LLTDecomposition(std::vector<double>& matrix_L, const int& N){
@@ -170,9 +171,11 @@ void LLTDecomposition(std::vector<double>& matrix_L, const int& N){
 
     // Make the upper triangular part of L to be zero
     for (int i = 0; i < N; ++i) {
-        for (int j = i + 1; j < N; ++j) {
-            matrix_L[i * N + j] = 0.0;
-        }
+        // Zero out the elements above the diagonal in the i-th row.
+        // The lower triangular part is at indices i+1 to N-1 of the i-th row.
+        std::fill(matrix_L.begin() + i * N + i + 1,
+                  matrix_L.begin() + i * N + N,
+                  0.0);
     }
 }
 

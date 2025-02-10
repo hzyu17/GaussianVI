@@ -19,13 +19,14 @@ using namespace Eigen;
 using namespace gvi;
 
 /// integrands used for testing
-MatrixXd gx_1d(const VectorXd& x){
+inline MatrixXd gx_1d(const VectorXd& x){
     int dim = x.rows();
     MatrixXd precision = MatrixXd::Identity(dim, dim)*10000;
     return MatrixXd::Constant(1, 1, x.transpose() * precision * x);
 }
 
-std::vector<double> gx_1d_mkl(const std::vector<double>& x){
+
+inline std::vector<double> gx_1d_mkl(const std::vector<double>& x){
     int dim = x.size();
     std::vector<double> precision(dim*dim, 0.0);
     for (int j=0; j<dim; j++){
@@ -42,14 +43,14 @@ std::vector<double> gx_1d_mkl(const std::vector<double>& x){
     return result;
 }
 
-MatrixXd gx_2d(const VectorXd& x){
+inline MatrixXd gx_2d(const VectorXd& x){
     MatrixXd res(2, 1);
     res.setZero();
     res << 3*x(0)*x(0), 2*x(1)*x(1);
     return MatrixXd{res};
 }
 
-std::vector<double> gx_2d_mkl(const std::vector<double>& x){
+inline std::vector<double> gx_2d_mkl(const std::vector<double>& x){
     
     std::vector<double> result(2, 0.0);
     result[0] = 3*x[0]*x[0];
@@ -58,23 +59,24 @@ std::vector<double> gx_2d_mkl(const std::vector<double>& x){
     return result;
 }
 
-MatrixXd gx_3d(const VectorXd& x){
+inline MatrixXd gx_3d(const VectorXd& x){
     return MatrixXd{0.5*x*x.transpose().eval()};
 }
 
-std::vector<double> gx_3d_mkl(const std::vector<double>& x){
+inline std::vector<double> gx_3d_mkl(const std::vector<double>& x) {
     int dim = x.size();
-    std::vector<double> x1(dim, 0.0);
 
-    for (int i=0; i<dim; i++){
-        x1[i] = 0.5*x[i];
-    }
+    // Copy x into x1 and use MKL's cblas_dscal to scale by 0.5
+    std::vector<double> x1 = x;  
+    cblas_dscal(dim, 0.5, x1.data(), 1);  // Scales x1 in place
 
-    std::vector<double> result(dim*dim, 0.0);
+    // Allocate result vector to hold the (dim x dim) output
+    std::vector<double> result(dim * dim, 0.0);
+
+    // Call your matrix multiplication function
     AMultiplyBT(x, x1, result, dim, 1, dim);
 
     return result;
-
 }
 
 
@@ -251,13 +253,13 @@ void sparseGH_MKL_3D(){
 
 
 int main(){
-    sparseGH();
+    // sparseGH();
     sparseGH_MKL();
 
-    sparseGH_2D();
+    // sparseGH_2D();
     sparseGH_MKL_2D();
 
-    sparseGH_3D();
+    // sparseGH_3D();
     sparseGH_MKL_3D();
 
     return 0;

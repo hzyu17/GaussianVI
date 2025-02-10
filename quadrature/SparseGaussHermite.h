@@ -205,31 +205,16 @@ public:
             Eigen::MatrixXd private_res = Eigen::MatrixXd::Zero(res.rows(), res.cols());
             Eigen::VectorXd pt(_dim);
 
-            // std::cout << "_sigmapts.rows() " << std::endl << _sigmapts.rows() << std::endl;
-
             #pragma omp for nowait  // The 'nowait' clause can be used if there is no need for synchronization after the loop
 
             for (int i = 0; i < _sigmapts.rows(); i++) {
                 pt = _sigmapts.row(i);
-                // std::cout << "pt " << std::endl << pt << std::endl;
-                // std::cout << "_Weights(i) " << std::endl << _Weights(i) << std::endl;
-                // std::cout << "function(pt) " << std::endl << function(pt) << std::endl;
-
                 private_res += function(pt) * _Weights(i);
             }
             // Use a critical section to sum up results from all threads
             #pragma omp critical
             res += private_res;
         }
-
-        // Eigen::VectorXd pt(_dim);
-        // for (int i = 0; i < _sigmapts.rows(); i++) {
-        //     std::cout << "----------- i= " << i << "--------------" << std::endl;
-        //     pt = _sigmapts.row(i);
-        //     std::cout << "pt " << std::endl << pt << std::endl;
-        //     std::cout << "_Weights(i) " << std::endl << _Weights(i) << std::endl;
-        //     std::cout << "function(pt) " << std::endl << function(pt) << std::endl;
-        // }
         
         return res;
         

@@ -16,7 +16,7 @@
 #include "quadrature/SparseGHQuadratureWeights.h"
 #include "helpers/CommonDefinitions.h"
 #include "src_MKL/gvimp_mkl.h"
-
+#include <omp.h>
 #include "helpers/timer.h"
 
 
@@ -28,16 +28,11 @@
 
 namespace gvi{
 
-// using Function_MKL = std::function<std::vector<double>(const std::vector<double>&)>;
-
 template <typename Function_MKL>
 class SparseGaussHermite_MKL{
-
-    // using GHFunction = std::function<std::vector<double>(const std::vector<double>&)>;
-    // using GHFunction = std::function<MatrixXd(const VectorXd&)>;
-    // using CostFunction = std::function<double(const VectorXd&, const CostClass &)>;
-
 public:
+
+    using FunctionType = std::function<std::vector<double>(const std::vector<double>&)>;
 
     virtual ~SparseGaussHermite_MKL(){}
 
@@ -112,15 +107,11 @@ public:
                 else{
                     QuadratureWeightsMap_MKL nodes_weights_map;
                     try {
-                        std::cout << "Opening file for GH weights reading in file: " + map_mkl_file << std::endl;
-                        std::ifstream ifs(map_mkl_file, std::ios::binary);
-                        if (!ifs.is_open()) {
-                            std::string error_msg = "Failed to open file for GH weights reading in file: " + map_mkl_file;
-                            throw std::runtime_error(error_msg);
-                        }
+
+                        auto buffer = readFileToBuffer(map_mkl_file);
+                        std::istringstream iss(std::string(buffer.data(), buffer.size()));
+                        cereal::BinaryInputArchive archive(iss);
                         
-                        // Use cereal for deserialization
-                        cereal::BinaryInputArchive archive(ifs);
                         archive(nodes_weights_map);
 
                     } catch (const std::exception& e) {
@@ -177,7 +168,7 @@ public:
              "key does not exist in the GH weight map." << std::endl;
         }
 
-        std::cout << "Finished the computing of sigma points and weights." << std::endl;
+        // std::cout << "Finished the computing of sigma points and weights." << std::endl;
 
     }
 
@@ -210,53 +201,33 @@ public:
     /**
      * @brief Compute the approximated integration using Gauss-Hermite.
      */
-    std::vector<double> Integrate(const Function_MKL& function, const int& output_rows, const int& output_cols){
+    std::vector<double> Integrate(const Function_MKL& function, 
+                                    const int& output_rows, 
+                                    const int& output_cols){
        
-        // std::cout << "Starting Integration... " << std::endl;       
-        std::vector<double> integration_result(output_rows*output_cols, 0.0);
-        std::vector<std::vector<double>> row_results(_num_sigmapoints, std::vector<double>(output_rows*output_cols, 0.0));
+        // std::cout << "Starting Integration... " << std::endl; 
+        int size = output_rows*output_cols;
+        std::vector<double> integration_result(size, 0.0);
         
-        for (int i = 0; i < _num_sigmapoints; i++) {
-
-            std::vector<double> pt(_dim, 0.0);
-            get_row_i(_sigmapts, i, _dim, pt);
-            
-            double weight_i = _Weights[i];
-
-            std::vector<double> res_i = function(pt);
-            
-            for (size_t j = 0; j < res_i.size(); ++j) {
-                res_i[j] = res_i[j]*weight_i;
-            }
-
-            row_results[i] = res_i;
-
-        }
+        std::vector<double> pt(_dim, 0.0);
+        std::vector<double> res_i(size, 0.0);
+        double weight_i(0.0);
 
         for (int i = 0; i < _num_sigmapoints; i++) {
-
-            std::vector<double> pt(_dim, 0.0);
+            
             get_row_i(_sigmapts, i, _dim, pt);
             
-            double weight_i = _Weights[i];
+            weight_i = _Weights[i];
 
-            std::vector<double> res_i = function(pt);
+            res_i = function(pt);
             
-
-            for (size_t j = 0; j < res_i.size(); ++j) {
+            for (size_t j = 0; j < size; ++j) {
                 res_i[j] = res_i[j]*weight_i;
-            }
-
-            row_results[i] = res_i;
-        }
-
-        for (size_t ii = 0; ii<_num_sigmapoints; ++ii){
-            std::vector<double>res_i = row_results[ii];
-            for (size_t j = 0; j < integration_result.size(); ++j) {
                 integration_result[j] += res_i[j];
             }
+
         }
-        
+
         return integration_result;
         
     }
@@ -287,6 +258,21 @@ public:
 
         AddTransposeToRows(_sigmapts, _mean, _num_sigmapoints, _dim);
 
+    }
+
+    std::vector<char> readFileToBuffer(const std::string& filename) {
+        std::ifstream ifs(filename, std::ios::binary | std::ios::ate);
+        if (!ifs.is_open()) {
+            throw std::runtime_error("Failed to open file: " + filename);
+        }
+        std::streamsize fileSize = ifs.tellg();
+        ifs.seekg(0, std::ios::beg);
+        
+        std::vector<char> buffer(fileSize);
+        if (!ifs.read(buffer.data(), fileSize)) {
+            throw std::runtime_error("Failed to read file: " + filename);
+        }
+        return buffer;
     }
 
     inline void update_P(const std::vector<double>& P){ 
@@ -334,6 +320,8 @@ protected:
     std::vector<double> _sigmapts, _zeromeanpts;
 
     std::shared_ptr<QuadratureWeightsMap_MKL> _nodes_weights_map;
+
+    FunctionType m_function;
     
 };
 
