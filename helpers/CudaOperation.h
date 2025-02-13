@@ -12,6 +12,11 @@
 #include <math.h>
 #include <cusolverDn.h>
 #include <cublas_v2.h>
+#include <cusolverSp.h>
+#include <cusparse_v2.h>
+#include "helpers/timer.h"
+#include <magma_v2.h>
+#include <magma_lapack.h>
 
 #include <gpmp2/obstacle/SignedDistanceField.h>
 #include <gpmp2/kinematics/ArmModel.h>
@@ -419,32 +424,61 @@ public:
     CudaOperation_Base(double cost_sigma, double epsilon, double radius = 1):
     _sigma(cost_sigma), _epsilon(epsilon), _radius(radius){}
 
-    virtual void Cuda_init(const Eigen::MatrixXd& weights) = 0;
+    virtual void Cuda_init(const MatrixXd& weights, const MatrixXd& zeromean, const int n_states) = 0;
 
     virtual void Cuda_free() = 0;
 
-    void zeromean_init(const MatrixXd& zeromean){
-      // std::cout << "Row and Col of zeromean: " << zeromean.rows() << " " << zeromean.cols() << std::endl;
+    void GH_parameters_init(const MatrixXd& weights, const MatrixXd& zeromean, const int n_states){
+      _sigmapts_rows = zeromean.rows();
+      _dim_conf = zeromean.cols();
+      _n_states = n_states;
+
+      cudaMalloc(&_weight_gpu, weights.size() * sizeof(double));
       cudaMalloc(&_zeromean_gpu, zeromean.size() * sizeof(double));
+      cudaMalloc(&_sigmapts_gpu, _sigmapts_rows * _dim_conf * _n_states * sizeof(double));
+      cudaMalloc(&_func_value_gpu, _sigmapts_rows * _n_states * sizeof(double));
+
+      cudaMemcpy(_weight_gpu, weights.data(), weights.size() * sizeof(double), cudaMemcpyHostToDevice);
       cudaMemcpy(_zeromean_gpu, zeromean.data(), zeromean.size() * sizeof(double), cudaMemcpyHostToDevice);
+
+      cusolverDnCreate(&_cusolverH);
+      cublasCreate(&_cublasH);
+      cusolverDnCreateSyevjInfo(&_syevj_params);
     }
 
-    void zeromean_free(){
+    void GH_parameters_free(){
+      cudaFree(_weight_gpu);
       cudaFree(_zeromean_gpu);
+      cudaFree(_sigmapts_gpu);
+      cudaFree(_func_value_gpu);
+
+      cusolverDnDestroySyevjInfo(_syevj_params);
+      cusolverDnDestroy(_cusolverH);
+      // cublasDestroy(_cublasH);
     }
+    
 
     void Cuda_init_iter(const MatrixXd& sigmapts, VectorXd& results, const int sigmapts_cols){
-      _sigmapts_rows = sigmapts.rows();
-      _dim_conf = sigmapts_cols;
-      _n_states = results.size();
+      // Allocate the space at first to avoid multiple mallocs
+      
+      // _sigmapts_rows = sigmapts.rows();
+      // _dim_conf = sigmapts_cols;
+      // _n_states = results.size();
 
-      cudaMalloc(&_sigmapts_gpu, sigmapts.size() * sizeof(double));
-      cudaMalloc(&_func_value_gpu, _sigmapts_rows * _n_states * sizeof(double));
+      // cudaMalloc(&_sigmapts_gpu, sigmapts.size() * sizeof(double));
+      // cudaMalloc(&_func_value_gpu, _sigmapts_rows * _n_states * sizeof(double));
+
+      // Timer timer;
+      // timer.start();
+      // cudaMemset(_func_value_gpu, 0, _sigmapts_rows * _n_states * sizeof(double));
+      // std::cout << "Time for setting sigmapts zero: " << timer.end_mus_output() << " us" << std::endl;
+
+      cudaMemcpy(_sigmapts_gpu, sigmapts.data(), sigmapts.size() * sizeof(double), cudaMemcpyHostToDevice);
     }
 
     void Cuda_free_iter(){
-      cudaFree(_sigmapts_gpu);
-      cudaFree(_func_value_gpu); 
+      // cudaFree(_sigmapts_gpu);
+      // cudaFree(_func_value_gpu); 
     }
 
     void update_sigmapts(const MatrixXd& covariance, const MatrixXd& mean, int dim_state, int num_states, MatrixXd& sigmapts);
@@ -463,12 +497,12 @@ public:
 
     void freeSigmaptsResources(int num_states);
 
-
+    void update_sigmapts_magma_batched(const MatrixXd& covariance, const MatrixXd& mean, int dim_conf, int num_states, MatrixXd& sigmapts);
 
   double _epsilon, _radius, _sigma;
   SDFType _sdf; // define sdf in the derived class
 
-  int _sigmapts_rows, _dim_conf, _n_states;
+  int _sigmapts_rows, _dim_conf, _n_states, num_streams;
   double *_weight_gpu, *_data_gpu, *_func_value_gpu, *_sigmapts_gpu, *_mu_gpu, *_zeromean_gpu;
 
   double* covariance_gpu, *mean_gpu, *d_sigmapt_cuda;  // sigmapts size: _sigmapts_rows x (dim_conf * num_states)
@@ -485,8 +519,9 @@ public:
   std::vector<double*> d_V_scaled_vec;        // each: dim_conf x dim_conf
   std::vector<double*> d_sqrtP_vec;           // each: dim_conf x dim_conf
 
-  cusolverDnHandle_t cusolver_handle; // cusolverDnHandle_t
-  cublasHandle_t cublas_handle;       // cublasHandle_t
+  cusolverDnHandle_t _cusolverH = nullptr;
+  cublasHandle_t _cublasH = nullptr;
+  syevjInfo_t _syevj_params = nullptr;
 
 };
 
@@ -508,20 +543,20 @@ public:
         _sdf = PlanarSDF{origin, cell_size, field};
     }
 
-    void Cuda_init(const MatrixXd& weights){
-      cudaMalloc(&_weight_gpu, weights.size() * sizeof(double));
+    void Cuda_init(const MatrixXd& weights, const MatrixXd& zeromean, const int n_states) override{
       cudaMalloc(&_data_gpu, _sdf.data_.size() * sizeof(double));
       cudaMalloc(&_class_gpu, sizeof(CudaOperation_PlanarPR));
 
-      cudaMemcpy(_weight_gpu, weights.data(), weights.size() * sizeof(double), cudaMemcpyHostToDevice);
       cudaMemcpy(_data_gpu, _sdf.data_.data(), _sdf.data_.size() * sizeof(double), cudaMemcpyHostToDevice);
       cudaMemcpy(_class_gpu, this, sizeof(CudaOperation_PlanarPR), cudaMemcpyHostToDevice);
+
+      GH_parameters_init(weights, zeromean, n_states);
     }
 
     void Cuda_free(){
-      cudaFree(_weight_gpu);
       cudaFree(_data_gpu);
       cudaFree(_class_gpu);
+      GH_parameters_free();
     }
 
     void CudaIntegration(const MatrixXd& sigmapts, const MatrixXd& weights, MatrixXd& results, const MatrixXd& mean, int type);
@@ -582,20 +617,20 @@ public:
         _sdf = PlanarSDF{origin, cell_size, field};
     }
 
-    void Cuda_init(const MatrixXd& weights) override{
-      cudaMalloc(&_weight_gpu, weights.size() * sizeof(double));
+    void Cuda_init(const MatrixXd& weights, const MatrixXd& zeromean, const int n_states) override{
       cudaMalloc(&_data_gpu, _sdf.data_.size() * sizeof(double));
       cudaMalloc(&_class_gpu, sizeof(CudaOperation_Quad));
 
-      cudaMemcpy(_weight_gpu, weights.data(), weights.size() * sizeof(double), cudaMemcpyHostToDevice);
       cudaMemcpy(_data_gpu, _sdf.data_.data(), _sdf.data_.size() * sizeof(double), cudaMemcpyHostToDevice);
       cudaMemcpy(_class_gpu, this, sizeof(CudaOperation_Quad), cudaMemcpyHostToDevice);
+
+      GH_parameters_init(weights, zeromean, n_states);
     }
 
     void Cuda_free() override{
-      cudaFree(_weight_gpu);
       cudaFree(_data_gpu);
       cudaFree(_class_gpu);
+      GH_parameters_free();
     }
 
     void CudaIntegration(const MatrixXd& sigmapts, const MatrixXd& weights, MatrixXd& results, const MatrixXd& mean, int type);
@@ -658,20 +693,20 @@ public:
         _sdf.loadSDF(sdf_file);
     }
 
-    void Cuda_init(const MatrixXd& weights){
-      cudaMalloc(&_weight_gpu, weights.size() * sizeof(double));
+    void Cuda_init(const MatrixXd& weights, const MatrixXd& zeromean, const int n_states) override{
       cudaMalloc(&_data_gpu, _sdf.data_matrix_.size() * sizeof(double));
       cudaMalloc(&_class_gpu, sizeof(CudaOperation_3dpR));
 
-      cudaMemcpy(_weight_gpu, weights.data(), weights.size() * sizeof(double), cudaMemcpyHostToDevice);
       cudaMemcpy(_class_gpu, this, sizeof(CudaOperation_3dpR), cudaMemcpyHostToDevice);
       cudaMemcpy(_data_gpu, _sdf.data_matrix_.data(), _sdf.data_matrix_.size() * sizeof(double), cudaMemcpyHostToDevice);
+
+      GH_parameters_init(weights, zeromean, n_states);
     }
 
-    void Cuda_free(){
-      cudaFree(_weight_gpu);
+    void Cuda_free() override{
       cudaFree(_data_gpu);
       cudaFree(_class_gpu);
+      GH_parameters_free();
     }
 
     void CudaIntegration(const MatrixXd& sigmapts, const MatrixXd& weights, MatrixXd& results, const MatrixXd& mean, int type);
@@ -747,8 +782,7 @@ public:
         _fk = ForwardKinematics(a, alpha, d, theta_bias, num_spheres, frames, centers);
     }
 
-    void Cuda_init(const MatrixXd& weights){
-      cudaMalloc(&_weight_gpu, weights.size() * sizeof(double));
+    void Cuda_init(const MatrixXd& weights, const MatrixXd& zeromean, const int n_states) override{
       cudaMalloc(&_data_gpu, _sdf.data_.size() * sizeof(double));
       cudaMalloc(&_class_gpu, sizeof(CudaOperation_3dArm));
       cudaMalloc(&_a_gpu, _fk._a.size() * sizeof(double));
@@ -759,7 +793,6 @@ public:
       cudaMalloc(&_frames_gpu, _fk._frames.size() * sizeof(int));
       cudaMalloc(&_centers_gpu, _fk._centers.size() * sizeof(double));
 
-      cudaMemcpy(_weight_gpu, weights.data(), weights.size() * sizeof(double), cudaMemcpyHostToDevice);
       cudaMemcpy(_class_gpu, this, sizeof(CudaOperation_3dArm), cudaMemcpyHostToDevice);
       cudaMemcpy(_data_gpu, _sdf.data_.data(), _sdf.data_.size() * sizeof(double), cudaMemcpyHostToDevice);
       cudaMemcpy(_a_gpu, _fk._a.data(), _fk._a.size() * sizeof(double), cudaMemcpyHostToDevice);
@@ -769,10 +802,11 @@ public:
       cudaMemcpy(_rad_gpu, _radii.data(), _radii.size() * sizeof(double), cudaMemcpyHostToDevice);
       cudaMemcpy(_frames_gpu, _fk._frames.data(), _fk._frames.size() * sizeof(int), cudaMemcpyHostToDevice);
       cudaMemcpy(_centers_gpu, _fk._centers.data(), _fk._centers.size() * sizeof(double), cudaMemcpyHostToDevice);
+
+      GH_parameters_init(weights, zeromean, n_states);
     }
 
-    void Cuda_free(){
-      cudaFree(_weight_gpu);
+    void Cuda_free() override{
       cudaFree(_data_gpu);
       cudaFree(_class_gpu);
       cudaFree(_a_gpu);
@@ -782,6 +816,7 @@ public:
       cudaFree(_rad_gpu);
       cudaFree(_frames_gpu);
       cudaFree(_centers_gpu);
+      GH_parameters_free();
     }
 
     void CudaIntegration(const MatrixXd& sigmapts, const MatrixXd& weights, MatrixXd& results, const MatrixXd& mean, int type);
