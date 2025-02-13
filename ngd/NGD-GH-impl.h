@@ -40,7 +40,7 @@ std::tuple<VectorXd, SpMat> NGDGH<Factor>::compute_gradients(std::optional<doubl
         for (auto &opt_k : Base::_vec_factors) {
             opt_k->calculate_partial_V();
             Vdmu_private += opt_k->local2joint_dmu_insertion();
-            Vddmu_private += opt_k->local2joint_dprecision_insertion();
+            Vddmu_private += opt_k->local2joint_dprecision_triplet();
         }
 
         #pragma omp critical
@@ -92,7 +92,7 @@ std::tuple<VectorXd, SpMat> NGDGH<Factor>::compute_gradients_time(std::optional<
         for (auto &opt_k : Base::_vec_factors) {
             opt_k->calculate_partial_V();
             Vdmu_private += opt_k->local2joint_dmu_insertion();
-            Vddmu_private += opt_k->local2joint_dprecision_insertion();
+            Vddmu_private += opt_k->local2joint_dprecision_triplet();
         }
 
         #pragma omp critical

@@ -178,13 +178,17 @@ public:
 
     virtual inline SpMat local2joint_dprecision_insertion() {}
 
-    virtual inline void cuda_init(){}
+    virtual inline SpMat local2joint_dprecision_triplet() {}
+
+    virtual inline void cuda_init(const int n_states){}
 
     virtual inline void compute_sigmapts(const MatrixXd& mean, const MatrixXd& covariance, int dim_state, int num_states, MatrixXd& sigmapts){}
 
     virtual inline void cuda_free(){}
 
     virtual inline bool linear_factor(){}
+
+    virtual inline void cuda_iter_init(const MatrixXd& sigmapts, VectorXd& results, const int sigmapts_cols){}
 
     virtual inline void newCostIntegration(const MatrixXd& sigmapts, VectorXd& results, const int sigmapts_cols){}
 

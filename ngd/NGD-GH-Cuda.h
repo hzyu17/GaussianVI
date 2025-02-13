@@ -44,17 +44,7 @@ public:
           double temperature = 1.0,
           double high_temperature = 100.0) :
         GVIGH<FactorizedOptimizer>(vec_fact_optimizers, dim_state, num_states, niterations, temperature, high_temperature)
-        // _Vdmu(VectorXd::Zero(Base::_dim)),
-        // _Vddmu(SpMat(Base::_dim, Base::_dim))
-    {
-        // _Vdmu.setZero();
-        // _Vddmu.setZero();
-
-    }
-
-protected:
-    // VectorXd _Vdmu;
-    // SpMat _Vddmu;    
+    {}
 
 public:
 /// ************************* Override functions for NGD algorithm *************************************
@@ -99,4 +89,4 @@ public:
 
 #include "NGD-GH-Cuda-impl.h"
 
-#endif //NGD-GH
+#endif 

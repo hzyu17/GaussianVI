@@ -90,6 +90,20 @@ public:
         return res;
     }
 
+    inline SpMat local2joint_dprecision_triplet() override{ 
+        SpMat res(this->_joint_size, this->_joint_size);
+        std::vector<Trip> triplets;
+        triplets.reserve(this->_dim * this->_dim);  
+
+        int offset = this->_state_dim * this->_start_index;
+        for (int i = 0; i < this->_dim; ++i)
+            for (int j = 0; j < this->_dim; ++j)
+                triplets.emplace_back(i + offset, j + offset, this->_Vddmu(i, j));
+
+        res.setFromTriplets(triplets.begin(), triplets.end());
+        return res;
+    }
+
     void calculate_partial_V(std::optional<double> step_size=std::nullopt) override{
         _Vdmu.setZero();
         _Vddmu.setZero();
