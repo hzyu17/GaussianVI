@@ -15,8 +15,8 @@
 #include <cusolverSp.h>
 #include <cusparse_v2.h>
 #include "helpers/timer.h"
-#include <magma_v2.h>
-#include <magma_lapack.h>
+// #include <magma_v2.h>
+// #include <magma_lapack.h>
 
 #include <gpmp2/obstacle/SignedDistanceField.h>
 #include <gpmp2/kinematics/ArmModel.h>
@@ -444,6 +444,28 @@ public:
       cusolverDnCreate(&_cusolverH);
       cublasCreate(&_cublasH);
       cusolverDnCreateSyevjInfo(&_syevj_params);
+
+      size_t covarianceSize = _n_states * _dim_conf * _dim_conf * sizeof(double);
+      size_t meanSize       = _n_states * _dim_conf * sizeof(double);
+      size_t sigmaptsSize   = _sigmapts_rows * _dim_conf * _n_states * sizeof(double);
+
+      cudaMalloc(&d_covariance, covarianceSize);
+      cudaMalloc(&d_mean, meanSize);
+      cudaMalloc(&d_sigmapts, sigmaptsSize);
+
+      size_t eigenvaluesSize = _dim_conf * _n_states * sizeof(double);
+      cudaMalloc(&d_eigenvalues, eigenvaluesSize);
+      cudaMalloc(&d_info, _n_states * sizeof(int));
+
+      lwork = 0;
+      cusolverDnDsyevjBatched_bufferSize(_cusolverH, CUSOLVER_EIG_MODE_VECTOR, CUBLAS_FILL_MODE_LOWER,
+                                        _dim_conf, d_covariance, _dim_conf, d_eigenvalues, &lwork, _syevj_params, _n_states);
+      cudaMalloc(&work, lwork * sizeof(double));
+
+      cudaMalloc(&d_eigvec, covarianceSize);
+      cudaMalloc(&d_scaledEigvec, covarianceSize);
+      cudaMalloc(&d_sqrtP, covarianceSize);
+
     }
 
     void GH_parameters_free(){
@@ -451,6 +473,16 @@ public:
       cudaFree(_zeromean_gpu);
       cudaFree(_sigmapts_gpu);
       cudaFree(_func_value_gpu);
+
+      cudaFree(d_covariance);
+      cudaFree(d_mean);
+      cudaFree(d_sigmapts);
+      cudaFree(d_eigenvalues);
+      cudaFree(d_info);
+      cudaFree(work);
+      cudaFree(d_eigvec);
+      cudaFree(d_scaledEigvec);
+      cudaFree(d_sqrtP);
 
       cusolverDnDestroySyevjInfo(_syevj_params);
       cusolverDnDestroy(_cusolverH);
@@ -491,13 +523,13 @@ public:
 
     void ddmuIntegration(MatrixXd& results);
 
-    void initializeSigmaptsResources(int dim_conf, int num_states, int sigmapts_rows);
+    // void initializeSigmaptsResources(int dim_conf, int num_states, int sigmapts_rows);
 
-    void update_sigmapts_separate(const MatrixXd& covariance, const MatrixXd& mean, int dim_conf, int num_states, MatrixXd& sigmapts);
+    // void update_sigmapts_separate(const MatrixXd& covariance, const MatrixXd& mean, int dim_conf, int num_states, MatrixXd& sigmapts);
 
-    void freeSigmaptsResources(int num_states);
+    // void freeSigmaptsResources(int num_states);
 
-    void update_sigmapts_magma_batched(const MatrixXd& covariance, const MatrixXd& mean, int dim_conf, int num_states, MatrixXd& sigmapts);
+    // void update_sigmapts_magma_batched(const MatrixXd& covariance, const MatrixXd& mean, int dim_conf, int num_states, MatrixXd& sigmapts);
 
   double _epsilon, _radius, _sigma;
   SDFType _sdf; // define sdf in the derived class
@@ -522,6 +554,18 @@ public:
   cusolverDnHandle_t _cusolverH = nullptr;
   cublasHandle_t _cublasH = nullptr;
   syevjInfo_t _syevj_params = nullptr;
+
+
+  double* d_covariance  = nullptr;
+  double* d_mean        = nullptr;
+  double* d_sigmapts    = nullptr;
+  double* d_eigenvalues = nullptr;
+  int*    d_info        = nullptr;
+  int     lwork         = 0;
+  double* work          = nullptr;
+  double* d_eigvec      = nullptr;
+  double* d_scaledEigvec = nullptr;
+  double* d_sqrtP        = nullptr;
 
 };
 
@@ -582,8 +626,8 @@ public:
       return cost;
     }
 
-    __host__ __device__ Eigen::MatrixXd vec_balls(const Eigen::VectorXd& x, int n_balls) {
-      Eigen::MatrixXd v_pts = Eigen::MatrixXd::Zero(n_balls, 2);
+    __host__ __device__ MatrixXd vec_balls(const Eigen::VectorXd& x, int n_balls) {
+      MatrixXd v_pts = MatrixXd::Zero(n_balls, 2);
 
       double pos_x = x(0);
       double pos_z = x(1);

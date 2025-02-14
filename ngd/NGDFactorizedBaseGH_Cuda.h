@@ -164,6 +164,20 @@ public:
         return res;
     }
 
+    inline SpMat local2joint_dprecision_triplet() override{ 
+        SpMat res(this->_joint_size, this->_joint_size);
+        std::vector<Trip> triplets;
+        triplets.reserve(this->_dim * this->_dim);  
+
+        int offset = this->_state_dim * this->_start_index;
+        for (int i = 0; i < this->_dim; ++i)
+            for (int j = 0; j < this->_dim; ++j)
+                triplets.emplace_back(i + offset, j + offset, this->_Vddmu(i, j));
+
+        res.setFromTriplets(triplets.begin(), triplets.end());
+        return res;
+    }
+
     /**
      * @brief returns the (x-mu)*Phi(x) 
      */
@@ -182,19 +196,21 @@ public:
     //     _cuda = std::make_shared<CudaClass>(CudaClass{_sigma, _epsilon, _radius});
     // }
 
-    inline void cuda_init() override{
-        _cuda -> Cuda_init(this -> _gh -> weights());
-        _cuda -> zeromean_init(this -> _gh ->zeromeanpts());
-        _cuda -> initializeSigmaptsResources(2, 48, 89);
+    inline void cuda_init(const int n_states) override{
+        _cuda -> Cuda_init(this -> _gh -> weights(), this -> _gh ->zeromeanpts(), n_states);
+        // _cuda -> initializeSigmaptsResources(2, 998, 89);
     }
 
     inline void cuda_free() override{
         _cuda -> Cuda_free();
-        _cuda -> zeromean_free();
-        _cuda -> freeSigmaptsResources(48);
+        // _cuda -> freeSigmaptsResources(998);
     }
 
     inline bool linear_factor() override { return _isLinear; }
+
+    inline void cuda_iter_init(const MatrixXd& sigmapts, VectorXd& results, const int sigmapts_cols) override{
+        _cuda -> Cuda_init_iter(sigmapts, results, sigmapts_cols);
+    }
 
     inline void newCostIntegration(const MatrixXd& sigmapts, VectorXd& results, const int sigmapts_cols) override{
         _cuda -> Cuda_init_iter(sigmapts, results, sigmapts_cols);
@@ -203,7 +219,8 @@ public:
     }
 
     inline void dmuIntegration(const MatrixXd& sigmapts, const MatrixXd& mean, VectorXd& E_phi_mat, VectorXd& dmu_mat, MatrixXd& ddmu_mat, const int sigmapts_cols) override{
-        _cuda -> Cuda_init_iter(sigmapts, E_phi_mat, sigmapts_cols);
+        // _cuda -> Cuda_init_iter(sigmapts, E_phi_mat, sigmapts_cols);
+        // Most time in cuda was spent here
         _cuda -> costIntegration(sigmapts, E_phi_mat, sigmapts_cols);
         _cuda -> dmuIntegration(sigmapts, mean, dmu_mat, sigmapts_cols);
         _cuda -> ddmuIntegration(ddmu_mat);
@@ -218,7 +235,13 @@ public:
         // MatrixXd eigen_value = es.eigenvalues();
         // std::cout << "Eigen values" << std::endl << eigen_value.transpose() << std::endl;
 
-        _cuda->update_sigmapts_separate(covariance, mean, dim_conf, num_states, sigmapts);
+        _cuda->update_sigmapts(covariance, mean, dim_conf, num_states, sigmapts);
+        // for(int i = 0; i < num_states; i++){
+        //     MatrixXd cov = covariance.block(0, i*dim_conf, dim_conf, dim_conf);
+        //     SelfAdjointEigenSolver<MatrixXd> eig(cov);
+        //     VectorXd eigvals = eig.operatorSqrt();
+        //     std::cout << "Eigen values error: " << (eigvals - sigmapts.block(0, i * dim_conf, dim_conf, dim_conf)).norm() << std::endl;
+        // }
         // std::cout << "Cholesky result" << std::endl << sqrtP << std::endl;
     }
 

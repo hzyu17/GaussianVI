@@ -62,7 +62,7 @@ public:
             _Vdmu(VectorXd::Zero(_dim)),
             _Vddmu(SpMat(_dim, _dim))
     {
-        construct_sparse_precision();
+        // construct_sparse_precision();
         _Vdmu.setZero();
         _Vddmu.setZero();
     }
@@ -147,6 +147,10 @@ public:
     SpMat residual_splash_GBP(const SpMat &Precision);
 
     SpMat chain_splash_GBP(const SpMat &Precision);
+
+    VectorXd solveWithCuSolverQR(const SpMat& Vddmu, const VectorXd& Vdmu);
+
+    VectorXd solveWithCuSolverChol(const SpMat& Vddmu, const VectorXd& Vdmu);
 
     /**
      * @brief Compute the message of factors in GBP.
@@ -263,6 +267,7 @@ public:
         set_precision(init_precision);
     }
 
+    // Maybe for inverse?
     void construct_sparse_precision(){
         _precision.setZero();
         // fill in the precision matrix to the known sparsity pattern
@@ -274,7 +279,6 @@ public:
             for (int i=0; i<_num_states-1; i++){
                 _ei.block_insert_sparse(_precision, i*_dim_state, i*_dim_state, 2*_dim_state, 2*_dim_state, block);
             }
-
         }
         
         SpMat lower = _precision.triangularView<Eigen::Lower>();

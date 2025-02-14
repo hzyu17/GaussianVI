@@ -76,6 +76,7 @@ public:
         _res_costs(niters),
         _res_factor_costs(n_factors, 1, niters)
         {
+            // All the time is used in setting zero
             _res_mean.setZero();
             _res_joint_covariances.setZero();
             _res_joint_precisions.setZero();
@@ -83,7 +84,6 @@ public:
             _res_precisions.setZero();
             _res_costs.setZero();
             _res_factor_costs.setZero();
-
         }
 
     /**
