@@ -69,7 +69,7 @@ public:
 
 protected:
     /// optimization variables
-    int _dim, _niters, _niters_lowtemp, _niters_backtrack, _nfactors, _dim_state, _num_states;
+    int _dim, _niters, _niters_lowtemp, _niters_backtrack, _nfactors, _dim_state, _num_states, _sigma_rows, _dim_conf;
 
     double _temperature, _high_temperature, _initial_precision_factor, _boundary_penalties;
 
@@ -169,6 +169,8 @@ public:
     // virtual void optimize(std::optional<bool> verbose= std::nullopt);
 
     virtual std::tuple<double, VectorXd, SpMat> onestep_linesearch(const double &step_size, const VectorXd& dmu, const SpMat& dprecision){};
+
+    virtual double bisection_stepsize(const VectorXd& dmu, const SpMat& dprecision){};
 
     virtual inline void update_proposal(const VectorXd& new_mu, const SpMat& new_precision){};
 

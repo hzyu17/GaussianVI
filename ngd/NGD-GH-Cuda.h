@@ -56,6 +56,8 @@ public:
 
     std::tuple<double, VectorXd, SpMat> onestep_linesearch(const double &step_size, const VectorXd& dmu, const SpMat& dprecision) override;
 
+    double bisection_stepsize(const VectorXd& dmu, const SpMat& dprecision) override;
+
     inline void update_proposal(const VectorXd& new_mu, const SpMat& new_precision) override;
 
     /**
@@ -78,6 +80,8 @@ public:
     std::tuple<double, VectorXd, VectorXd, SpMat> factor_cost_vector_cuda() override;
 
     std::tuple<double, VectorXd, VectorXd, SpMat> factor_cost_vector_cuda_time() override;
+
+    double KL_Divergence(const VectorXd& mean_former, const VectorXd& mean_latter, const SpMat& precision_former, const SpMat& precision_latter);
 
 
 }; //class

@@ -250,7 +250,7 @@ public:
 public:
 
     /// dimension
-    int _dim, _state_dim, _num_states, _joint_size, _start_index;
+    int _dim, _state_dim, _num_states, _joint_size, _start_index, _sigma_rows, _dim_conf;
 
     VectorXd _mu;
     

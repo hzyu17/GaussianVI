@@ -259,9 +259,9 @@ public:
         // timer.end_mus();
     }
 
-    inline Eigen::VectorXd weights() const { return this->_Weights; }
+    inline const Eigen::VectorXd& weights() const { return this->_Weights; }
 
-    inline Eigen::MatrixXd zeromeanpts() const { return this->_zeromeanpts; }
+    inline const Eigen::MatrixXd& zeromeanpts() const { return this->_zeromeanpts; }
 
     inline Eigen::MatrixXd sigmapts() const { return this->_sigmapts; }
 

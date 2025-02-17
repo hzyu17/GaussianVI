@@ -197,6 +197,8 @@ public:
     // }
 
     inline void cuda_init(const int n_states) override{
+        _sigma_rows = this -> _gh -> sigmapts().rows();
+        _dim_conf = this -> _gh -> sigmapts().cols();
         _cuda -> Cuda_init(this -> _gh -> weights(), this -> _gh ->zeromeanpts(), n_states);
         // _cuda -> initializeSigmaptsResources(2, 998, 89);
     }

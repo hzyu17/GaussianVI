@@ -21,8 +21,8 @@ std::tuple<double, VectorXd, SpMat> ProxKLGH<Factor>::onestep_linesearch(const d
     double temperature = this->_temperature;
 
     // update mu and precision matrix
-    Eigen::ConjugateGradient<SpMat> solver;
-    // Eigen::ConjugateGradient<SpMat, Eigen::Upper> solver;
+    // Eigen::ConjugateGradient<SpMat> solver;
+    Eigen::ConjugateGradient<SpMat, Eigen::Upper> solver;
 
     // std::cout << "mu_prior" << _mu_prior.transpose() << std::endl << std::endl;
     // std::cout << "mu" << this->_mu.transpose() << std::endl << std::endl;
@@ -59,7 +59,7 @@ std::tuple<double, VectorXd, SpMat> ProxKLGH<Factor>::onestep_linesearch(const d
         std::exit(EXIT_FAILURE);
     }
 
-    std::cout << "New cost = " << new_cost << std::endl << std::endl;
+    // std::cout << "New cost = " << new_cost << std::endl << std::endl;
     return std::make_tuple(new_cost, new_mu, new_precision);
 }
 
@@ -77,7 +77,8 @@ std::tuple<double, VectorXd, SpMat> ProxKLGH<Factor>::bisection_update(const Vec
     double epsilon = this->_alpha;
 
     // update mu and precision matrix
-    Eigen::ConjugateGradient<SpMat> solver;
+    // Eigen::ConjugateGradient<SpMat> solver;
+    Eigen::ConjugateGradient<SpMat, Eigen::Upper> solver;
 
     while (log_upper - log_lower > log_threshold) 
     {
@@ -110,8 +111,8 @@ std::tuple<double, VectorXd, SpMat> ProxKLGH<Factor>::bisection_update(const Vec
         std::exit(EXIT_FAILURE);
     }
 
-    std::cout << "Final Step Size: " << final_step_size << std::endl;
-    std::cout << "New cost = " << new_cost << std::endl << std::endl;
+    // std::cout << "Final Step Size: " << final_step_size << std::endl;
+    // std::cout << "New cost = " << new_cost << std::endl << std::endl;
     return std::make_tuple(new_cost, new_mu, new_precision);
 }
 
@@ -124,7 +125,7 @@ void ProxKLGH<Factor>::optimize(std::optional<bool> verbose)
     bool is_lowtemp = true;
     bool converged = false;
 
-    Base::_vec_nonlinear_factors[0]->cuda_init();
+    Base::_vec_nonlinear_factors[0]->cuda_init(Base::_vec_nonlinear_factors.size());
     
     for (int i_iter = 0; i_iter < Base::_niters; i_iter++)
     {   
@@ -150,11 +151,11 @@ void ProxKLGH<Factor>::optimize(std::optional<bool> verbose)
 
         if (is_verbose){
             std::cout << "========= iteration " << i_iter << " ========= " << std::endl;
-            std::cout << "--- cost_iter ---" << std::endl << cost_iter << std::endl << std::endl;
+            std::cout << "--- cost_iter ---" << std::endl << cost_iter << std::endl;
             // std::cout << "Factor Costs:" << fact_costs_iter.transpose() << std::endl;
         }
 
-        Base::_res_recorder.update_data(this->_mu, this->_covariance, this->_precision, cost_iter, fact_costs_iter);
+        // Base::_res_recorder.update_data(this->_mu, this->_covariance, this->_precision, cost_iter, fact_costs_iter);
         
         int cnt = 0;
         int B = 1;
@@ -206,8 +207,8 @@ void ProxKLGH<Factor>::optimize(std::optional<bool> verbose)
 
     Base::_vec_nonlinear_factors[0]->cuda_free();
 
-    std::cout << "=========== Saving Data ===========" << std::endl;
-    Base::save_data(is_verbose);
+    // std::cout << "=========== Saving Data ===========" << std::endl;
+    // Base::save_data(is_verbose);
 
     std::cout << "Optimization Finished" << std::endl;
 
@@ -388,9 +389,9 @@ std::tuple<double, VectorXd, VectorXd, SpMat>ProxKLGH<Factor>::factor_cost_vecto
     double collision_cost = nonlinear_fac_cost.sum();
     double prior_cost = fac_costs.sum() - collision_cost;
 
-    std::cout << "Prior Cost: " << prior_cost << std::endl;
-    std::cout << "Collision Cost: " << collision_cost << std::endl;
-    std::cout << "Entropy: " << entropy << std::endl;
+    // std::cout << "Prior Cost: " << prior_cost << std::endl;
+    // std::cout << "Collision Cost: " << collision_cost << std::endl;
+    // std::cout << "Entropy: " << entropy << std::endl;
 
     // SparseLDLT ldlt_prior(_precision_prior);
 
@@ -496,15 +497,15 @@ double ProxKLGH<Factor>::cost_value_cuda(const VectorXd& fill_joint_mean, SpMat&
         value += opt_k->fact_cost_value(fill_joint_mean, joint_cov); 
     }
 
-    std::cout << "Prior Cost: " << value << std::endl;
-    std::cout << "Collision Cost: " << nonlinear_fac_cost.sum() << std::endl;
+    // std::cout << "Prior Cost: " << value << std::endl;
+    // std::cout << "Collision Cost: " << nonlinear_fac_cost.sum() << std::endl;
     
     value += nonlinear_fac_cost.sum();
 
     SparseLDLT ldlt(joint_precision);
     VectorXd vec_D = ldlt.vectorD();
 
-    std::cout << "Entropy: " << vec_D.array().log().sum() / 2 << std::endl;
+    // std::cout << "Entropy: " << vec_D.array().log().sum() / 2 << std::endl;
     return value + vec_D.array().log().sum() / 2;
 
 
@@ -641,8 +642,18 @@ double ProxKLGH<Factor>::KL_Divergence(const VectorXd& mean_former, const Vector
 
     SpMat covariance_former = this->inverse_GBP(precision_former);
 
-    SpMat precision_prior_times_Cov = precision_latter * covariance_former;
-    double trace_term = precision_prior_times_Cov.diagonal().sum();
+    // SpMat precision_prior_times_Cov = precision_latter * covariance_former;
+    // double trace_term = precision_prior_times_Cov.diagonal().sum();
+    
+    
+    double trace_term = 0;
+    for (int k = 0; k < precision_latter.outerSize(); ++k) {
+        for (typename SpMat::InnerIterator it(precision_latter, k); it; ++it) {
+            int i = it.row();
+            int j = it.col();
+            trace_term += it.value() * covariance_former.coeff(i, j);
+        }
+    }
     // std::cout << "trace_term: " << trace_term << std::endl;
 
     double quadratic_term = (mean_latter - mean_former).transpose() * precision_latter * (mean_latter - mean_former);
