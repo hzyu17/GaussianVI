@@ -15,8 +15,6 @@
 #include <cusolverSp.h>
 #include <cusparse_v2.h>
 #include "helpers/timer.h"
-// #include <magma_v2.h>
-// #include <magma_lapack.h>
 
 #include <gpmp2/obstacle/SignedDistanceField.h>
 #include <gpmp2/kinematics/ArmModel.h>
@@ -328,7 +326,6 @@ public:
   }
 };
 
-
 class ForwardKinematics{
 
 public:
@@ -435,11 +432,13 @@ public:
 
       cudaMalloc(&_weight_gpu, weights.size() * sizeof(double));
       cudaMalloc(&_zeromean_gpu, zeromean.size() * sizeof(double));
+      cudaMalloc(&_data_gpu, _sdf.data_.size() * sizeof(double));
       cudaMalloc(&_sigmapts_gpu, _sigmapts_rows * _dim_conf * _n_states * sizeof(double));
       cudaMalloc(&_func_value_gpu, _sigmapts_rows * _n_states * sizeof(double));
 
       cudaMemcpy(_weight_gpu, weights.data(), weights.size() * sizeof(double), cudaMemcpyHostToDevice);
       cudaMemcpy(_zeromean_gpu, zeromean.data(), zeromean.size() * sizeof(double), cudaMemcpyHostToDevice);
+      cudaMemcpy(_data_gpu, _sdf.data_.data(), _sdf.data_.size() * sizeof(double), cudaMemcpyHostToDevice);
 
       cusolverDnCreate(&_cusolverH);
       cublasCreate(&_cublasH);
@@ -471,6 +470,7 @@ public:
     void GH_parameters_free(){
       cudaFree(_weight_gpu);
       cudaFree(_zeromean_gpu);
+      cudaFree(_data_gpu);
       cudaFree(_sigmapts_gpu);
       cudaFree(_func_value_gpu);
 
@@ -529,8 +529,6 @@ public:
 
     // void freeSigmaptsResources(int num_states);
 
-    // void update_sigmapts_magma_batched(const MatrixXd& covariance, const MatrixXd& mean, int dim_conf, int num_states, MatrixXd& sigmapts);
-
   double _epsilon, _radius, _sigma;
   SDFType _sdf; // define sdf in the derived class
 
@@ -539,22 +537,9 @@ public:
 
   double* covariance_gpu, *mean_gpu, *d_sigmapt_cuda;  // sigmapts size: _sigmapts_rows x (dim_conf * num_states)
 
-  // Pre-allocated per-state resources
-  std::vector<cudaStream_t> streams;
-  std::vector<cusolverDnHandle_t> cusolver_handles;
-  std::vector<cublasHandle_t> cublas_handles;
-
-  std::vector<double*> d_eigen_values_vec;    // each: dim_conf
-  std::vector<int*>    d_info_vec;            // each: 1 int
-  std::vector<double*> d_work_vec;            // each: Lwork (query per state)
-  std::vector<int>     Lwork_vec;             // each: workspace size for eigen decomposition
-  std::vector<double*> d_V_scaled_vec;        // each: dim_conf x dim_conf
-  std::vector<double*> d_sqrtP_vec;           // each: dim_conf x dim_conf
-
   cusolverDnHandle_t _cusolverH = nullptr;
   cublasHandle_t _cublasH = nullptr;
   syevjInfo_t _syevj_params = nullptr;
-
 
   double* d_covariance  = nullptr;
   double* d_mean        = nullptr;
@@ -585,61 +570,71 @@ public:
 
         double cell_size = 0.1;
         _sdf = PlanarSDF{origin, cell_size, field};
+
+        hostCost._epsilon = _epsilon;
+        hostCost._radius = _radius;
+        hostCost._sigma = _sigma;
+        hostCost._sdf = _sdf;
     }
 
     void Cuda_init(const MatrixXd& weights, const MatrixXd& zeromean, const int n_states) override{
-      cudaMalloc(&_data_gpu, _sdf.data_.size() * sizeof(double));
-      cudaMalloc(&_class_gpu, sizeof(CudaOperation_PlanarPR));
-
-      cudaMemcpy(_data_gpu, _sdf.data_.data(), _sdf.data_.size() * sizeof(double), cudaMemcpyHostToDevice);
-      cudaMemcpy(_class_gpu, this, sizeof(CudaOperation_PlanarPR), cudaMemcpyHostToDevice);
+      cudaMalloc(&d_cost, sizeof(ObstacleCost));
+      cudaMemcpy(d_cost, &hostCost, sizeof(ObstacleCost), cudaMemcpyHostToDevice);
 
       GH_parameters_init(weights, zeromean, n_states);
     }
 
     void Cuda_free(){
-      cudaFree(_data_gpu);
-      cudaFree(_class_gpu);
+      cudaFree(d_cost);
       GH_parameters_free();
     }
 
-    void CudaIntegration(const MatrixXd& sigmapts, const MatrixXd& weights, MatrixXd& results, const MatrixXd& mean, int type);
+    // void CudaIntegration(const MatrixXd& sigmapts, const MatrixXd& weights, MatrixXd& results, const MatrixXd& mean, int type);
 
     void costIntegration(const MatrixXd& sigmapts, VectorXd& results, const int sigmapts_cols);
 
-    __host__ __device__ double cost_obstacle_planar(const VectorXd& pose, const PlanarSDF& sdf){
-      int n_balls = 1;
-      double slope = 1;
-      MatrixXd checkpoints = vec_balls(pose, n_balls);
-      VectorXd signed_distance = sdf.getSignedDistance(checkpoints);
-      VectorXd err(signed_distance.size());
+    struct ObstacleCost {
+      double _epsilon;
+      double _radius;
+      double _sigma;
 
-      double cost = 0;
-      for (int i = 0; i < n_balls; i++){
-        if (signed_distance(i) > _epsilon + _radius)
-          err(i) =  0.0;
-        else
-          err(i) =  (_epsilon + _radius - signed_distance(i)) * slope;
-        cost += err(i) * err(i) * _sigma;
+      PlanarSDF _sdf;
+
+      __device__ double cost_obstacle_planar(const VectorXd& pose){
+        int n_balls = 1;
+        double slope = 1;
+        MatrixXd checkpoints = vec_balls(pose, n_balls);
+        VectorXd signed_distance = _sdf.getSignedDistance(checkpoints);
+        VectorXd err(signed_distance.size());
+
+        double cost = 0;
+        for (int i = 0; i < n_balls; i++){
+          if (signed_distance(i) > _epsilon + _radius)
+            err(i) =  0.0;
+          else
+            err(i) =  (_epsilon + _radius - signed_distance(i)) * slope;
+          cost += err(i) * err(i) * _sigma;
+        }
+        
+        return cost;
       }
-      
-      return cost;
-    }
 
-    __host__ __device__ MatrixXd vec_balls(const Eigen::VectorXd& x, int n_balls) {
-      MatrixXd v_pts = MatrixXd::Zero(n_balls, 2);
-
-      double pos_x = x(0);
-      double pos_z = x(1);
-
-      for (int i = 0; i < n_balls; i++) {
-          v_pts(i, 0) = pos_x;
-          v_pts(i, 1) = pos_z;
+      __device__ MatrixXd vec_balls(const Eigen::VectorXd& x, int n_balls) {
+        MatrixXd v_pts = MatrixXd::Zero(n_balls, 2);
+  
+        double pos_x = x(0);
+        double pos_z = x(1);
+  
+        for (int i = 0; i < n_balls; i++) {
+            v_pts(i, 0) = pos_x;
+            v_pts(i, 1) = pos_z;
+        }
+        return v_pts;
       }
-      return v_pts;
-    }
+    };
 
-  CudaOperation_PlanarPR* _class_gpu;
+  ObstacleCost hostCost;
+  ObstacleCost* d_cost;
 };
 
 
@@ -659,72 +654,82 @@ public:
 
         double cell_size = 0.1;
         _sdf = PlanarSDF{origin, cell_size, field};
+
+        hostCost._epsilon = _epsilon;
+        hostCost._radius = _radius;
+        hostCost._sigma = _sigma;
+        hostCost._sdf = _sdf;
     }
 
     void Cuda_init(const MatrixXd& weights, const MatrixXd& zeromean, const int n_states) override{
-      cudaMalloc(&_data_gpu, _sdf.data_.size() * sizeof(double));
-      cudaMalloc(&_class_gpu, sizeof(CudaOperation_Quad));
-
-      cudaMemcpy(_data_gpu, _sdf.data_.data(), _sdf.data_.size() * sizeof(double), cudaMemcpyHostToDevice);
-      cudaMemcpy(_class_gpu, this, sizeof(CudaOperation_Quad), cudaMemcpyHostToDevice);
+      cudaMalloc(&d_cost, sizeof(ObstacleCost));
+      cudaMemcpy(d_cost, &hostCost, sizeof(ObstacleCost), cudaMemcpyHostToDevice);
 
       GH_parameters_init(weights, zeromean, n_states);
     }
 
     void Cuda_free() override{
-      cudaFree(_data_gpu);
-      cudaFree(_class_gpu);
+      cudaFree(d_cost);
       GH_parameters_free();
     }
 
-    void CudaIntegration(const MatrixXd& sigmapts, const MatrixXd& weights, MatrixXd& results, const MatrixXd& mean, int type);
+    // void CudaIntegration(const MatrixXd& sigmapts, const MatrixXd& weights, MatrixXd& results, const MatrixXd& mean, int type);
 
     void costIntegration(const MatrixXd& sigmapts, VectorXd& results, const int sigmapts_cols);
 
-    __host__ __device__ double cost_obstacle_planar(const VectorXd& pose, const PlanarSDF& sdf){
-      int n_balls = 5;
-      double slope = 5.0;
+    struct ObstacleCost {
+      double _epsilon;
+      double _radius;
+      double _sigma;
 
-      MatrixXd checkpoints = vec_balls(pose, n_balls);
-      VectorXd signed_distance = sdf.getSignedDistance(checkpoints);
-      VectorXd err(signed_distance.size());
+      PlanarSDF _sdf;
 
-      double cost = 0;
-
-      for (int i = 0; i < n_balls; i++){
-        if (signed_distance(i) > _epsilon + _radius)
-          err(i) =  0.0;
-        else
-          err(i) =  (_epsilon + _radius - signed_distance(i)) * slope;
-        cost += err(i) * err(i) * _sigma;
+      __device__ double cost_obstacle_planar(const VectorXd& pose){
+        int n_balls = 5;
+        double slope = 5.0;
+  
+        MatrixXd checkpoints = vec_balls(pose, n_balls);
+        VectorXd signed_distance = _sdf.getSignedDistance(checkpoints);
+        VectorXd err(signed_distance.size());
+  
+        double cost = 0;
+  
+        for (int i = 0; i < n_balls; i++){
+          if (signed_distance(i) > _epsilon + _radius)
+            err(i) =  0.0;
+          else
+            err(i) =  (_epsilon + _radius - signed_distance(i)) * slope;
+          cost += err(i) * err(i) * _sigma;
+        }
+        
+        return cost;
       }
-      
-      return cost;
-    }
 
-    __host__ __device__ Eigen::MatrixXd vec_balls(const Eigen::VectorXd& x, int n_balls) {
-      Eigen::MatrixXd v_pts = Eigen::MatrixXd::Zero(n_balls, 2);
-
-      double L = 5.0;
-
-      double pos_x = x(0);
-      double pos_z = x(1);
-      double phi = x(2);
-      
-      double l_pt_x = pos_x - (L - _radius * 1.5) * std::cos(phi) / 2.0;
-      double l_pt_z = pos_z - (L - _radius * 1.5) * std::sin(phi) / 2.0;
-
-      for (int i = 0; i < n_balls; i++) {
-        double pt_xi = l_pt_x + L * std::cos(phi) / n_balls * i;
-        double pt_zi = l_pt_z + L * std::sin(phi) / n_balls * i;
-        v_pts(i, 0) = pt_xi;
-        v_pts(i, 1) = pt_zi;
+      __device__ Eigen::MatrixXd vec_balls(const Eigen::VectorXd& x, int n_balls) {
+        Eigen::MatrixXd v_pts = Eigen::MatrixXd::Zero(n_balls, 2);
+  
+        double L = 5.0;
+  
+        double pos_x = x(0);
+        double pos_z = x(1);
+        double phi = x(2);
+        
+        double l_pt_x = pos_x - (L - _radius * 1.5) * std::cos(phi) / 2.0;
+        double l_pt_z = pos_z - (L - _radius * 1.5) * std::sin(phi) / 2.0;
+  
+        for (int i = 0; i < n_balls; i++) {
+          double pt_xi = l_pt_x + L * std::cos(phi) / n_balls * i;
+          double pt_zi = l_pt_z + L * std::sin(phi) / n_balls * i;
+          v_pts(i, 0) = pt_xi;
+          v_pts(i, 1) = pt_zi;
+        }
+        return v_pts;
       }
-      return v_pts;
-    }
 
-  CudaOperation_Quad* _class_gpu;
+    };
 
+  ObstacleCost hostCost;
+  ObstacleCost* d_cost;
 };
 
 
@@ -735,64 +740,75 @@ public:
     {
         std::string sdf_file = source_root + "/maps/3dpR/pRSDF3D.bin";
         _sdf.loadSDF(sdf_file);
+
+        hostCost._epsilon = _epsilon;
+        hostCost._radius = _radius;
+        hostCost._sigma = _sigma;
+        hostCost._sdf = _sdf;
     }
 
     void Cuda_init(const MatrixXd& weights, const MatrixXd& zeromean, const int n_states) override{
-      cudaMalloc(&_data_gpu, _sdf.data_matrix_.size() * sizeof(double));
-      cudaMalloc(&_class_gpu, sizeof(CudaOperation_3dpR));
-
-      cudaMemcpy(_class_gpu, this, sizeof(CudaOperation_3dpR), cudaMemcpyHostToDevice);
-      cudaMemcpy(_data_gpu, _sdf.data_matrix_.data(), _sdf.data_matrix_.size() * sizeof(double), cudaMemcpyHostToDevice);
+      cudaMalloc(&d_cost, sizeof(ObstacleCost));
+      cudaMemcpy(d_cost, &hostCost, sizeof(ObstacleCost), cudaMemcpyHostToDevice);
 
       GH_parameters_init(weights, zeromean, n_states);
     }
 
     void Cuda_free() override{
-      cudaFree(_data_gpu);
-      cudaFree(_class_gpu);
+      cudaFree(d_cost);
       GH_parameters_free();
     }
 
-    void CudaIntegration(const MatrixXd& sigmapts, const MatrixXd& weights, MatrixXd& results, const MatrixXd& mean, int type);
+    // void CudaIntegration(const MatrixXd& sigmapts, const MatrixXd& weights, MatrixXd& results, const MatrixXd& mean, int type);
 
     void costIntegration(const MatrixXd& sigmapts, VectorXd& results, const int sigmapts_cols);
 
-    __host__ __device__ double cost_obstacle_planar(const VectorXd& pose, const SignedDistanceField& sdf){
-      int n_balls = 1;
-      double slope = 1;
-      MatrixXd checkpoints = vec_balls(pose, n_balls);
-      VectorXd signed_distance = sdf.getSignedDistance(checkpoints);
-      // printf("signed_distance of pt: (%lf, %lf, %lf) = %lf\n", pose(0), pose(1), pose(2), signed_distance(0));
-      VectorXd err(signed_distance.size());
+    struct ObstacleCost {
+      double _epsilon;
+      double _radius;
+      double _sigma;
 
-      double cost = 0;
-      for (int i = 0; i < n_balls; i++){
-        if (signed_distance(i) > _epsilon + _radius)
-          err(i) =  0.0;
-        else
-          err(i) =  (_epsilon + _radius - signed_distance(i)) * slope;
-        cost += err(i) * err(i) * _sigma;
+      SignedDistanceField _sdf;
+
+      __device__ double cost_obstacle_planar(const VectorXd& pose){
+        int n_balls = 1;
+        double slope = 1;
+        MatrixXd checkpoints = vec_balls(pose, n_balls);
+        VectorXd signed_distance = _sdf.getSignedDistance(checkpoints);
+        // printf("signed_distance of pt: (%lf, %lf, %lf) = %lf\n", pose(0), pose(1), pose(2), signed_distance(0));
+        VectorXd err(signed_distance.size());
+  
+        double cost = 0;
+        for (int i = 0; i < n_balls; i++){
+          if (signed_distance(i) > _epsilon + _radius)
+            err(i) =  0.0;
+          else
+            err(i) =  (_epsilon + _radius - signed_distance(i)) * slope;
+          cost += err(i) * err(i) * _sigma;
+        }
+        
+        return cost;
       }
-      
-      return cost;
-    }
 
-    __host__ __device__ Eigen::MatrixXd vec_balls(const Eigen::VectorXd& x, int n_balls) {
-      Eigen::MatrixXd v_pts = Eigen::MatrixXd::Zero(n_balls, 3);
-
-      double pos_x = x(0);
-      double pos_y = x(1);
-      double pos_z = x(2);
-
-      for (int i = 0; i < n_balls; i++) {
-          v_pts(i, 0) = pos_x;
-          v_pts(i, 1) = pos_y;
-          v_pts(i, 2) = pos_z;
+      __device__ Eigen::MatrixXd vec_balls(const Eigen::VectorXd& x, int n_balls) {
+        Eigen::MatrixXd v_pts = Eigen::MatrixXd::Zero(n_balls, 3);
+  
+        double pos_x = x(0);
+        double pos_y = x(1);
+        double pos_z = x(2);
+  
+        for (int i = 0; i < n_balls; i++) {
+            v_pts(i, 0) = pos_x;
+            v_pts(i, 1) = pos_y;
+            v_pts(i, 2) = pos_z;
+        }
+        return v_pts;
       }
-      return v_pts;
-    }
 
-  CudaOperation_3dpR* _class_gpu;
+    };
+
+  ObstacleCost hostCost;
+  ObstacleCost* d_cost;
 };
 
 
@@ -827,7 +843,6 @@ public:
     }
 
     void Cuda_init(const MatrixXd& weights, const MatrixXd& zeromean, const int n_states) override{
-      cudaMalloc(&_data_gpu, _sdf.data_.size() * sizeof(double));
       cudaMalloc(&_class_gpu, sizeof(CudaOperation_3dArm));
       cudaMalloc(&_a_gpu, _fk._a.size() * sizeof(double));
       cudaMalloc(&_alpha_gpu, _fk._alpha.size() * sizeof(double));
@@ -838,7 +853,6 @@ public:
       cudaMalloc(&_centers_gpu, _fk._centers.size() * sizeof(double));
 
       cudaMemcpy(_class_gpu, this, sizeof(CudaOperation_3dArm), cudaMemcpyHostToDevice);
-      cudaMemcpy(_data_gpu, _sdf.data_.data(), _sdf.data_.size() * sizeof(double), cudaMemcpyHostToDevice);
       cudaMemcpy(_a_gpu, _fk._a.data(), _fk._a.size() * sizeof(double), cudaMemcpyHostToDevice);
       cudaMemcpy(_alpha_gpu, _fk._alpha.data(), _fk._alpha.size() * sizeof(double), cudaMemcpyHostToDevice);
       cudaMemcpy(_d_gpu, _fk._d.data(), _fk._d.size() * sizeof(double), cudaMemcpyHostToDevice);
@@ -851,7 +865,6 @@ public:
     }
 
     void Cuda_free() override{
-      cudaFree(_data_gpu);
       cudaFree(_class_gpu);
       cudaFree(_a_gpu);
       cudaFree(_alpha_gpu);
