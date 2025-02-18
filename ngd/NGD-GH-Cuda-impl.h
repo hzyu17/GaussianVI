@@ -79,12 +79,99 @@ std::tuple<double, VectorXd, SpMat> NGDGH<Factor>::onestep_linesearch(const doub
     new_mu = this->_mu + step_size * dmu;
     new_precision = this->_precision + step_size * dprecision;
 
-    // new cost
-    double new_cost = Base::cost_value_cuda(new_mu, new_precision);
+    double new_cost;
+    if (isPositiveDefinite(new_precision))
+        new_cost = Base::cost_value_cuda(new_mu, new_precision);
+    else
+        new_cost = std::numeric_limits<double>::infinity();
     
     // std::cout << "New cost = " << new_cost << std::endl;
     return std::make_tuple(new_cost, new_mu, new_precision);
+}
 
+template <typename Factor>
+bool NGDGH<Factor>::isPositiveDefinite(const SpMat& precision)
+{
+    SparseLDLT ldlt(precision);
+    VectorXd diag = ldlt.vectorD();
+    return (diag.array() > 0).all();
+}
+
+template <typename Factor>
+double NGDGH<Factor>::bisection_stepsize(const VectorXd& dmu, const SpMat& dprecision)
+{   
+    SpMat new_precision; 
+    VectorXd new_mu; 
+    new_mu.setZero(); new_precision.setZero();
+
+    double log_lower = -2;
+    double log_upper = 2;
+
+    double log_threshold = 0.01; 
+    double epsilon = 100;
+
+    while (log_upper - log_lower > log_threshold) 
+    {
+        double log_mid = (log_lower + log_upper) / 2;
+        double step_size = std::exp(log_mid);
+
+        new_mu = this->_mu + step_size * dmu;
+        new_precision = this->_precision + step_size * dprecision;
+
+        // Compute KL divergence and check for PD indirectly
+        double KL = KL_Divergence(new_mu, this->_mu, new_precision, this->_precision);
+        std::cout << "KL Divergence: " << KL << std::endl;
+
+        if (std::isnan(KL) || KL >= epsilon) {
+            log_upper = log_mid;
+        } else {
+            log_lower = log_mid;
+        }
+    }
+
+    double final_step_size = std::exp((log_lower + log_upper) / 2);
+
+    return final_step_size;
+}
+
+template <typename Factor>
+double NGDGH<Factor>::KL_Divergence(const VectorXd& mean_former, const VectorXd& mean_latter, const SpMat& precision_former, const SpMat& precision_latter)
+{
+    Timer timer;
+    // Compute the KL divergence
+    timer.start();
+    SparseLDLT ldlt_former(precision_former);
+    SparseLDLT ldlt_latter(precision_latter);
+
+    VectorXd vec_D_former = ldlt_former.vectorD();
+    VectorXd vec_D_latter = ldlt_latter.vectorD();
+    std::cout << "LDLT time: " << timer.end_mus_output() << " us" << std::endl;
+
+    timer.start();
+    SpMat covariance_former = this->inverse_GBP(precision_former);    
+    std::cout << "Inverse time: " << timer.end_mus_output() << " us" << std::endl;
+    
+    timer.start();
+    double trace_term = 0;
+    for (int k = 0; k < precision_latter.outerSize(); ++k) {
+        for (typename SpMat::InnerIterator it(precision_latter, k); it; ++it) {
+            int i = it.row();
+            int j = it.col();
+            trace_term += it.value() * covariance_former.coeff(i, j);
+        }
+    }
+    std::cout << "Trace time: " << timer.end_mus_output() << " us" << std::endl;
+
+    timer.start();
+    double quadratic_term = (mean_latter - mean_former).transpose() * precision_latter * (mean_latter - mean_former);
+    std::cout << "Quadratic time: " << timer.end_mus_output() << " us" << std::endl;
+
+    timer.start();
+    double log_term = vec_D_former.array().log().sum() - vec_D_latter.array().log().sum();
+    std::cout << "Log time: " << timer.end_mus_output() << " us" << std::endl;
+
+    double KL = (trace_term + quadratic_term + log_term - mean_former.size()) / 2;
+    return KL;
 }
 
 
