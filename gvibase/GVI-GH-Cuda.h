@@ -77,6 +77,8 @@ protected:
 
     double _alpha = 1.0;
 
+    bool _save_data = true;
+
     // Put step size decrease rate in config
 
     /// @param _vec_factors Vector of marginal optimizers
@@ -231,6 +233,8 @@ public:
     inline void set_stop_err(double stop_err) { _stop_err = stop_err; }
 
     inline void set_alpha(double alpha) { _alpha = alpha; }
+
+    inline void set_data_save(bool flag) { _save_data = flag; }
 
     /// The base step size in backtracking
     inline void set_step_size_base(double step_size_base){ _step_size_base = step_size_base; }
