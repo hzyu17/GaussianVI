@@ -23,105 +23,109 @@ using namespace Eigen;
 
 namespace gvi{
 
+struct Point2 {
+  double x;
+  double y;
+};
+
+struct FloatIndex {
+  double row;
+  double col;
+};
+
+
 class PlanarSDF {
 public:
-  // index and float_index is <row, col>
-  typedef std::tuple<size_t, size_t> index;
+  // FloatIndex is <row, col>
   typedef Vector2d float_index;
-  typedef std::shared_ptr<PlanarSDF> shared_ptr;
-  double* data_array_;
-  Eigen::Vector2d origin_;
+  const double* data_array_;
+  Point2 origin_;
 
   // geometry setting of signed distance field
   size_t field_rows_, field_cols_;
   double cell_size_;
-  Eigen::MatrixXd data_;
 
 public:
   /// constructor
   PlanarSDF() : field_rows_(0), field_cols_(0), cell_size_(0.0) {}
 
   /// constructor with data
-  PlanarSDF(const Eigen::Vector2d& origin, double cell_size, const Eigen::MatrixXd& data) :
-      origin_(origin), field_rows_(data.rows()), field_cols_(data.cols()),
-      cell_size_(cell_size), data_(data){
-        data_array_ = data_.data();
+  PlanarSDF(const Vector2d& origin, double cell_size, const MatrixXd& data) :
+      origin_{origin(0), origin(1)}, field_rows_(data.rows()), 
+      field_cols_(data.cols()), cell_size_(cell_size){
+        data_array_ = data.data(); // Has no use when we pass the data to the GPU
       }
 
   ~PlanarSDF() {}
 
-
-  /// give a point, search for signed distance field and (optional) gradient
   /// return signed distance
-  __host__ __device__ inline VectorXd getSignedDistance(const Eigen::MatrixXd& point) const {
-    int n_balls = point.rows();
-    VectorXd signed_dis(n_balls);
-    for (int i = 0; i < n_balls; i++){
-      const float_index pidx = convertPoint2toCell(point.row(i));
-      signed_dis(i) = signed_distance(pidx);
+  __device__ void getSignedDistance(const Point2* points, int n_points, double* out_signed_distance) const {
+    for (int i = 0; i < n_points; i++) {
+        FloatIndex fi = convertPoint2toCell(points[i]);
+        out_signed_distance[i] = signed_distance(fi);
     }
-    return signed_dis;
   }
 
+
   /// convert between point and cell corrdinate
-  __host__ __device__ inline float_index convertPoint2toCell(const Eigen::Vector2d& point) const {
+  __device__ FloatIndex convertPoint2toCell(const Point2& point) const {
     // check point range
     double x_inrange, y_inrange;
 
-    if (point.x() < origin_.x())
-      x_inrange = origin_.x();
-    else if (point.x() > (origin_.x() + (field_cols_-1.0)*cell_size_))
-      x_inrange = origin_.x() + (field_cols_-1.0)*cell_size_;
+    if (point.x < origin_.x)
+      x_inrange = origin_.x;
+    else if (point.x > (origin_.x + (field_cols_-1.0)*cell_size_))
+      x_inrange = origin_.x + (field_cols_-1.0)*cell_size_;
     else
-      x_inrange = point.x();
+      x_inrange = point.x;
 
-    if (point.y() < origin_.y())
-      y_inrange = origin_.y();
-    else if (point.y() > (origin_.y() + (field_rows_-1.0)*cell_size_))
-      y_inrange = origin_.y() + (field_rows_-1.0)*cell_size_;
+    if (point.y < origin_.y)
+      y_inrange = origin_.y;
+    else if (point.y > (origin_.y + (field_rows_-1.0)*cell_size_))
+      y_inrange = origin_.y + (field_rows_-1.0)*cell_size_;
     else
-      y_inrange = point.y();
+      y_inrange = point.y;
 
-    const double col = (x_inrange - origin_.x()) / cell_size_;
-    const double row = (y_inrange - origin_.y()) / cell_size_;
-    return Vector2d{row, col};
+    const double col = (x_inrange - origin_.x) / cell_size_;
+    const double row = (y_inrange - origin_.y) / cell_size_;
+    return {row, col};
   }
 
-  __host__ __device__ inline Eigen::Vector2d convertCelltoPoint2(const float_index& cell) const {
-    return origin_ + Eigen::Vector2d(
-        cell(1) * cell_size_,
-        cell(0) * cell_size_);
-  }
+  // __device__ inline Eigen::Vector2d convertCelltoPoint2(const float_index& cell) const {
+  //   return origin_ + Eigen::Vector2d(
+  //       cell(1) * cell_size_,
+  //       cell(0) * cell_size_);
+  // }
 
 
   /// bilinear interpolation
-  __host__ __device__ inline double signed_distance(const float_index& idx) const {
-    const double lr = floor(idx(0)), lc = floor(idx(1));
+  __device__ inline double signed_distance(const FloatIndex& idx) const {
+    const double lr = floor(idx.row), lc = floor(idx.col);
     const double hr = lr + 1.0, hc = lc + 1.0;
     const int lri = static_cast<int>(lr), lci = static_cast<int>(lc),
               hri = static_cast<int>(hr), hci = static_cast<int>(hc);
     return
-        (hr-idx(0))*(hc-idx(1))*signed_distance(lri, lci) +
-        (idx(0)-lr)*(hc-idx(1))*signed_distance(hri, lci) +
-        (hr-idx(0))*(idx(1)-lc)*signed_distance(lri, hci) +
-        (idx(0)-lr)*(idx(1)-lc)*signed_distance(hri, hci);
+        (hr-idx.row)*(hc-idx.col)*signed_distance(lri, lci) +
+        (idx.row-lr)*(hc-idx.col)*signed_distance(hri, lci) +
+        (hr-idx.row)*(idx.col-lc)*signed_distance(lri, hci) +
+        (idx.row-lr)*(idx.col-lc)*signed_distance(hri, hci);
   }
 
   /// gradient operator for bilinear interpolation
   /// gradient regrads to float_index
   /// not numerical differentiable at index point
 
-  __host__ __device__ inline Eigen::Vector2d gradient(const float_index& idx) const {
-    const double lr = floor(idx(0)), lc = floor(idx(1));
+  __device__ inline Point2 gradient(const FloatIndex& idx) const {
+    const double lr = floor(idx.row), lc = floor(idx.col);
     const double hr = lr + 1.0, hc = lc + 1.0;
     const size_t lri = static_cast<size_t>(lr), lci = static_cast<size_t>(lc),
         hri = static_cast<size_t>(hr), hci = static_cast<size_t>(hc);
-    return Eigen::Vector2d(
-        (hc-idx(1)) * (signed_distance(hri, lci)-signed_distance(lri, lci)) +
-        (idx(1)-lc) * (signed_distance(hri, hci)-signed_distance(lri, hci)),
+    return {
+        (hc-idx.col) * (signed_distance(hri, lci)-signed_distance(lri, lci)) +
+        (idx.col-lc) * (signed_distance(hri, hci)-signed_distance(lri, hci)),
 
-        (hr-idx(0)) * (signed_distance(lri, hci)-signed_distance(lri, lci)) +
-        (idx(0)-lr) * (signed_distance(hri, hci)-signed_distance(hri, lci)));
+        (hr-idx.row) * (signed_distance(lri, hci)-signed_distance(lri, lci)) +
+        (idx.row-lr) * (signed_distance(hri, hci)-signed_distance(hri, lci))};
   }
 
   // access
@@ -129,9 +133,8 @@ public:
     return data_array_[r + c * field_rows_];
   }
 
-  const Eigen::Vector2d& origin() const { return origin_; }
+  const Eigen::Vector2d origin() const { return Vector2d(origin_.x, origin_.y); }
   double cell_size() const { return cell_size_; }
-  const Eigen::MatrixXd& raw_data() const { return data_; }
 
 };
 
@@ -148,7 +151,7 @@ public:
   int field_rows_, field_cols_, field_z_;
   double cell_size_;
   std::vector<Eigen::MatrixXd> data_;
-  Eigen::MatrixXd data_matrix_;
+  MatrixXd data_matrix_;
   double* data_array_;
 
 public:
@@ -278,7 +281,7 @@ public:
         ia(*this);
     }
 
-    data_matrix_ = Eigen::MatrixXd(field_rows_, field_cols_ * field_z_);
+    data_matrix_ = MatrixXd(field_rows_, field_cols_ * field_z_);
     for (int i = 0; i < field_z_; i++){
       data_matrix_.block(0, i*field_cols_, field_rows_, field_cols_) = data_[i];
     }
@@ -432,13 +435,13 @@ public:
 
       cudaMalloc(&_weight_gpu, weights.size() * sizeof(double));
       cudaMalloc(&_zeromean_gpu, zeromean.size() * sizeof(double));
-      cudaMalloc(&_data_gpu, _sdf.data_.size() * sizeof(double));
+      cudaMalloc(&_data_gpu, _data_matrix.size() * sizeof(double));
       cudaMalloc(&_sigmapts_gpu, _sigmapts_rows * _dim_conf * _n_states * sizeof(double));
       cudaMalloc(&_func_value_gpu, _sigmapts_rows * _n_states * sizeof(double));
 
       cudaMemcpy(_weight_gpu, weights.data(), weights.size() * sizeof(double), cudaMemcpyHostToDevice);
       cudaMemcpy(_zeromean_gpu, zeromean.data(), zeromean.size() * sizeof(double), cudaMemcpyHostToDevice);
-      cudaMemcpy(_data_gpu, _sdf.data_.data(), _sdf.data_.size() * sizeof(double), cudaMemcpyHostToDevice);
+      cudaMemcpy(_data_gpu, _data_matrix.data(), _data_matrix.size() * sizeof(double), cudaMemcpyHostToDevice);
 
       cusolverDnCreate(&_cusolverH);
       cublasCreate(&_cublasH);
@@ -523,14 +526,10 @@ public:
 
     void ddmuIntegration(MatrixXd& results);
 
-    // void initializeSigmaptsResources(int dim_conf, int num_states, int sigmapts_rows);
-
-    // void update_sigmapts_separate(const MatrixXd& covariance, const MatrixXd& mean, int dim_conf, int num_states, MatrixXd& sigmapts);
-
-    // void freeSigmaptsResources(int num_states);
-
   double _epsilon, _radius, _sigma;
   SDFType _sdf; // define sdf in the derived class
+
+  MatrixXd _data_matrix;
 
   int _sigmapts_rows, _dim_conf, _n_states, num_streams;
   double *_weight_gpu, *_data_gpu, *_func_value_gpu, *_sigmapts_gpu, *_mu_gpu, *_zeromean_gpu;
@@ -575,6 +574,8 @@ public:
         hostCost._radius = _radius;
         hostCost._sigma = _sigma;
         hostCost._sdf = _sdf;
+
+        _data_matrix = field;
     }
 
     void Cuda_init(const MatrixXd& weights, const MatrixXd& zeromean, const int n_states) override{
@@ -600,37 +601,25 @@ public:
 
       PlanarSDF _sdf;
 
-      __device__ double cost_obstacle_planar(const VectorXd& pose){
+      __device__ double cost_obstacle_planar(const double* pose){
         int n_balls = 1;
         double slope = 1;
-        MatrixXd checkpoints = vec_balls(pose, n_balls);
-        VectorXd signed_distance = _sdf.getSignedDistance(checkpoints);
-        VectorXd err(signed_distance.size());
 
-        double cost = 0;
-        for (int i = 0; i < n_balls; i++){
-          if (signed_distance(i) > _epsilon + _radius)
-            err(i) =  0.0;
-          else
-            err(i) =  (_epsilon + _radius - signed_distance(i)) * slope;
-          cost += err(i) * err(i) * _sigma;
-        }
-        
+        Point2 checkpoint = {pose[0], pose[1]};
+        double signed_distance = 0.0;
+
+        _sdf.getSignedDistance(&checkpoint, n_balls, &signed_distance);
+
+        double err = 0.0;
+        if (signed_distance > _epsilon + _radius)
+          err = 0.0;
+        else
+          err = (_epsilon + _radius - signed_distance) * slope;
+
+        double cost = err * err * _sigma;
         return cost;
       }
 
-      __device__ MatrixXd vec_balls(const Eigen::VectorXd& x, int n_balls) {
-        MatrixXd v_pts = MatrixXd::Zero(n_balls, 2);
-  
-        double pos_x = x(0);
-        double pos_z = x(1);
-  
-        for (int i = 0; i < n_balls; i++) {
-            v_pts(i, 0) = pos_x;
-            v_pts(i, 1) = pos_z;
-        }
-        return v_pts;
-      }
     };
 
   ObstacleCost hostCost;
@@ -659,6 +648,8 @@ public:
         hostCost._radius = _radius;
         hostCost._sigma = _sigma;
         hostCost._sdf = _sdf;
+
+        _data_matrix = field;
     }
 
     void Cuda_init(const MatrixXd& weights, const MatrixXd& zeromean, const int n_states) override{
@@ -684,35 +675,35 @@ public:
 
       PlanarSDF _sdf;
 
-      __device__ double cost_obstacle_planar(const VectorXd& pose){
-        int n_balls = 5;
+      __device__ double cost_obstacle_planar(const double* pose){
+        constexpr int n_balls = 5;
         double slope = 5.0;
-  
-        MatrixXd checkpoints = vec_balls(pose, n_balls);
-        VectorXd signed_distance = _sdf.getSignedDistance(checkpoints);
-        VectorXd err(signed_distance.size());
+
+        Point2 checkpoints[n_balls];
+        vec_balls(pose, n_balls, checkpoints);
+
+        double signed_distance[n_balls];
+        _sdf.getSignedDistance(checkpoints, n_balls, signed_distance);
   
         double cost = 0;
   
         for (int i = 0; i < n_balls; i++){
-          if (signed_distance(i) > _epsilon + _radius)
-            err(i) =  0.0;
+          double err = 0.0;
+          if (signed_distance[i] > _epsilon + _radius)
+            err =  0.0;
           else
-            err(i) =  (_epsilon + _radius - signed_distance(i)) * slope;
-          cost += err(i) * err(i) * _sigma;
+            err =  (_epsilon + _radius - signed_distance[i]) * slope;
+          cost += err * err * _sigma;
         }
         
         return cost;
       }
 
-      __device__ Eigen::MatrixXd vec_balls(const Eigen::VectorXd& x, int n_balls) {
-        Eigen::MatrixXd v_pts = Eigen::MatrixXd::Zero(n_balls, 2);
-  
+      __device__ void vec_balls(const double* pose, int n_balls, Point2* v_pts) {  
         double L = 5.0;
-  
-        double pos_x = x(0);
-        double pos_z = x(1);
-        double phi = x(2);
+        double pos_x = pose[0];
+        double pos_z = pose[1];
+        double phi = pose[2];
         
         double l_pt_x = pos_x - (L - _radius * 1.5) * std::cos(phi) / 2.0;
         double l_pt_z = pos_z - (L - _radius * 1.5) * std::sin(phi) / 2.0;
@@ -720,10 +711,9 @@ public:
         for (int i = 0; i < n_balls; i++) {
           double pt_xi = l_pt_x + L * std::cos(phi) / n_balls * i;
           double pt_zi = l_pt_z + L * std::sin(phi) / n_balls * i;
-          v_pts(i, 0) = pt_xi;
-          v_pts(i, 1) = pt_zi;
+          v_pts[i].x = pt_xi;
+          v_pts[i].y = pt_zi;
         }
-        return v_pts;
       }
 
     };
@@ -745,6 +735,8 @@ public:
         hostCost._radius = _radius;
         hostCost._sigma = _sigma;
         hostCost._sdf = _sdf;
+
+        _data_matrix = _sdf.data_matrix_;
     }
 
     void Cuda_init(const MatrixXd& weights, const MatrixXd& zeromean, const int n_states) override{
@@ -828,6 +820,8 @@ public:
         _radii_data = _radii.data();
         const int num_spheres = frames.size();
         _fk = ForwardKinematics(a, alpha, d, theta_bias, num_spheres, frames, centers);
+
+        _data_matrix = _sdf.data_matrix_;
     }
 
     CudaOperation_3dArm(const Eigen::VectorXd& a, const Eigen::VectorXd& alpha, const Eigen::VectorXd& d, const Eigen::VectorXd& theta_bias,
@@ -840,6 +834,8 @@ public:
         _radii_data = _radii.data();
         const int num_spheres = frames.size();
         _fk = ForwardKinematics(a, alpha, d, theta_bias, num_spheres, frames, centers);
+
+        _data_matrix = _sdf.data_matrix_;
     }
 
     void Cuda_init(const MatrixXd& weights, const MatrixXd& zeromean, const int n_states) override{
