@@ -106,24 +106,8 @@ __global__ void cost_function(double* d_sigmapts, double* d_pts, int sigmapts_ro
 }
 template __global__ void cost_function<CudaOperation_PlanarPR>(double*, double*, int, int, int, typename CudaOperation_PlanarPR::ObstacleCost*, double*);
 template __global__ void cost_function<CudaOperation_Quad>(double*, double*, int, int, int, typename CudaOperation_Quad::ObstacleCost*, double*);
-// template __global__ void cost_function<CudaOperation_3dpR>(double*, double*, int, int, int, typename CudaOperation_3dpR::ObstacleCost*, double*);
+template __global__ void cost_function<CudaOperation_3dpR>(double*, double*, int, int, int, typename CudaOperation_3dpR::ObstacleCost*, double*);
 
-__global__ void cost_function(double* d_sigmapts, double* d_pts, int sigmapts_rows, int sigmapts_cols, 
-                                int n_states, CudaOperation_3dpR::ObstacleCost* d_cost, double* d_data){
-
-    int row = blockIdx.y * blockDim.y + threadIdx.y;
-    int col = blockIdx.x * blockDim.x + threadIdx.x;
-
-    if (row < sigmapts_rows && col < n_states){
-    Eigen::Map<MatrixXd> sigmapts(d_sigmapts + col*sigmapts_rows*sigmapts_cols, sigmapts_rows, sigmapts_cols);
-
-    (d_cost->_sdf).data_array_ = d_data;
-
-    double function_value = d_cost -> cost_obstacle_planar(sigmapts.row(row));
-
-    d_pts[col*sigmapts_rows + row] = function_value;
-    }
-}
 
 __global__ void cost_function(double* d_sigmapts, double* d_pts, int sigmapts_rows, int sigmapts_cols, 
                                 int n_states, gvi::CudaOperation_3dArm* pointer, double* sdf_data, 
@@ -560,7 +544,7 @@ void CudaOperation_3dpR::costIntegration(const MatrixXd& sigmapts, VectorXd& res
     dim3 blockSize1(64, 64);
     dim3 threadperblock1((results.size() + blockSize1.x - 1) / blockSize1.x, (sigmapts.rows() + blockSize1.y - 1) / blockSize1.y);
 
-    cost_function<<<blockSize1, threadperblock1>>>(_sigmapts_gpu, _func_value_gpu, sigmapts.rows(), sigmapts_cols, results.size(), d_cost, _data_gpu);
+    cost_function<CudaOperation_3dpR><<<blockSize1, threadperblock1>>>(_sigmapts_gpu, _func_value_gpu, sigmapts.rows(), sigmapts_cols, results.size(), d_cost, _data_gpu);
     cudaDeviceSynchronize();
 
     cudaError_t err = cudaGetLastError();

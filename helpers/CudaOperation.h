@@ -37,7 +37,6 @@ struct FloatIndex {
 class PlanarSDF {
 public:
   // FloatIndex is <row, col>
-  typedef Vector2d float_index;
   const double* data_array_;
   Point2 origin_;
 
@@ -70,21 +69,18 @@ public:
   /// convert between point and cell corrdinate
   __device__ FloatIndex convertPoint2toCell(const Point2& point) const {
     // check point range
-    double x_inrange, y_inrange;
+    double x_inrange = point.x;
+    double y_inrange = point.y;
 
     if (point.x < origin_.x)
       x_inrange = origin_.x;
     else if (point.x > (origin_.x + (field_cols_-1.0)*cell_size_))
       x_inrange = origin_.x + (field_cols_-1.0)*cell_size_;
-    else
-      x_inrange = point.x;
 
     if (point.y < origin_.y)
       y_inrange = origin_.y;
     else if (point.y > (origin_.y + (field_rows_-1.0)*cell_size_))
       y_inrange = origin_.y + (field_rows_-1.0)*cell_size_;
-    else
-      y_inrange = point.y;
 
     const double col = (x_inrange - origin_.x) / cell_size_;
     const double row = (y_inrange - origin_.y) / cell_size_;
@@ -133,22 +129,33 @@ public:
     return data_array_[r + c * field_rows_];
   }
 
-  const Eigen::Vector2d origin() const { return Vector2d(origin_.x, origin_.y); }
+  const Vector2d origin() const { return Vector2d(origin_.x, origin_.y); }
   double cell_size() const { return cell_size_; }
 
 };
 
-class SignedDistanceField {
 
+struct Point3 {
+  double x;
+  double y;
+  double z;
+};
+
+struct FloatIndex3 {
+  double row;
+  double col;
+  double z;
+};
+
+/////    Check Serilization in the maps/3dpR     /////
+class SignedDistanceField {
 public:
-  // index and float_index is <row, col>
-  typedef std::tuple<size_t, size_t, size_t> index;
-  typedef Vector3d float_index;
-  typedef std::shared_ptr<SignedDistanceField> shared_ptr;
-  Eigen::Vector3d origin_;
+  // FloatIndex3 is <row, col, z>
+  Vector3d origin_;
+  Point3 origin_device_;
 
   // geometry setting of signed distance field
-  int field_rows_, field_cols_, field_z_;
+  size_t field_rows_, field_cols_, field_z_;
   double cell_size_;
   std::vector<Eigen::MatrixXd> data_;
   MatrixXd data_matrix_;
@@ -160,7 +167,7 @@ public:
 
   /// constructor with data
   SignedDistanceField(const Eigen::Vector3d& origin, double cell_size, const std::vector<Eigen::MatrixXd>& data) :
-      origin_(origin), field_rows_(data[0].rows()), field_cols_(data[0].cols()), 
+      origin_(origin), origin_device_{origin(0), origin(1), origin(2)}, field_rows_(data[0].rows()), field_cols_(data[0].cols()), 
       field_z_(data.size()), cell_size_(cell_size), data_(data), data_matrix_(field_rows_, field_cols_ * field_z_)
       {
         for (int i = 0; i < field_z_; i++){
@@ -174,92 +181,76 @@ public:
 
   /// give a point, search for signed distance field and (optional) gradient
   /// return signed distance
-  __host__ __device__ inline VectorXd getSignedDistance(const Eigen::MatrixXd& point) const {
-    int n_balls = point.rows();
-    VectorXd signed_dis(n_balls);
-    // printf("point = (%lf, %lf, %lf)\n", point(0), point(1), point(2));
-    for (int i = 0; i < n_balls; i++){
-      const float_index pidx = convertPoint3toCell(point.row(i));
-      signed_dis(i) = signed_distance(pidx);
+  __device__ void getSignedDistance(const Point3* points, int n_points, double* out_signed_distance) const {
+    for (int i = 0; i < n_points; i++) {
+      FloatIndex3 idx = convertPoint3toCell(points[i]);
+      out_signed_distance[i] = signed_distance(idx);
     }
-    return signed_dis;
   }
 
   /// convert between point and cell corrdinate
-  __host__ __device__ inline float_index convertPoint3toCell(const Eigen::Vector3d& point) const {
+  __device__ inline FloatIndex3 convertPoint3toCell(const Point3& point) const {
     // check point range
-    double x_inrange, y_inrange, z_inrange;
+    double x_inrange = point.x;
+    double y_inrange = point.y;
+    double z_inrange = point.z;
 
-    if (point(0) < origin_(0))
-      x_inrange = origin_(0);
-    else if (point(0) > (origin_(0) + (field_cols_-1.0)*cell_size_))
-      x_inrange = origin_(0) + (field_cols_-1.0)*cell_size_;
-    else
-      x_inrange = point(0);
+    if (point.x < origin_device_.x)
+      x_inrange = origin_device_.x;
+    else if (point.x > (origin_device_.x + (field_cols_-1.0)*cell_size_))
+      x_inrange = origin_device_.x + (field_cols_-1.0)*cell_size_;
 
-    if (point(1) < origin_(1))
-      y_inrange = origin_(1);
-    else if (point(1) > (origin_(1) + (field_rows_-1.0)*cell_size_))
-      y_inrange = origin_(1) + (field_rows_-1.0)*cell_size_;
-    else
-      y_inrange = point(1);
+    if (point.y < origin_device_.y)
+      y_inrange = origin_device_.y;
+    else if (point.y > (origin_device_.y + (field_rows_-1.0)*cell_size_))
+      y_inrange = origin_device_.y + (field_rows_-1.0)*cell_size_;
 
-    if (point(2) < origin_(2))
-      z_inrange = origin_(2);
-    else if (point(2) > (origin_(2) + (field_z_-1.0)*cell_size_))
-      z_inrange = origin_(2) + (field_z_-1.0)*cell_size_;
-    else
-      z_inrange = point(2);
+    if (point.z < origin_device_.z)
+      z_inrange = origin_device_.z;
+    else if (point.z > (origin_device_.z + (field_z_-1.0)*cell_size_))
+      z_inrange = origin_device_.z + (field_z_-1.0)*cell_size_;
 
-    const double col = (x_inrange - origin_(0)) / cell_size_;
-    const double row = (y_inrange - origin_(1)) / cell_size_;
-    const double z   = (z_inrange - origin_(2)) / cell_size_;
-    return Vector3d{row, col, z};
+    const double col = (x_inrange - origin_device_.x) / cell_size_;
+    const double row = (y_inrange - origin_device_.y) / cell_size_;
+    const double z   = (z_inrange - origin_device_.z) / cell_size_;
+    return FloatIndex3{row, col, z};
   }
 
-  __host__ __device__ inline Eigen::Vector3d convertCelltoPoint2(const float_index& cell) const {
-    return origin_ + Eigen::Vector3d(
-        cell(1) * cell_size_,
-        cell(0) * cell_size_,
-        cell(2) * cell_size_);
-  }
+  // __host__ __device__ inline Eigen::Vector3d convertCelltoPoint2(const float_index& cell) const {
+  //   return origin_ + Eigen::Vector3d(
+  //       cell(1) * cell_size_,
+  //       cell(0) * cell_size_,
+  //       cell(2) * cell_size_);
+  // }
 
 
   /// bilinear interpolation
-  __host__ __device__ inline double signed_distance(const float_index& idx) const {
-    const double lr = floor(idx(0)), lc = floor(idx(1)), lz = floor(idx(2));
+  __device__ inline double signed_distance(const FloatIndex3& idx) const {
+    const double lr = floor(idx.row), lc = floor(idx.col), lz = floor(idx.z);
     const double hr = lr + 1.0, hc = lc + 1.0, hz = lz + 1.0;
     const int lri = static_cast<int>(lr), lci = static_cast<int>(lc), lzi = static_cast<int>(lz), 
               hri = static_cast<int>(hr), hci = static_cast<int>(hc), hzi = static_cast<int>(hz);
     // printf("lri = %d, lci = %d, lzi = %d, hri = %d, hci = %d, hzi = %d\n\n", lri, lci, lzi, hri, hci, hzi);
     return
-        (hr-idx(0))*(hc-idx(1))*(hz-idx(2))*signed_distance(lri, lci, lzi) +
-        (idx(0)-lr)*(hc-idx(1))*(hz-idx(2))*signed_distance(hri, lci, lzi) +
-        (hr-idx(0))*(idx(1)-lc)*(hz-idx(2))*signed_distance(lri, hci, lzi) +
-        (idx(0)-lr)*(idx(1)-lc)*(hz-idx(2))*signed_distance(hri, hci, lzi) +
-        (hr-idx(0))*(hc-idx(1))*(idx(2)-lz)*signed_distance(lri, lci, hzi) +
-        (idx(0)-lr)*(hc-idx(1))*(idx(2)-lz)*signed_distance(hri, lci, hzi) +
-        (hr-idx(0))*(idx(1)-lc)*(idx(2)-lz)*signed_distance(lri, hci, hzi) +
-        (idx(0)-lr)*(idx(1)-lc)*(idx(2)-lz)*signed_distance(hri, hci, hzi);
+        (hr-idx.row)*(hc-idx.col)*(hz-idx.z)*signed_distance(lri, lci, lzi) +
+        (idx.row-lr)*(hc-idx.col)*(hz-idx.z)*signed_distance(hri, lci, lzi) +
+        (hr-idx.row)*(idx.col-lc)*(hz-idx.z)*signed_distance(lri, hci, lzi) +
+        (idx.row-lr)*(idx.col-lc)*(hz-idx.z)*signed_distance(hri, hci, lzi) +
+        (hr-idx.row)*(hc-idx.col)*(idx.z-lz)*signed_distance(lri, lci, hzi) +
+        (idx.row-lr)*(hc-idx.col)*(idx.z-lz)*signed_distance(hri, lci, hzi) +
+        (hr-idx.row)*(idx.col-lc)*(idx.z-lz)*signed_distance(lri, hci, hzi) +
+        (idx.row-lr)*(idx.col-lc)*(idx.z-lz)*signed_distance(hri, hci, hzi);
   }
 
-  /// gradient operator for bilinear interpolation
-  /// gradient regrads to float_index
-  /// not numerical differentiable at index point
+  __device__ inline double signed_distance(int r, int c, int z) const {
+    return data_array_[r + c * field_rows_ + z * field_rows_ * field_cols_];
+  }
 
-  // __host__ __device__ inline Eigen::Vector2d gradient(const float_index& idx) const {
-  //   const double lr = floor(idx(0)), lc = floor(idx(1));
-  //   const double hr = lr + 1.0, hc = lc + 1.0;
-  //   const size_t lri = static_cast<size_t>(lr), lci = static_cast<size_t>(lc),
-  //       hri = static_cast<size_t>(hr), hci = static_cast<size_t>(hc);
-  //   return Eigen::Vector2d(
-  //       (hc-idx(1)) * (signed_distance(hri, lci)-signed_distance(lri, lci)) +
-  //       (idx(1)-lc) * (signed_distance(hri, hci)-signed_distance(lri, hci)),
+  const Vector3d origin() const { return origin_; }
+  double cell_size() const { return cell_size_; }
+  const std::vector<Eigen::MatrixXd>& raw_data() const { return data_; }
 
-  //       (hr-idx(0)) * (signed_distance(lri, hci)-signed_distance(lri, lci)) +
-  //       (idx(0)-lr) * (signed_distance(hri, hci)-signed_distance(hri, lci)));
-  // }
-
+  // Remember to check the loadSDF and serialization functions
   void loadSDF(const std::string& filename) {
     std::ifstream ifs(filename, std::ios::binary);
     if (!ifs.is_open()) {
@@ -306,16 +297,6 @@ public:
       archive(CEREAL_NVP(*this));
     }
   }
-
-
-  // access
-  __host__ __device__ inline double signed_distance(int r, int c, int z) const {
-    return data_array_[r + c * field_rows_ + z * field_rows_ * field_cols_]; //Need to change a way to read
-  }
-
-  const Eigen::Vector3d& origin() const { return origin_; }
-  double cell_size() const { return cell_size_; }
-  const std::vector<Eigen::MatrixXd>& raw_data() const { return data_; }
 
   /** Serialization function */
   template<class Archive>
@@ -677,7 +658,7 @@ public:
 
       __device__ double cost_obstacle_planar(const double* pose){
         constexpr int n_balls = 5;
-        double slope = 5.0;
+        double slope = 1.0; // I can use sigma to replace the slope
 
         Point2 checkpoints[n_balls];
         vec_balls(pose, n_balls, checkpoints);
@@ -692,7 +673,7 @@ public:
           if (signed_distance[i] > _epsilon + _radius)
             err =  0.0;
           else
-            err =  (_epsilon + _radius - signed_distance[i]) * slope;
+            err = (_epsilon + _radius - signed_distance[i]) * slope;
           cost += err * err * _sigma;
         }
         
@@ -762,39 +743,24 @@ public:
 
       SignedDistanceField _sdf;
 
-      __device__ double cost_obstacle_planar(const VectorXd& pose){
+      __device__ double cost_obstacle_planar(const double* pose){
         int n_balls = 1;
         double slope = 1;
-        MatrixXd checkpoints = vec_balls(pose, n_balls);
-        VectorXd signed_distance = _sdf.getSignedDistance(checkpoints);
-        // printf("signed_distance of pt: (%lf, %lf, %lf) = %lf\n", pose(0), pose(1), pose(2), signed_distance(0));
-        VectorXd err(signed_distance.size());
-  
-        double cost = 0;
-        for (int i = 0; i < n_balls; i++){
-          if (signed_distance(i) > _epsilon + _radius)
-            err(i) =  0.0;
-          else
-            err(i) =  (_epsilon + _radius - signed_distance(i)) * slope;
-          cost += err(i) * err(i) * _sigma;
-        }
-        
-        return cost;
-      }
 
-      __device__ Eigen::MatrixXd vec_balls(const Eigen::VectorXd& x, int n_balls) {
-        Eigen::MatrixXd v_pts = Eigen::MatrixXd::Zero(n_balls, 3);
+        Point3 checkpoint = {pose[0], pose[1], pose[2]};
+        double signed_distance = 0.0;
+
+        _sdf.getSignedDistance(&checkpoint, n_balls, &signed_distance);
+        // printf("signed_distance of pt: (%lf, %lf, %lf) = %lf\n", pose(0), pose(1), pose(2), signed_distance(0));
+        
+        double err = 0.0;
+        if (signed_distance > _epsilon + _radius)
+          err = 0.0;
+        else
+          err = (_epsilon + _radius - signed_distance) * slope;
   
-        double pos_x = x(0);
-        double pos_y = x(1);
-        double pos_z = x(2);
-  
-        for (int i = 0; i < n_balls; i++) {
-            v_pts(i, 0) = pos_x;
-            v_pts(i, 1) = pos_y;
-            v_pts(i, 2) = pos_z;
-        }
-        return v_pts;
+        double cost = err * err * _sigma;
+        return cost;
       }
 
     };
@@ -876,41 +842,46 @@ public:
 
     void costIntegration(const MatrixXd& sigmapts, VectorXd& results, const int sigmapts_cols);
 
-    __host__ __device__ double cost_obstacle(const VectorXd& theta, const SignedDistanceField& sdf, const ForwardKinematics& fk){
+    __device__ double cost_obstacle(const VectorXd& theta, const SignedDistanceField& sdf, const ForwardKinematics& fk){
+      constexpr int MAX_BALLS = 128;
       int n_balls = theta.size();
       double slope = 1;
       VectorXd pose = fk.compute_transformed_sphere_centers(theta);
-      MatrixXd checkpoints = vec_balls(pose, n_balls);
-      VectorXd signed_distance = sdf.getSignedDistance(checkpoints);
-      VectorXd err(signed_distance.size());
+
+      Point3 checkpoints[MAX_BALLS];
+      vec_balls(pose, n_balls, checkpoints);
+
+      double signed_distance[MAX_BALLS] = {0};
+
+      sdf.getSignedDistance(checkpoints, n_balls, signed_distance);
 
       double cost = 0;
       for (int i = 0; i < n_balls; i++){
-        if (signed_distance(i) > _epsilon + radius(i))
-          err(i) =  0.0;
+        double err = 0.0;
+        if (signed_distance[i] > _epsilon + radius(i))
+          err =  0.0;
         else
-          err(i) =  (_epsilon + radius(i) - signed_distance(i)) * slope;
-        cost += err(i) * err(i) * _sigma;
+          err =  (_epsilon + radius(i) - signed_distance[i]) * slope;
+        cost += err * err * _sigma;
       }
       
       return cost;
     }
 
-    __host__ __device__ Eigen::MatrixXd vec_balls(const Eigen::VectorXd& x, int n_balls) {
-      Eigen::MatrixXd v_pts = Eigen::MatrixXd::Zero(n_balls, 3);
+    // Reshape from vector to a matrix
+    __device__ void vec_balls(const Eigen::VectorXd& x, int n_balls, Point3* pts) {
       for (int i = 0; i < n_balls; i++) {
-          v_pts(i, 0) = x(3*i);
-          v_pts(i, 1) = x(3*i+1);
-          v_pts(i, 2) = x(3*i+2);
+        pts[i].x = x(3 * i);
+        pts[i].y = x(3 * i + 1);
+        pts[i].z = x(3 * i + 2);
       }
-      return v_pts;
     }
 
     __host__ __device__ inline double radius(int i) const {
       return _radii_data[i];
     }
 
-  Eigen::VectorXd _radii;
+  VectorXd _radii;
   double* _radii_data;
   ForwardKinematics _fk;
 
