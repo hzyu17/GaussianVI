@@ -150,16 +150,17 @@ struct FloatIndex3 {
 /////    Check Serilization in the maps/3dpR     /////
 class SignedDistanceField {
 public:
-  // FloatIndex3 is <row, col, z>
+  // Members loaded from the bin file
   Vector3d origin_;
-  Point3 origin_device_;
-
-  // geometry setting of signed distance field
-  size_t field_rows_, field_cols_, field_z_;
+  int field_rows_, field_cols_, field_z_;
   double cell_size_;
   std::vector<Eigen::MatrixXd> data_;
+
   MatrixXd data_matrix_;
+
+  // Members used in the GPU
   double* data_array_;
+  Point3 origin_device_;
 
 public:
   /// constructor
@@ -278,6 +279,7 @@ public:
     }
 
     data_array_ = data_matrix_.data();
+    origin_device_ = {origin_(0), origin_(1), origin_(2)};
   }
 
   void saveSDF(const std::string filename) {
@@ -311,7 +313,6 @@ public:
 };
 
 class ForwardKinematics{
-
 public:
   // Denavit-Hartenberg (DH) variables
   Eigen::VectorXd _a;
@@ -430,14 +431,10 @@ public:
 
       size_t covarianceSize = _n_states * _dim_conf * _dim_conf * sizeof(double);
       size_t meanSize       = _n_states * _dim_conf * sizeof(double);
-      size_t sigmaptsSize   = _sigmapts_rows * _dim_conf * _n_states * sizeof(double);
 
       cudaMalloc(&d_covariance, covarianceSize);
       cudaMalloc(&d_mean, meanSize);
-      cudaMalloc(&d_sigmapts, sigmaptsSize);
-
-      size_t eigenvaluesSize = _dim_conf * _n_states * sizeof(double);
-      cudaMalloc(&d_eigenvalues, eigenvaluesSize);
+      cudaMalloc(&d_eigenvalues, covarianceSize);
       cudaMalloc(&d_info, _n_states * sizeof(int));
 
       lwork = 0;
@@ -448,7 +445,6 @@ public:
       cudaMalloc(&d_eigvec, covarianceSize);
       cudaMalloc(&d_scaledEigvec, covarianceSize);
       cudaMalloc(&d_sqrtP, covarianceSize);
-
     }
 
     void GH_parameters_free(){
@@ -460,7 +456,6 @@ public:
 
       cudaFree(d_covariance);
       cudaFree(d_mean);
-      cudaFree(d_sigmapts);
       cudaFree(d_eigenvalues);
       cudaFree(d_info);
       cudaFree(work);
@@ -475,20 +470,6 @@ public:
     
 
     void Cuda_init_iter(const MatrixXd& sigmapts, VectorXd& results, const int sigmapts_cols){
-      // Allocate the space at first to avoid multiple mallocs
-      
-      // _sigmapts_rows = sigmapts.rows();
-      // _dim_conf = sigmapts_cols;
-      // _n_states = results.size();
-
-      // cudaMalloc(&_sigmapts_gpu, sigmapts.size() * sizeof(double));
-      // cudaMalloc(&_func_value_gpu, _sigmapts_rows * _n_states * sizeof(double));
-
-      // Timer timer;
-      // timer.start();
-      // cudaMemset(_func_value_gpu, 0, _sigmapts_rows * _n_states * sizeof(double));
-      // std::cout << "Time for setting sigmapts zero: " << timer.end_mus_output() << " us" << std::endl;
-
       cudaMemcpy(_sigmapts_gpu, sigmapts.data(), sigmapts.size() * sizeof(double), cudaMemcpyHostToDevice);
     }
 
@@ -523,7 +504,6 @@ public:
 
   double* d_covariance  = nullptr;
   double* d_mean        = nullptr;
-  double* d_sigmapts    = nullptr;
   double* d_eigenvalues = nullptr;
   int*    d_info        = nullptr;
   int     lwork         = 0;
@@ -560,18 +540,17 @@ public:
     }
 
     void Cuda_init(const MatrixXd& weights, const MatrixXd& zeromean, const int n_states) override{
+      GH_parameters_init(weights, zeromean, n_states);
+      hostCost._sdf.data_array_ = _data_gpu;
+
       cudaMalloc(&d_cost, sizeof(ObstacleCost));
       cudaMemcpy(d_cost, &hostCost, sizeof(ObstacleCost), cudaMemcpyHostToDevice);
-
-      GH_parameters_init(weights, zeromean, n_states);
     }
 
     void Cuda_free(){
       cudaFree(d_cost);
       GH_parameters_free();
     }
-
-    // void CudaIntegration(const MatrixXd& sigmapts, const MatrixXd& weights, MatrixXd& results, const MatrixXd& mean, int type);
 
     void costIntegration(const MatrixXd& sigmapts, VectorXd& results, const int sigmapts_cols);
 
@@ -634,18 +613,17 @@ public:
     }
 
     void Cuda_init(const MatrixXd& weights, const MatrixXd& zeromean, const int n_states) override{
+      GH_parameters_init(weights, zeromean, n_states);
+      hostCost._sdf.data_array_ = _data_gpu;
+
       cudaMalloc(&d_cost, sizeof(ObstacleCost));
       cudaMemcpy(d_cost, &hostCost, sizeof(ObstacleCost), cudaMemcpyHostToDevice);
-
-      GH_parameters_init(weights, zeromean, n_states);
     }
 
     void Cuda_free() override{
       cudaFree(d_cost);
       GH_parameters_free();
     }
-
-    // void CudaIntegration(const MatrixXd& sigmapts, const MatrixXd& weights, MatrixXd& results, const MatrixXd& mean, int type);
 
     void costIntegration(const MatrixXd& sigmapts, VectorXd& results, const int sigmapts_cols);
 
@@ -709,7 +687,7 @@ public:
     CudaOperation_3dpR(double cost_sigma = 15.5, double epsilon = 0.5, double radius = 1):
     CudaOperation_Base(cost_sigma, epsilon, radius)
     {
-        std::string sdf_file = source_root + "/maps/3dpR/pRSDF3D.bin";
+        std::string sdf_file = source_root + "/maps/3dpR/pRSDF3D_cereal.bin";
         _sdf.loadSDF(sdf_file);
 
         hostCost._epsilon = _epsilon;
@@ -721,18 +699,17 @@ public:
     }
 
     void Cuda_init(const MatrixXd& weights, const MatrixXd& zeromean, const int n_states) override{
+      GH_parameters_init(weights, zeromean, n_states);
+      hostCost._sdf.data_array_ = _data_gpu;
+
       cudaMalloc(&d_cost, sizeof(ObstacleCost));
       cudaMemcpy(d_cost, &hostCost, sizeof(ObstacleCost), cudaMemcpyHostToDevice);
-
-      GH_parameters_init(weights, zeromean, n_states);
     }
 
     void Cuda_free() override{
       cudaFree(d_cost);
       GH_parameters_free();
     }
-
-    // void CudaIntegration(const MatrixXd& sigmapts, const MatrixXd& weights, MatrixXd& results, const MatrixXd& mean, int type);
 
     void costIntegration(const MatrixXd& sigmapts, VectorXd& results, const int sigmapts_cols);
 
