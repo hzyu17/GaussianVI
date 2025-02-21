@@ -50,9 +50,6 @@ void GVIGH<Factor>::optimize(std::optional<bool> verbose)
             if (is_verbose){
                 std::cout << "Switching to high temperature.." << std::endl;
             }
-            if (is_verbose){
-                std::cout << "Switching to high temperature.." << std::endl;
-            }
             this->switch_to_high_temperature();
             is_lowtemp = false;
         }
@@ -131,38 +128,132 @@ void GVIGH<Factor>::optimize(std::optional<bool> verbose)
 
 
 template <typename Factor>
+void GVIGH<Factor>::optimize_time_test()
+{
+    bool is_lowtemp = true;
+    bool converged = false;
+
+    for (int i_iter = 0; i_iter < _niters; i_iter++)
+    {
+        if (converged){
+            break;
+        }
+
+        // ============= High temperature phase =============
+        if (i_iter == _niters_lowtemp && is_lowtemp){
+            this->switch_to_high_temperature();
+            is_lowtemp = false;
+        }
+
+        // // ============= Cost at current iteration =============
+        double cost_iter = this->cost_value();
+
+        // ============= Collect factor costs =============
+        VectorXd fact_costs_iter = this->factor_cost_vector();
+
+        // gradients
+        std::tuple<VectorXd, SpMat> gradients = compute_gradients(); //Used calculate partial V here
+
+        VectorXd dmu = std::get<0>(gradients);
+        SpMat dprecision = std::get<1>(gradients);
+
+        int cnt = 0;
+        int B = 1;
+        double step_size = _step_size_base;
+
+        // backtracking 
+        while (true)
+        {   
+            // new step size
+            step_size = step_size * 0.75;
+
+            auto onestep_res = onestep_linesearch(step_size, dmu, dprecision);
+
+            double new_cost = std::get<0>(onestep_res);
+            VectorXd new_mu = std::get<1>(onestep_res);
+            auto new_precision = std::get<2>(onestep_res);
+
+            if (new_cost < cost_iter){
+                break;
+            }else{ 
+                cnt += 1;
+            }
+
+            if (cnt > _niters_backtrack)
+            {
+                if (is_lowtemp){
+                    this->switch_to_high_temperature();
+                    is_lowtemp = false;
+                }else{
+                    converged = true;
+                }
+                break;
+            }                
+        }
+        // std::cout << "Backtracking time: "<< cnt << std::endl;
+    }
+}
+
+
+template <typename Factor>
 void GVIGH<Factor>::time_test()
 {
-    // std::cout << "========== Optimization Start: ==========" << std::endl << std::endl;
-
     Timer timer;
-    std::vector<double> times;
-    times.reserve(_niters);
 
-    for (int i=0; i < _niters+1; i++){
+    int n_repeat = 20;
+    std::vector<double> times_evaluation;
+    times_evaluation.reserve(n_repeat);
+
+    // Compute cost and derivatives
+    for (int i=0; i < n_repeat+1; i++){
         timer.start();
         double cost_iter = this->cost_value();
         VectorXd fact_costs_iter = this->factor_cost_vector();
         std::tuple<VectorXd, SpMat> gradients = compute_gradients_time();
         double time = timer.end_mis();
         if (i != 0)
-            times.push_back(time);  
+        times_evaluation.push_back(time);  // The first time need to initialize
     }
 
-    double average_time = std::accumulate(times.begin(), times.end(), 0.0) / _niters;
+    double average_time = std::accumulate(times_evaluation.begin(), times_evaluation.end(), 0.0) / n_repeat;
+    double min_time = *std::min_element(times_evaluation.begin(), times_evaluation.end());
+    double max_time = *std::max_element(times_evaluation.begin(), times_evaluation.end());
 
-    double min_time = *std::min_element(times.begin(), times.end());
-    double max_time = *std::max_element(times.begin(), times.end());
+    std::cout << "% CPU Cost average: " << average_time << " ms" << std::endl;
+    std::cout << "% CPU Cost min: " << min_time << " ms" << std::endl;
+    std::cout << "% CPU Cost max: " << max_time << " ms" << std::endl;
 
-    std::cout << "% CPU average: " << average_time << " ms" << std::endl;
-    std::cout << "% CPU min: " << min_time << " ms" << std::endl;
-    std::cout << "% CPU max: " << max_time << " ms" << std::endl;
-
-    std::cout << "% [ " << times[0];
-    for (int i = 1; i < times.size(); ++i) {
-        std::cout << ", " << times[i];
+    std::cout << "% [ " << times_evaluation[0];
+    for (int i = 1; i < times_evaluation.size(); ++i) {
+        std::cout << ", " << times_evaluation[i];
     }
     std::cout << " ]" << std::endl;
+
+
+    // std::vector<double> times_optimization;
+    // times_optimization.reserve(n_repeat);
+
+    // for (int i=0; i < n_repeat+1; i++){
+    //     timer.start();
+    //     optimize_time_test();
+    //     double time = timer.end_mis();
+    //     if (i != 0)
+    //     times_optimization.push_back(time);  // The first time need to initialize
+    // }
+
+    // average_time = std::accumulate(times_optimization.begin(), times_optimization.end(), 0.0) / n_repeat;
+    // min_time = *std::min_element(times_optimization.begin(), times_optimization.end());
+    // max_time = *std::max_element(times_optimization.begin(), times_optimization.end());
+
+    // std::cout << "% CPU Optimize average: " << average_time << " ms" << std::endl;
+    // std::cout << "% CPU Optimize min: " << min_time << " ms" << std::endl;
+    // std::cout << "% CPU Optimize max: " << max_time << " ms" << std::endl;
+
+    // std::cout << "% [ " << times_optimization[0];
+    // for (int i = 1; i < times_optimization.size(); ++i) {
+    //     std::cout << ", " << times_optimization[i];
+    // }
+    // std::cout << " ]" << std::endl;
     
 }
 
@@ -223,7 +314,7 @@ double GVIGH<Factor>::cost_value(const VectorXd &mean, SpMat &Precision)
     double value = 0.0;
 
     // sum up the factor costs
-    // #pragma omp parallel for reduction(+:value)
+    #pragma omp parallel for reduction(+:value)
     for (int i = 0; i < _vec_factors.size(); ++i)
     {
         // Access the current element - ensure this is safe in a parallel context

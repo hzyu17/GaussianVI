@@ -106,6 +106,8 @@ public:
     */
     virtual void optimize(std::optional<bool> verbose=std::nullopt);
 
+    void optimize_time_test();
+
     /**
      * @brief Compute the total cost function value given a mean and covariace.
      */

@@ -120,6 +120,8 @@ public:
     */
     virtual void optimize(std::optional<bool> verbose=std::nullopt);
 
+    void optimize_time_test();
+
     /**
      * @brief Compute the total cost function value given a mean and covariace.
      */
@@ -151,8 +153,6 @@ public:
     SpMat chain_splash_GBP(const SpMat &Precision);
 
     VectorXd solveWithCuSolverQR(const SpMat& Vddmu, const VectorXd& Vdmu);
-
-    VectorXd solveWithCuSolverChol(const SpMat& Vddmu, const VectorXd& Vdmu);
 
     /**
      * @brief Compute the message of factors in GBP.
