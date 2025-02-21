@@ -48,7 +48,15 @@ void GVIGH<Factor>::optimize(std::optional<bool> verbose)
     bool is_lowtemp = true;
     bool converged = false;
 
-    _vec_nonlinear_factors[0]->cuda_init();
+    if (_save_data){
+        _res_recorder.init_data();
+    }
+
+    // Initialize the cuda and give value to _sigma_rows and _dim_conf
+    _vec_nonlinear_factors[0]->cuda_init(_vec_nonlinear_factors.size());
+
+    _sigma_rows = _vec_nonlinear_factors[0]->_sigma_rows;
+    _dim_conf = _vec_nonlinear_factors[0]->_dim_conf;
 
     // VectorXd mu_EMA(_mu.size());
     // SpMat precision_EMA(_precision.rows(), _precision.cols());
@@ -73,29 +81,39 @@ void GVIGH<Factor>::optimize(std::optional<bool> verbose)
         if (is_verbose){
             std::cout << "========= iteration " << i_iter << " ========= " << std::endl;
         }
+        Timer timer;
+        // timer.start();
 
+        // 135 ms when n_states = 500
         auto result_cuda = factor_cost_vector_cuda();
         double cost_iter = std::get<0>(result_cuda);
         VectorXd fact_costs_iter = std::get<1>(result_cuda);
         VectorXd dmu = std::get<2>(result_cuda);
         SpMat dprecision = std::get<3>(result_cuda);
 
+        // std::cout << "Time for computing factor costs: " << timer.end_mis() << " ms" << std::endl;
+
         if (is_verbose){
             std::cout << "--- cost_iter ---" << std::endl << cost_iter << std::endl;
             // std::cout << "Factor Costs:" << fact_costs_iter.transpose() << std::endl;
-            // std::cout << "--- dmu ---" << std::endl << dmu.norm() << std::endl;
-            // std::cout << "--- dprecision ---" << std::endl << dprecision.norm() << std::endl;
         }
 
-        _res_recorder.update_data(_mu, _covariance, _precision, cost_iter, fact_costs_iter);
+        // timer.start();
+
+        // This update_data takes about 80 ms each iteration
+        if (_save_data){
+            _res_recorder.update_data(_mu, _covariance, _precision, cost_iter, fact_costs_iter);
+        }
+        // std::cout << "Time for updating data: " << timer.end_mis() << " ms" << std::endl;
         
         int cnt = 0;
         int B = 1;
         double step_size = _step_size_base;
 
+        timer.start();
         // backtracking 
         while (true)
-        {   
+        {
             // new step size
             // step_size = pow(_step_size_base, B);
             step_size = step_size * 0.75;
@@ -137,13 +155,81 @@ void GVIGH<Factor>::optimize(std::optional<bool> verbose)
                 break;
             }                
         }
+        std::cout << "backtracking time: " << B << std::endl;
+        std::cout << "Time for backtracking: " << timer.end_mis() << " ms" << std::endl;
+
     }
 
     _vec_nonlinear_factors[0]->cuda_free();
 
-    std::cout << "=========== Saving Data ===========" << std::endl;
-    save_data(is_verbose);
+    if (_save_data){
+        std::cout << "=========== Saving Data ===========" << std::endl;
+        save_data(is_verbose);
+    }
 
+}
+
+template <typename Factor>
+void GVIGH<Factor>::optimize_time_test()
+{
+    bool is_lowtemp = true;
+    bool converged = false;
+
+    _sigma_rows = _vec_nonlinear_factors[0]->_sigma_rows;
+    _dim_conf = _vec_nonlinear_factors[0]->_dim_conf;
+
+    for (int i_iter = 0; i_iter < _niters; i_iter++)
+    {
+        if (converged){
+            break;
+        }
+
+        // ============= High temperature phase =============
+        if (i_iter == _niters_lowtemp && is_lowtemp){
+            this->switch_to_high_temperature();
+            is_lowtemp = false;
+        }
+
+        auto result_cuda = factor_cost_vector_cuda_time();
+        double cost_iter = std::get<0>(result_cuda);
+        VectorXd fact_costs_iter = std::get<1>(result_cuda);
+        VectorXd dmu = std::get<2>(result_cuda);
+        SpMat dprecision = std::get<3>(result_cuda);
+
+        int cnt = 0;
+        int B = 1;
+        double step_size = _step_size_base;
+
+        // backtracking 
+        while (true)
+        {   
+            // new step size
+            step_size = step_size * 0.75;
+
+            auto onestep_res = onestep_linesearch(step_size, dmu, dprecision);
+
+            double new_cost = std::get<0>(onestep_res);
+            VectorXd new_mu = std::get<1>(onestep_res);
+            auto new_precision = std::get<2>(onestep_res);
+
+            if (new_cost < cost_iter){
+                break;
+            }else{ 
+                cnt += 1;
+            }
+
+            if (cnt > _niters_backtrack)
+            {
+                if (is_lowtemp){
+                    this->switch_to_high_temperature();
+                    is_lowtemp = false;
+                }else{
+                    converged = true;
+                }
+                break;
+            }                
+        }
+    }
 }
 
 template <typename Factor>
@@ -156,85 +242,40 @@ std::tuple<double, VectorXd, VectorXd, SpMat> GVIGH<Factor>::factor_cost_vector_
     fac_costs.setZero();
     nonlinear_fac_cost.setZero();
 
-    SpMat joint_cov = inverse_GBP(joint_precision);
-    // SpMat joint_cov_splash = chain_splash_GBP(joint_precision);
-
-    // double norm_joint_cov = joint_cov.toDense().norm();
-    // double norm_error = (joint_cov_splash - joint_cov).toDense().norm();
-
-    // std::cout << "Norm of joint covariance: " << norm_joint_cov << std::endl;
-    // std::cout << "Norm of error: " << norm_error << std::endl;
-    // std::cout << "Error: " << norm_error / norm_joint_cov * 100 << "%" << std::endl;
-
-    std::vector<MatrixXd> sigmapts_vec(n_nonlinear);
-    std::vector<VectorXd> mean_vec(n_nonlinear);
-
     omp_set_num_threads(20); 
 
-    #pragma omp parallel for
-    for (int i = 0; i < n_nonlinear; i++)
-    {
-        auto &opt_k = _vec_nonlinear_factors[i];
-        opt_k->cuda_matrices(sigmapts_vec, mean_vec); 
-    }
-
-    int sigma_rows = sigmapts_vec[0].rows();
-    int sigma_cols = sigmapts_vec[0].cols();
-    int mean_size = mean_vec[0].size();
-
-    MatrixXd sigmapts_mat(sigma_rows, sigmapts_vec.size()*sigma_cols);
-    MatrixXd mean_mat(mean_size, mean_vec.size());
+    MatrixXd sigmapts_mat(_sigma_rows, n_nonlinear*_dim_conf);
+    MatrixXd mean_mat(_dim_conf, n_nonlinear);
+    MatrixXd covariance_matrix(_dim_conf, n_nonlinear*_dim_conf);
+    MatrixXd sigma(_sigma_rows, _dim_conf);
 
     VectorXd E_phi_mat(n_nonlinear);
-    VectorXd dmu_mat(sigma_cols * n_nonlinear);
-    MatrixXd ddmu_mat(sigma_cols, sigma_cols * n_nonlinear);
-
-    #pragma omp parallel for
-    for (int i = 0; i < n_nonlinear; i++)
-    {
-        sigmapts_mat.block(0, i * sigma_cols, sigma_rows, sigma_cols) = sigmapts_vec[i];
-        mean_mat.col(i) = mean_vec[i];
-    }
-
-    // Compute the cost and derivatives of the nonlinear factors
-    _vec_nonlinear_factors[0]->dmuIntegration(sigmapts_mat, mean_mat, nonlinear_fac_cost, dmu_mat, ddmu_mat, sigma_cols);
-    E_phi_mat = nonlinear_fac_cost;
-
-    nonlinear_fac_cost = nonlinear_fac_cost / this ->_temperature; 
-
-
-    MatrixXd covariance_matrix(sigma_cols, n_nonlinear*sigma_cols);
-    MatrixXd sigma(sigma_rows, sigma_cols);
+    VectorXd dmu_mat(_dim_conf * n_nonlinear);
+    MatrixXd ddmu_mat(_dim_conf, _dim_conf * n_nonlinear);
 
     #pragma omp parallel for
     for (int i = 0; i < n_nonlinear; i++)
     {
         auto &opt_k = _vec_nonlinear_factors[i];
-        covariance_matrix.block(0, i * sigma_cols, sigma_cols, sigma_cols) = joint_cov.block((i+1)*_dim_state, (i+1)*_dim_state, sigma_cols, sigma_cols);
+        mean_mat.col(i) = opt_k->_mu;
+        covariance_matrix.block(0, i * _dim_conf, _dim_conf, _dim_conf) = opt_k->covariance();
     }
-    _vec_nonlinear_factors[0]->compute_sigmapts(fill_joint_mean, covariance_matrix, sigma_cols, n_nonlinear, sigma);
-    std::cout << "error of sigmapts: " << std::endl << (sigma-sigmapts_mat).norm() << std::endl;
 
+    _vec_nonlinear_factors[0]->compute_sigmapts(mean_mat, covariance_matrix, _dim_conf, n_nonlinear, sigma);
 
-    int cnt = 0;
+    // Compute the cost and derivatives of the nonlinear factors
+    _vec_nonlinear_factors[0]->dmuIntegration(sigmapts_mat, mean_mat, nonlinear_fac_cost, dmu_mat, ddmu_mat, _dim_conf);
+    E_phi_mat = nonlinear_fac_cost;
+    nonlinear_fac_cost = nonlinear_fac_cost / this ->_temperature; 
 
-    // Use a private counter for each thread to avoid race conditions
-    int thread_cnt = 0;
-
-    // #pragma omp for
-    for (int i = 0; i < _vec_factors.size(); ++i)
+    #pragma omp parallel for
+    for (int i = 0; i < _vec_factors.size(); i++)
     {
         auto &opt_k = _vec_factors[i];
-        if (opt_k->linear_factor())
-            fac_costs(thread_cnt) = opt_k->fact_cost_value(_mu, _covariance); 
+        if (opt_k->linear_factor()) // matrix multiplication between dim_state x dim_state and dim_state * dim_state
+            fac_costs(i) = opt_k->fact_cost_value(_mu, _covariance); 
         else
-            fac_costs(thread_cnt) = nonlinear_fac_cost(opt_k->_start_index - 1);
-        thread_cnt += 1;
-    }
-
-    #pragma omp critical
-    {
-        cnt += thread_cnt; // Safely update the global counter
+            fac_costs(i) = nonlinear_fac_cost(opt_k->_start_index - 1);
     }
 
     double value = fac_costs.sum();
@@ -243,13 +284,13 @@ std::tuple<double, VectorXd, VectorXd, SpMat> GVIGH<Factor>::factor_cost_vector_
 
     double cost = value + vec_D.array().log().sum() / 2;
 
-    // double entropy = vec_D.array().log().sum() / 2;
-    // double collision_cost = nonlinear_fac_cost.cwiseAbs().sum();
-    // double prior_cost = fac_costs.sum() - collision_cost;
+    double entropy = vec_D.array().log().sum() / 2;
+    double collision_cost = nonlinear_fac_cost.cwiseAbs().sum();
+    double prior_cost = fac_costs.sum() - collision_cost;
 
-    // std::cout << "Entropy: " << entropy << std::endl;
-    // std::cout << "Collision Cost: " << collision_cost << std::endl;
-    // std::cout << "Prior Cost: " << prior_cost << std::endl;
+    std::cout << "Prior Cost: " << prior_cost << std::endl;
+    std::cout << "Collision Cost: " << collision_cost << std::endl;
+    std::cout << "Entropy: " << entropy << std::endl;
 
     _Vdmu.setZero();
     _Vddmu.setZero();
@@ -274,14 +315,14 @@ std::tuple<double, VectorXd, VectorXd, SpMat> GVIGH<Factor>::factor_cost_vector_
             }
             else{
                 int index = opt_k->index()-1;
-                MatrixXd ddmu_i = ddmu_mat.block(0, index*sigma_cols, sigma_cols, sigma_cols);;
-                VectorXd dmu_i = dmu_mat.segment(index*sigma_cols, sigma_cols);
+                MatrixXd ddmu_i = ddmu_mat.block(0, index*_dim_conf, _dim_conf, _dim_conf);;
+                VectorXd dmu_i = dmu_mat.segment(index*_dim_conf, _dim_conf);
 
                 opt_k->calculate_partial_V(ddmu_i, dmu_i, E_phi_mat(index));
             }
 
             Vdmu_private += opt_k->local2joint_dmu_insertion();
-            Vddmu_private += opt_k->local2joint_dprecision_insertion();
+            Vddmu_private += opt_k->local2joint_dprecision_triplet();
         }
 
         #pragma omp critical
@@ -298,11 +339,9 @@ std::tuple<double, VectorXd, VectorXd, SpMat> GVIGH<Factor>::factor_cost_vector_
     dprecision.setZero();
     dprecision = _Vddmu - _precision;
 
-    Eigen::ConjugateGradient<SpMat, Eigen::Upper> solver;
-    // Eigen::ConjugateGradient<SpMat, Eigen::Upper, Eigen::IncompleteLUT<double>> solver;
     VectorXd dmu(_dim);
     dmu.setZero();
-    dmu = solver.compute(_Vddmu).solve(-_Vdmu);
+    dmu = solveWithCuSolverQR(_Vddmu, -_Vdmu);
 
     return std::make_tuple(cost, fac_costs, dmu, dprecision);
 }
@@ -320,89 +359,57 @@ std::tuple<double, VectorXd, VectorXd, SpMat> GVIGH<Factor>::factor_cost_vector_
     fac_costs.setZero();
     nonlinear_fac_cost.setZero();
 
-    if (!flag)
-        timer.start();
-
-    SpMat joint_cov = inverse_GBP(joint_precision);
-
-    if (!flag)
-        std::cout << "GBP Inverse time: " << timer.end_mis() << " ms" << std::endl;
-
-
-    // if (!flag)
+    // if (flag % 5 == 0)
     //     timer.start();
-
-    // SpMat cov = inverse(joint_precision);
-
-    // if (!flag)
-    //     std::cout << "Inverse time: " << timer.end_mis() << " ms" << std::endl;
-
-
-    // if (!flag)
-    //     timer.start();
-    
-    std::vector<MatrixXd> sigmapts_vec(n_nonlinear);
-    std::vector<VectorXd> mean_vec(n_nonlinear);
 
     omp_set_num_threads(20); 
+
+    MatrixXd sigmapts_mat(_sigma_rows, _dim_conf*n_nonlinear);
+    MatrixXd mean_mat(_dim_conf, n_nonlinear);
+    MatrixXd covariance_matrix(_dim_conf, _dim_conf*n_nonlinear);
+    MatrixXd sigma(_sigma_rows, _dim_conf*n_nonlinear);
+
+    VectorXd E_phi_mat(n_nonlinear);
+    VectorXd dmu_mat(_dim_conf * n_nonlinear);
+    MatrixXd ddmu_mat(_dim_conf, _dim_conf * n_nonlinear);
 
     #pragma omp parallel for
     for (int i = 0; i < n_nonlinear; i++)
     {
         auto &opt_k = _vec_nonlinear_factors[i];
-        opt_k->cuda_matrices(sigmapts_vec, mean_vec); 
+        mean_mat.col(i) = opt_k->_mu;
+        covariance_matrix.block(0, i * _dim_conf, _dim_conf, _dim_conf) = opt_k->covariance();
     }
+    
+    // copied sigma here
+    _vec_nonlinear_factors[0]->compute_sigmapts(mean_mat, covariance_matrix, _dim_conf, n_nonlinear, sigma);
 
-    int sigma_rows = sigmapts_vec[0].rows();
-    int sigma_cols = sigmapts_vec[0].cols();
-    int mean_size = mean_vec[0].size();
-
-    MatrixXd sigmapts_mat(sigma_rows, sigmapts_vec.size()*sigma_cols);
-    MatrixXd mean_mat(mean_size, mean_vec.size());
-
-    VectorXd E_phi_mat(n_nonlinear);
-    VectorXd dmu_mat(sigma_cols * n_nonlinear);
-    MatrixXd ddmu_mat(sigma_cols, sigma_cols * n_nonlinear);
-
-    #pragma omp parallel for
-    for (int i = 0; i < n_nonlinear; i++)
-    {
-        sigmapts_mat.block(0, i * sigma_cols, sigma_rows, sigma_cols) = sigmapts_vec[i];
-        mean_mat.col(i) = mean_vec[i];
-    }
-
-    // if (!flag)
-        // std::cout << "Matrix Filling time: " << timer.end_mis() << " ms" << std::endl;
-
-    if (!flag)
-        timer.start();
+    // if (flag % 5 == 0)
+    //     std::cout << "Sigma Points computaiton time: " << timer.end_mus_output() << " us" << std::endl;
+    
+    
+    // if (flag % 5 == 0)
+    //     timer.start();
 
     // Compute the cost of the nonlinear factors
-    _vec_nonlinear_factors[0]->dmuIntegration(sigmapts_mat, mean_mat, nonlinear_fac_cost, dmu_mat, ddmu_mat, sigma_cols);
+    _vec_nonlinear_factors[0]->dmuIntegration(sigmapts_mat, mean_mat, nonlinear_fac_cost, dmu_mat, ddmu_mat, _dim_conf);
     E_phi_mat = nonlinear_fac_cost;
     nonlinear_fac_cost = nonlinear_fac_cost / this ->_temperature;     
 
-    if (!flag)
-        std::cout << "Cuda Computation time: " << timer.end_mis() << " ms" << std::endl;
+    // if (flag % 5 == 0)
+    //     std::cout << "Cost computation time: " << timer.end_mus_output() << " us" << std::endl;
 
-    int cnt = 0;
-    // Use a private counter for each thread to avoid race conditions
-    int thread_cnt = 0;
+    // if (flag % 5 == 0)
+    //     timer.start();
 
-    #pragma omp for
-    for (int i = 0; i < _vec_factors.size(); ++i)
+    #pragma omp parallel for
+    for (int i = 0; i < _vec_factors.size(); i++)
     {
         auto &opt_k = _vec_factors[i];
-        if (opt_k->linear_factor())
-            fac_costs(thread_cnt) = opt_k->fact_cost_value(_mu, _covariance); 
+        if (opt_k->linear_factor()) // matrix multiplication between dim_state x dim_state and dim_state * dim_state
+            fac_costs(i) = opt_k->fact_cost_value(_mu, _covariance); 
         else
-            fac_costs(thread_cnt) = nonlinear_fac_cost(opt_k->_start_index - 1);
-        thread_cnt += 1;
-    }
-
-    #pragma omp critical
-    {
-        cnt += thread_cnt; // Safely update the global counter
+            fac_costs(i) = nonlinear_fac_cost(opt_k->_start_index - 1);
     }
 
     double value = fac_costs.sum();
@@ -411,8 +418,26 @@ std::tuple<double, VectorXd, VectorXd, SpMat> GVIGH<Factor>::factor_cost_vector_
 
     double cost = value + vec_D.array().log().sum() / 2;
 
-    if (!flag)
-        timer.start();
+
+    // double entropy = vec_D.array().log().sum() / 2;
+    // double collision_cost = nonlinear_fac_cost.sum();
+    // double prior_cost = fac_costs.sum() - collision_cost;
+    
+    // std::cout << "Prior Cost: " << prior_cost << std::endl;
+    // std::cout << "Collision Cost: " << collision_cost << std::endl;
+    // std::cout << "Entropy: " << entropy << std::endl;
+
+
+    // if (flag % 5 == 0)
+    //     std::cout << "Factor cost computation time: " << timer.end_mus_output() << " us" << std::endl;
+
+    // for (int i = 0; i < n_nonlinear; i++){
+    //     std::cout << "dmu " << i << ": " << std::endl << dmu_mat.segment(i*_dim_conf, _dim_conf).transpose() << std::endl;
+    //     std::cout << "ddmu " << i << ": " << std::endl << ddmu_mat.block(0, i*_dim_conf, _dim_conf, _dim_conf) << std::endl;
+    // }
+
+    // if (flag % 5 == 0)
+    //     timer.start();
 
     _Vdmu.setZero();
     _Vddmu.setZero();
@@ -437,14 +462,14 @@ std::tuple<double, VectorXd, VectorXd, SpMat> GVIGH<Factor>::factor_cost_vector_
             }
             else{
                 int index = opt_k->index()-1;
-                MatrixXd ddmu_i = ddmu_mat.block(0, index*sigma_cols, sigma_cols, sigma_cols);;
-                VectorXd dmu_i = dmu_mat.segment(index*sigma_cols, sigma_cols);
+                MatrixXd ddmu_i = ddmu_mat.block(0, index*_dim_conf, _dim_conf, _dim_conf);;
+                VectorXd dmu_i = dmu_mat.segment(index*_dim_conf, _dim_conf);
 
                 opt_k->calculate_partial_V(ddmu_i, dmu_i, E_phi_mat(index));
             }
 
             Vdmu_private += opt_k->local2joint_dmu_insertion();
-            Vddmu_private += opt_k->local2joint_dprecision_insertion();
+            Vddmu_private += opt_k->local2joint_dprecision_triplet();
         }
 
         #pragma omp critical
@@ -457,26 +482,92 @@ std::tuple<double, VectorXd, VectorXd, SpMat> GVIGH<Factor>::factor_cost_vector_
     _Vdmu = Vdmu_sum;
     _Vddmu = Vddmu_sum;
 
-    if (!flag)
-        std::cout << "Derivative Mapping time: " << timer.end_mis() << " ms" << std::endl;
+    // if (flag % 5 == 0)
+    //     std::cout << "Derivative computation time: " << timer.end_mis() << " ms" << std::endl;
 
-    if (!flag)
-        timer.start();
+    // if (flag % 5 == 0)
+    //     timer.start();
 
     SpMat dprecision(_dim, _dim);
     dprecision.setZero();
     dprecision = _Vddmu - _precision;
 
-    Eigen::ConjugateGradient<SpMat, Eigen::Upper> solver;
-    // Eigen::ConjugateGradient<SpMat, Eigen::Upper, Eigen::IncompleteLUT<double>> solver;
     VectorXd dmu(_dim);
     dmu.setZero();
-    dmu = solver.compute(_Vddmu).solve(-_Vdmu);
 
-    if (!flag)
-        std::cout << "Solver time: " << timer.end_mis() << " ms" << std::endl << std::endl;
+    // dmu = solveWithCuSolverQR(_Vddmu, -_Vdmu);
+
+    Eigen::ConjugateGradient<SpMat, Eigen::Upper, Eigen::IncompleteLUT<double>> solver_lut;
+    dmu = solver_lut.compute(_Vddmu).solve(-_Vdmu);
+
+    // if (flag % 5 == 0)
+    //     std::cout << "Solver time: " << timer.end_mis() << " ms" << std::endl << std::endl;
+
+    // Eigen::ConjugateGradient<SpMat, Eigen::Upper> solver;
+    // Eigen::ConjugateGradient<SpMat, Eigen::Upper, Eigen::IncompleteCholesky<double>> solver_cho;
+    // Eigen::ConjugateGradient<SpMat, Eigen::Upper, Eigen::IncompleteLUT<double>> solver_lut;
+
+    // Right now the matrix is not positive definite, sometimes not even symmetric
+    // The condition number is very high, that's why the solver appoximation it not accurate
+    // Eigen::SimplicialLLT<SpMat> chol(_Vddmu);
+    // if (_Vddmu.isApprox(_Vddmu.transpose(), 1e-8))
+    // {
+    //     // If the Cholesky decomposition is successful, the matrix is SPD
+    //     if(chol.info() == Eigen::Success) {
+    //         std::cout << "SPD." << std::endl;
+    //     } else {
+    //         std::cout << "Not SPD." << std::endl;
+    //     }
+        
+    //     // Convert the sparse matrix to a dense matrix for eigenvalue computation
+    //     Eigen::MatrixXd denseMat = Eigen::MatrixXd(_Vddmu);
+        
+    //     // Compute the eigenvalues using SelfAdjointEigenSolver
+    //     Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> eigensolver(denseMat);
+    //     if(eigensolver.info() == Eigen::Success) {
+    //         std::cout << "Eigenvalues:\n" << eigensolver.eigenvalues().transpose() << std::endl;
+    //     } else {
+    //         std::cout << "Eigenvalue computation failed." << std::endl;
+    //     }
+    // }
+    // else
+    // {
+    //     std::cout << "Not symmetric." << std::endl;
+    // }
+
     
-    flag = 1;
+    // dmu = solver.compute(_Vddmu).solve(-_Vdmu);
+    
+    // if (flag % 5 == 0)
+    //     timer.start();
+    
+    // VectorXd dmu_lut = solver_lut.compute(_Vddmu).solve(-_Vdmu);
+
+    // if (flag % 5 == 0)
+    //     std::cout << "Solver time lut: " << timer.end_mis() << " ms" << std::endl << std::endl;
+
+    // if (flag % 5 == 0)
+    //     timer.start();
+    
+    // VectorXd dmu_cuda = solveWithCuSolverQR(_Vddmu, -_Vdmu);
+
+    // if (flag % 5 == 0)
+    //     std::cout << "Solver time cuda: " << timer.end_mis() << " ms" << std::endl << std::endl;
+
+    // if (flag % 5 == 0)
+    //     timer.start();
+    
+    // VectorXd dmu_cuda_cho = solveWithCuSolverChol(_Vddmu, -_Vdmu);
+
+    // if (flag % 5 == 0)
+    //     std::cout << "Solver time cuda_cho: " << timer.end_mis() << " ms" << std::endl << std::endl;
+
+    // std::cout << "Norm of dmu: " << dmu.norm() << std::endl;
+    // std::cout << "Error of lut pre-conditioner: " << (dmu - dmu_lut).norm() << std::endl;
+    // std::cout << "Error of dmu CuSolver QR: " << (dmu - dmu_cuda).norm() << std::endl;
+    // std::cout << "Error of dmu CuSolver Cholesky: " << (dmu - dmu_cuda_cho).norm() << std::endl;
+    
+    // flag++;
 
     return std::make_tuple(cost, fac_costs, dmu, dprecision);
 }
@@ -485,62 +576,62 @@ std::tuple<double, VectorXd, VectorXd, SpMat> GVIGH<Factor>::factor_cost_vector_
 template <typename Factor>
 void GVIGH<Factor>::time_test()
 {
-    // std::cout << "========== Optimization Start: ==========" << std::endl << std::endl;
-    _vec_nonlinear_factors[0]->cuda_init();
+    _vec_nonlinear_factors[0]->cuda_init(_vec_nonlinear_factors.size());
+    _sigma_rows = _vec_nonlinear_factors[0]->_sigma_rows;
+    _dim_conf = _vec_nonlinear_factors[0]->_dim_conf;
 
     Timer timer;
+    int n_repeat = 20;
+    std::vector<double> times_evaluation;
+    times_evaluation.reserve(n_repeat);
 
-    std::vector<double> times_GBP, times_inverse;
-    times_GBP.reserve(_niters);
-    times_inverse.reserve(_niters);
-
-    std::cout << "Optimization Start" << std::endl;
-
-    for (int i = 0; i < _niters + 1; i++){
+    for (int i=0; i < n_repeat+1; i++){
         timer.start();
         auto result_cuda = factor_cost_vector_cuda_time();
         double time = timer.end_mis();
-        if (i!=0)
-            times_GBP.push_back(time);  
+        if (i != 0)
+        times_evaluation.push_back(time);  // The first time need to initialize
     }
 
-    double average_time = std::accumulate(times_GBP.begin(), times_GBP.end(), 0.0) / _niters;
-
-    double min_time = *std::min_element(times_GBP.begin(), times_GBP.end());
-    double max_time = *std::max_element(times_GBP.begin(), times_GBP.end());
+    double average_time = std::accumulate(times_evaluation.begin(), times_evaluation.end(), 0.0) / n_repeat;
+    double min_time = *std::min_element(times_evaluation.begin(), times_evaluation.end());
+    double max_time = *std::max_element(times_evaluation.begin(), times_evaluation.end());
 
     std::cout << "% " << _vec_nonlinear_factors.size() + 2 << std::endl;
     std::cout << "% GPU average: " << average_time << " ms" << std::endl;
     std::cout << "% GPU min: " << min_time << " ms" << std::endl;
     std::cout << "% GPU max: " << max_time << " ms" << std::endl;
 
-    // std::cout << "% [ " << times_GBP[0];
-    // for (int i = 1; i < times_GBP.size(); ++i) {
-    //     std::cout << ", " << times_GBP[i];
-    // }
-    // std::cout << " ]" << std::endl;
+    std::cout << "% [ " << times_evaluation[0];
+    for (int i = 1; i < times_evaluation.size(); ++i) {
+        std::cout << ", " << times_evaluation[i];
+    }
+    std::cout << " ]" << std::endl;
+    
 
+    // std::vector<double> times_optimization;
+    // times_optimization.reserve(n_repeat);
 
-    // for (int i = 0; i < _niters + 1; i++){
+    // for (int i=0; i < n_repeat+1; i++){
     //     timer.start();
-    //     SpMat joint_cov = inverse(this -> _precision);
-    //     double time = timer.end_sec();
-    //     if (i!=0)
-    //         times_inverse.push_back(time * 1000);  
+    //     optimize_time_test();
+    //     double time = timer.end_mis();
+    //     if (i != 0)
+    //     times_optimization.push_back(time);  // The first time need to initialize
     // }
 
-    // average_time = std::accumulate(times_inverse.begin(), times_inverse.end(), 0.0) / _niters;
+    // average_time = std::accumulate(times_optimization.begin(), times_optimization.end(), 0.0) / n_repeat;
+    // min_time = *std::min_element(times_optimization.begin(), times_optimization.end());
+    // max_time = *std::max_element(times_optimization.begin(), times_optimization.end());
 
-    // min_time = *std::min_element(times_inverse.begin(), times_inverse.end());
-    // max_time = *std::max_element(times_inverse.begin(), times_inverse.end());
+    // std::cout << "% " << _vec_nonlinear_factors.size() + 2 << std::endl;
+    // std::cout << "% GPU Optimize average: " << average_time << " ms" << std::endl;
+    // std::cout << "% GPU Optimize min: " << min_time << " ms" << std::endl;
+    // std::cout << "% GPU Optimize max: " << max_time << " ms" << std::endl;
 
-    // std::cout << "% Inverse average: " << average_time << " ms" << std::endl;
-    // std::cout << "% Inverse min: " << min_time << " ms" << std::endl;
-    // std::cout << "% Inverse max: " << max_time << " ms" << std::endl;
-
-    // std::cout << "% [ " << times_inverse[0];
-    // for (int i = 1; i < times_inverse.size(); ++i) {
-    //     std::cout << ", " << times_inverse[i];
+    // std::cout << "% [ " << times_optimization[0];
+    // for (int i = 1; i < times_optimization.size(); ++i) {
+    //     std::cout << ", " << times_optimization[i];
     // }
     // std::cout << " ]" << std::endl;
 
@@ -606,28 +697,22 @@ double GVIGH<Factor>::cost_value_cuda(const VectorXd& fill_joint_mean, SpMat& jo
 
     SpMat joint_cov = inverse_GBP(joint_precision);
 
-    std::vector<MatrixXd> sigmapts_vec(n_nonlinear);
-    std::vector<VectorXd> mean_vec(n_nonlinear);
+    MatrixXd sigmapts_mat(_sigma_rows, n_nonlinear*_dim_conf);
+    MatrixXd mean_mat(_dim_conf, n_nonlinear);
+    MatrixXd covariance_matrix(_dim_conf, n_nonlinear*_dim_conf);
+    MatrixXd sigma(_sigma_rows, _dim_conf);
 
     #pragma omp parallel for
     for (int i = 0; i < n_nonlinear; i++)
     {
-        auto &opt_k = _vec_nonlinear_factors[i];
-        opt_k->cuda_matrices(fill_joint_mean, joint_cov, sigmapts_vec, mean_vec); 
+        mean_mat.col(i) = fill_joint_mean.segment((i+1)*_dim_state, _dim_conf);
+        covariance_matrix.block(0, i * _dim_conf, _dim_conf, _dim_conf) = joint_cov.block((i+1)*_dim_state, (i+1)*_dim_state, _dim_conf, _dim_conf);
     }
 
-    int sigma_rows = sigmapts_vec[0].rows();
-    int sigma_cols = sigmapts_vec[0].cols();
-    int mean_size = mean_vec[0].size();
-
-    MatrixXd sigmapts_mat(sigma_rows, sigmapts_vec.size()*sigma_cols);
-
-    for (int i = 0; i < n_nonlinear; i++)
-        sigmapts_mat.block(0, i * sigma_cols, sigma_rows, sigma_cols) = sigmapts_vec[i];
+    _vec_nonlinear_factors[0]->compute_sigmapts(mean_mat, covariance_matrix, _dim_conf, n_nonlinear, sigma);
 
     // Compute the cost of the nonlinear factors
-    _vec_nonlinear_factors[0]->newCostIntegration(sigmapts_mat, nonlinear_fac_cost, sigma_cols);
-
+    _vec_nonlinear_factors[0]->newCostIntegration(sigmapts_mat, nonlinear_fac_cost, _dim_conf);
     nonlinear_fac_cost = nonlinear_fac_cost / this ->_temperature;
 
     double value = 0.0;
@@ -1102,18 +1187,92 @@ Message GVIGH<Factor>::calculate_factor_message(const Message &input_message, in
     return message;
 }
 
+
+
+// This function solves the linear system A*x = b using sparse QR decomposition via cuSolver.
+// Input:
+//   Vddmu: Sparse matrix A (of type Eigen::SparseMatrix<double>)
+//   Vdmu:  Dense vector b (of type Eigen::VectorXd)
+// Output:
+//   Returns the solution vector x.
+template <typename Factor>
+VectorXd GVIGH<Factor>::solveWithCuSolverQR(const SpMat& Vddmu, const VectorXd& Vdmu)
+{
+    // Convert the input sparse matrix to row-major format (CSR representation)
+    Eigen::SparseMatrix<double, Eigen::RowMajor> A = Vddmu;
+    int m = A.rows();
+    int nnz = A.nonZeros();
+
+    // Retrieve CSR arrays from Eigen
+    // outerIndexPtr: row pointers, innerIndexPtr: column indices, valuePtr: nonzero values
+    const int* eigenOuter = A.outerIndexPtr();
+    const int* eigenInner = A.innerIndexPtr();
+    const double* eigenValues = A.valuePtr();
+
+    // Copy the Eigen CSR data into std::vector containers
+    std::vector<int> h_csrRowPtr(eigenOuter, eigenOuter + m + 1);
+    std::vector<int> h_csrColInd(eigenInner, eigenInner + nnz);
+    std::vector<double> h_csrVal(eigenValues, eigenValues + nnz);
+
+    // Prepare the right-hand side vector b = Vdmu
+    VectorXd b = Vdmu;
+    std::vector<double> h_b(b.data(), b.data() + b.size());
+
+    // Create cuSolver and cuSparse handles
+    cusolverSpHandle_t cusolverH;
+    cusolverSpCreate(&cusolverH);
+
+    cusparseMatDescr_t descrA;
+    cusparseCreateMatDescr(&descrA);
+    cusparseSetMatType(descrA, CUSPARSE_MATRIX_TYPE_GENERAL);
+    cusparseSetMatIndexBase(descrA, CUSPARSE_INDEX_BASE_ZERO);
+
+    // Allocate device memory
+    double* d_csrVal;
+    int* d_csrRowPtr;
+    int* d_csrColInd;
+    double* d_b;
+    double* d_x;
+    cudaMalloc((void**)&d_csrVal, nnz * sizeof(double));
+    cudaMalloc((void**)&d_csrRowPtr, (m + 1) * sizeof(int));
+    cudaMalloc((void**)&d_csrColInd, nnz * sizeof(int));
+    cudaMalloc((void**)&d_b, m * sizeof(double));
+    cudaMalloc((void**)&d_x, m * sizeof(double));
+
+    // Copy data from host to device
+    cudaMemcpy(d_csrVal, h_csrVal.data(), nnz * sizeof(double), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_csrRowPtr, h_csrRowPtr.data(), (m + 1) * sizeof(int), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_csrColInd, h_csrColInd.data(), nnz * sizeof(int), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_b, h_b.data(), m * sizeof(double), cudaMemcpyHostToDevice);
+
+    // Set tolerance and reordering flag for the QR solver
+    double tol = 1e-10;
+    int reorder = 1;
+    int singularity = 0;  // Output parameter: singularity info
+
+    // Solve the system A*x = b using QR decomposition
+    cusolverSpDcsrlsvqr(cusolverH, m, nnz, descrA, d_csrVal, d_csrRowPtr, d_csrColInd, d_b,
+                          tol, reorder, d_x, &singularity);
+
+    // Copy the solution from device to host
+    std::vector<double> h_x(m);
+    cudaMemcpy(h_x.data(), d_x, m * sizeof(double), cudaMemcpyDeviceToHost);
+
+    // Free device memory and destroy handles
+    cudaFree(d_csrVal);
+    cudaFree(d_csrRowPtr);
+    cudaFree(d_csrColInd);
+    cudaFree(d_b);
+    cudaFree(d_x);
+    cusparseDestroyMatDescr(descrA);
+    cusolverSpDestroy(cusolverH);
+
+    // Map the solution to an Eigen vector and return
+    VectorXd x = Eigen::Map<VectorXd>(h_x.data(), m);
+    return x;
 }
 
-// MatrixXd cov_error(cov_GBP.rows(), cov_GBP.cols());
-// cov_error.setZero();
-
-// for (int i = 0; i < _num_states - 1; ++i) {
-//     cov_error.block(i*_dim_state, i*_dim_state, 2*_dim_state, 2*_dim_state) = _covariance.block(i*_dim_state, i*_dim_state, 2*_dim_state, 2*_dim_state) - 
-//                                                                                 cov_GBP.block(i*_dim_state, i*_dim_state, 2*_dim_state, 2*_dim_state);
-// }
-
-// std::cout << "Norm of joint_cov = " << cov_GBP.norm() << "  Sum = " << cov_GBP.cwiseAbs().sum() << std::endl;
-// std::cout << "Norm of cov_error = " << cov_error.norm() << "  Sum = " << cov_error.cwiseAbs().sum() << std::endl;
+}
 
 
 #endif // GVI_GH_IMPL_H
