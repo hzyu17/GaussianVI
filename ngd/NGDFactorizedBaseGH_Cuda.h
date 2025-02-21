@@ -192,20 +192,14 @@ public:
         return _func_Vmumu(x);
     }
 
-    // inline void update_cuda() override{
-    //     _cuda = std::make_shared<CudaClass>(CudaClass{_sigma, _epsilon, _radius});
-    // }
-
     inline void cuda_init(const int n_states) override{
         _sigma_rows = this -> _gh -> sigmapts().rows();
         _dim_conf = this -> _gh -> sigmapts().cols();
         _cuda -> Cuda_init(this -> _gh -> weights(), this -> _gh ->zeromeanpts(), n_states);
-        // _cuda -> initializeSigmaptsResources(2, 998, 89);
     }
 
     inline void cuda_free() override{
         _cuda -> Cuda_free();
-        // _cuda -> freeSigmaptsResources(998);
     }
 
     inline bool linear_factor() override { return _isLinear; }
@@ -215,14 +209,13 @@ public:
     }
 
     inline void newCostIntegration(const MatrixXd& sigmapts, VectorXd& results, const int sigmapts_cols) override{
-        _cuda -> Cuda_init_iter(sigmapts, results, sigmapts_cols);
+        // _cuda -> Cuda_init_iter(sigmapts, results, sigmapts_cols);
         _cuda -> costIntegration(sigmapts, results, sigmapts_cols);
         _cuda -> Cuda_free_iter();
     }
 
     inline void dmuIntegration(const MatrixXd& sigmapts, const MatrixXd& mean, VectorXd& E_phi_mat, VectorXd& dmu_mat, MatrixXd& ddmu_mat, const int sigmapts_cols) override{
         // _cuda -> Cuda_init_iter(sigmapts, E_phi_mat, sigmapts_cols);
-        // Most time in cuda was spent here
         _cuda -> costIntegration(sigmapts, E_phi_mat, sigmapts_cols);
         _cuda -> dmuIntegration(sigmapts, mean, dmu_mat, sigmapts_cols);
         _cuda -> ddmuIntegration(ddmu_mat);
@@ -230,21 +223,7 @@ public:
     }
 
     inline void compute_sigmapts(const MatrixXd& mean, const MatrixXd& covariance, int dim_conf, int num_states, MatrixXd& sigmapts) override{
-        // MatrixXd P_0 = covariance.block(0, 0, dim_conf, dim_conf);
-        // Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> es(P_0);
-        // MatrixXd sqrtP = es.operatorSqrt();
-
-        // MatrixXd eigen_value = es.eigenvalues();
-        // std::cout << "Eigen values" << std::endl << eigen_value.transpose() << std::endl;
-
         _cuda->update_sigmapts(covariance, mean, dim_conf, num_states, sigmapts);
-        // for(int i = 0; i < num_states; i++){
-        //     MatrixXd cov = covariance.block(0, i*dim_conf, dim_conf, dim_conf);
-        //     SelfAdjointEigenSolver<MatrixXd> eig(cov);
-        //     VectorXd eigvals = eig.operatorSqrt();
-        //     std::cout << "Eigen values error: " << (eigvals - sigmapts.block(0, i * dim_conf, dim_conf, dim_conf)).norm() << std::endl;
-        // }
-        // std::cout << "Cholesky result" << std::endl << sqrtP << std::endl;
     }
 
     double fact_cost_value(const VectorXd& fill_joint_mean, const SpMat& joint_cov) override {
@@ -258,7 +237,6 @@ public:
     }
 
     void cuda_matrices(const VectorXd& fill_joint_mean, const SpMat& joint_cov, std::vector<MatrixXd>& vec_sigmapts, std::vector<VectorXd>& vec_mean) override {
-
         VectorXd mean_k = extract_mu_from_joint(fill_joint_mean);
         MatrixXd Cov_k = extract_cov_from_joint(joint_cov);        
 
