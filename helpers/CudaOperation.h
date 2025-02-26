@@ -589,17 +589,18 @@ public:
 
 class CudaOperation_Quad : public CudaOperation_Base<PlanarSDF>{
 public:
-    CudaOperation_Quad(double cost_sigma = 15.5, double epsilon = 0.5, double radius = 1):
+    CudaOperation_Quad(double cost_sigma = 15.5, double epsilon = 0.5, double radius = 1, const std::string& map_name = ""):
     CudaOperation_Base(cost_sigma, epsilon, radius)
     {
         MatrixIO _m_io;
-        // std::string field_file = source_root + "/maps/2dQuad/field_multiobs.csv";
-        std::string field_file = source_root + "/maps/2dQuad/SingleObstacleMap_field.csv";
+        std::string field_file = source_root + "/python/sdf_robot/map/planar/" + map_name + "_field.csv";
+        std::cout << "field_file: " << field_file << std::endl;
         MatrixXd field = _m_io.load_csv(field_file);      
 
         Vector2d origin;
         origin.setZero();
-        origin << -20.0, -20.0;
+        // origin << -20.0, -20.0;
+        origin << -50.0, -50.0;
 
         double cell_size = 0.1;
         _sdf = PlanarSDF{origin, cell_size, field};
@@ -750,15 +751,12 @@ public:
 class CudaOperation_3dArm : public CudaOperation_Base<SignedDistanceField>{
 public:
     CudaOperation_3dArm(const Eigen::VectorXd& a, const Eigen::VectorXd& alpha, const Eigen::VectorXd& d, const Eigen::VectorXd& theta_bias,
-                        const Eigen::VectorXd& radii, const Eigen::VectorXi& frames, const Eigen::VectorXd& centers,
+                        const Eigen::VectorXd& radii, const Eigen::VectorXi& frames, const Eigen::MatrixXd& centers,
                         double cost_sigma = 15.5, double epsilon = 0.5):
     _radii(radii), CudaOperation_Base(cost_sigma, epsilon)
     {
-        std::string sdf_file = source_root + "/maps/WAM/WAMDeskDataset.bin";  
+        std::string sdf_file = source_root + "/maps/WAM/WAMDeskDataset_cereal.bin";  
         _sdf.loadSDF(sdf_file);
-        // gpmp2::SignedDistanceField sdf;
-        // sdf.loadSDF(sdf_file);
-        // _sdf = SignedDistanceField{sdf.origin(), sdf.cell_size(), sdf.raw_data()};
 
         _radii_data = _radii.data();
         const int num_spheres = frames.size();

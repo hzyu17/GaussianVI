@@ -196,27 +196,7 @@ __global__ void obtain_ddmu(double* d_vec, double* d_weights, double* d_result, 
 }
 
 
-// __global__ void sqrtKernel(double* d_vals, int n) {
-//     int idx = blockIdx.x * blockDim.x + threadIdx.x;
-//     if (idx < n) {
-//         d_vals[idx] = sqrt(d_vals[idx]);
-//     }
-// }
-
-// __global__ void addMeanKernel(double* sigmaPts, const double* mean, int num_rows, int dim_state)
-// {
-//     int idx = blockIdx.x * blockDim.x + threadIdx.x;
-//     int total = num_rows * dim_state;
-//     if (idx < total)
-//     {
-//         int j = idx / num_rows;
-//         sigmaPts[idx] += mean[j];
-//     }
-// }
-
-
 // Combined kernel to compute the square root of eigenvalues and scale eigenvectors accordingly.
-// Assumes matrices are stored in column-major order.
 __global__ void sqrtAndScaleEigenvectorsKernel(const double* d_eigenvalues, const double* d_eigvec,
                                                double* d_scaledEigvec, int dim, int batch) {
     // Each block handles one matrix in the batch.
@@ -548,7 +528,7 @@ void CudaOperation_3dArm::CudaIntegration(const MatrixXd& sigmapts, const Matrix
 
     cudaError_t err = cudaGetLastError();
     if (err != cudaSuccess) {
-        printf("CUDA kernel error: %s\n", cudaGetErrorString(err));
+        printf("3dArm sigma_function kernel error: %s\n", cudaGetErrorString(err));
     }
 
     cudaFree(sigmapts_gpu);
@@ -565,7 +545,7 @@ void CudaOperation_3dArm::CudaIntegration(const MatrixXd& sigmapts, const Matrix
 
     err = cudaGetLastError();
     if (err != cudaSuccess) {
-        printf("CUDA kernel error: %s\n", cudaGetErrorString(err));
+        printf("3dArm obtain_res kernel error: %s\n", cudaGetErrorString(err));
     }
 
     cudaFree(pts_gpu);
@@ -576,10 +556,10 @@ void CudaOperation_3dArm::costIntegration(const MatrixXd& sigmapts, VectorXd& re
     double *result_gpu;
 
     cudaMalloc(&result_gpu, results.size() * sizeof(double));
-    cudaMemcpy(_sigmapts_gpu, sigmapts.data(), sigmapts.size() * sizeof(double), cudaMemcpyHostToDevice);
+    // cudaMemcpy(_sigmapts_gpu, sigmapts.data(), sigmapts.size() * sizeof(double), cudaMemcpyHostToDevice);
 
     // Kernel 1: Obtain the result of function 
-    dim3 threadperblock1(32, 32);
+    dim3 threadperblock1(16, 16);
     dim3 blockSize1((results.size() + threadperblock1.x - 1) / threadperblock1.x, (sigmapts.rows() + threadperblock1.y - 1) / threadperblock1.y);
 
     cost_function<<<blockSize1, threadperblock1>>>(_sigmapts_gpu, _func_value_gpu, sigmapts.rows(), sigmapts_cols, results.size(), 
@@ -589,7 +569,7 @@ void CudaOperation_3dArm::costIntegration(const MatrixXd& sigmapts, VectorXd& re
 
     cudaError_t err = cudaGetLastError();
     if (err != cudaSuccess) {
-        printf("CUDA kernel error: %s\n", cudaGetErrorString(err));
+        printf("3dArm cost kernel error: %s\n", cudaGetErrorString(err));
     }
 
     // Kernel 2: Obtain the result by multiplying the pts and the weights
@@ -602,7 +582,7 @@ void CudaOperation_3dArm::costIntegration(const MatrixXd& sigmapts, VectorXd& re
 
     err = cudaGetLastError();
     if (err != cudaSuccess) {
-        printf("CUDA kernel error: %s\n", cudaGetErrorString(err));
+        printf("3dArm Obtain Cost kernel error: %s\n", cudaGetErrorString(err));
     }
 
     cudaFree(result_gpu);
