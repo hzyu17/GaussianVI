@@ -52,6 +52,8 @@ protected:
     VectorXd _mu_prior;
     SpMat _precision_prior;
 
+    bool _save_data = true;
+
 
 public:
 /// ************************* Override functions for Prox-GVI algorithm *************************************
@@ -84,6 +86,8 @@ public:
         _mu_prior = mu_prior;
         _precision_prior = precision_prior;
     }
+
+    inline void set_save_data(bool flag){ _save_data = flag; }
 
 /// Optimizations related
 

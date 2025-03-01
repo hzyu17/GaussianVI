@@ -315,10 +315,10 @@ public:
 class ForwardKinematics{
 public:
   // Denavit-Hartenberg (DH) variables
-  Eigen::VectorXd _a;
-  Eigen::VectorXd _alpha;
-  Eigen::VectorXd _d;
-  Eigen::VectorXd _theta_bias;
+  VectorXd _a;
+  VectorXd _alpha;
+  VectorXd _d;
+  VectorXd _theta_bias;
 
   double* _a_data;
   double* _alpha_data;
@@ -394,7 +394,7 @@ public:
     __host__ __device__ inline double alpha(int i) const { return _alpha_data[i]; }
     __host__ __device__ inline double d(int i) const { return _d_data[i]; }
     __host__ __device__ inline double theta_bias(int i) const { return _theta_bias_data[i]; }
-    __host__ __device__ inline double frames(int i) const { return _frames_data[i]; }
+    __host__ __device__ inline int frames(int i) const { return _frames_data[i]; }
     __host__ __device__ inline double centers(int row, int col) const { return _centers_data[3*row + col]; }
 };
 
@@ -599,8 +599,8 @@ public:
 
         Vector2d origin;
         origin.setZero();
-        // origin << -20.0, -20.0;
-        origin << -50.0, -50.0;
+        origin << -20.0, -20.0;
+        // origin << -50.0, -50.0;
 
         double cell_size = 0.1;
         _sdf = PlanarSDF{origin, cell_size, field};
@@ -757,52 +757,65 @@ public:
     {
         std::string sdf_file = source_root + "/maps/WAM/WAMDeskDataset_cereal.bin";  
         _sdf.loadSDF(sdf_file);
-
-        _radii_data = _radii.data();
-        const int num_spheres = frames.size();
-        _fk = ForwardKinematics(a, alpha, d, theta_bias, num_spheres, frames, centers);
-
-        _data_matrix = _sdf.data_matrix_;
-    }
-
-    CudaOperation_3dArm(const Eigen::VectorXd& a, const Eigen::VectorXd& alpha, const Eigen::VectorXd& d, const Eigen::VectorXd& theta_bias,
-                        const Eigen::VectorXd& radii, const Eigen::VectorXi& frames, const Eigen::MatrixXd& centers,
-                        double cost_sigma, double epsilon, gpmp2::SignedDistanceField sdf):
-    _radii(radii), CudaOperation_Base(cost_sigma, epsilon) // we can replace the input with the sdf class we defined
-    {
-        _sdf = SignedDistanceField{sdf.origin(), sdf.cell_size(), sdf.raw_data()}; 
-
-        _radii_data = _radii.data();
-        const int num_spheres = frames.size();
-        _fk = ForwardKinematics(a, alpha, d, theta_bias, num_spheres, frames, centers);
+        
+        hostCost._epsilon = _epsilon;
+        hostCost._sigma = _sigma;
+        hostCost._sdf = _sdf;
+        hostCost._fk = ForwardKinematics(a, alpha, d, theta_bias, frames.size(), frames, centers);
 
         _data_matrix = _sdf.data_matrix_;
     }
+
+    // CudaOperation_3dArm(const Eigen::VectorXd& a, const Eigen::VectorXd& alpha, const Eigen::VectorXd& d, const Eigen::VectorXd& theta_bias,
+    //                     const Eigen::VectorXd& radii, const Eigen::VectorXi& frames, const Eigen::MatrixXd& centers,
+    //                     double cost_sigma, double epsilon, gpmp2::SignedDistanceField sdf):
+    // _radii(radii), CudaOperation_Base(cost_sigma, epsilon) // we can replace the input with the sdf class we defined
+    // {
+    //     _sdf = SignedDistanceField{sdf.origin(), sdf.cell_size(), sdf.raw_data()}; 
+
+    //     _radii_data = _radii.data();
+    //     const int num_spheres = frames.size();
+    //     _fk = ForwardKinematics(a, alpha, d, theta_bias, num_spheres, frames, centers);
+
+    //     _data_matrix = _sdf.data_matrix_;
+    // }
 
     void Cuda_init(const MatrixXd& weights, const MatrixXd& zeromean, const int n_states) override{
-      cudaMalloc(&_class_gpu, sizeof(CudaOperation_3dArm));
-      cudaMalloc(&_a_gpu, _fk._a.size() * sizeof(double));
-      cudaMalloc(&_alpha_gpu, _fk._alpha.size() * sizeof(double));
-      cudaMalloc(&_d_gpu, _fk._d.size() * sizeof(double));
-      cudaMalloc(&_theta_gpu, _fk._theta_bias.size() * sizeof(double));
-      cudaMalloc(&_rad_gpu, _radii.size() * sizeof(double));
-      cudaMalloc(&_frames_gpu, _fk._frames.size() * sizeof(int));
-      cudaMalloc(&_centers_gpu, _fk._centers.size() * sizeof(double));
-
-      cudaMemcpy(_class_gpu, this, sizeof(CudaOperation_3dArm), cudaMemcpyHostToDevice);
-      cudaMemcpy(_a_gpu, _fk._a.data(), _fk._a.size() * sizeof(double), cudaMemcpyHostToDevice);
-      cudaMemcpy(_alpha_gpu, _fk._alpha.data(), _fk._alpha.size() * sizeof(double), cudaMemcpyHostToDevice);
-      cudaMemcpy(_d_gpu, _fk._d.data(), _fk._d.size() * sizeof(double), cudaMemcpyHostToDevice);
-      cudaMemcpy(_theta_gpu, _fk._theta_bias.data(), _fk._theta_bias.size() * sizeof(double), cudaMemcpyHostToDevice);
-      cudaMemcpy(_rad_gpu, _radii.data(), _radii.size() * sizeof(double), cudaMemcpyHostToDevice);
-      cudaMemcpy(_frames_gpu, _fk._frames.data(), _fk._frames.size() * sizeof(int), cudaMemcpyHostToDevice);
-      cudaMemcpy(_centers_gpu, _fk._centers.data(), _fk._centers.size() * sizeof(double), cudaMemcpyHostToDevice);
-
       GH_parameters_init(weights, zeromean, n_states);
+
+      cudaMalloc(&_a_gpu, hostCost._fk._a.size() * sizeof(double));
+      cudaMalloc(&_alpha_gpu, hostCost._fk._alpha.size() * sizeof(double));
+      cudaMalloc(&_d_gpu, hostCost._fk._d.size() * sizeof(double));
+      cudaMalloc(&_theta_gpu, hostCost._fk._theta_bias.size() * sizeof(double));
+      cudaMalloc(&_rad_gpu, _radii.size() * sizeof(double));
+      cudaMalloc(&_frames_gpu, hostCost._fk._frames.size() * sizeof(int));
+      cudaMalloc(&_centers_gpu, hostCost._fk._centers.size() * sizeof(double));
+
+      cudaMemcpy(_a_gpu, hostCost._fk._a.data(), hostCost._fk._a.size() * sizeof(double), cudaMemcpyHostToDevice);
+      cudaMemcpy(_alpha_gpu, hostCost._fk._alpha.data(), hostCost._fk._alpha.size() * sizeof(double), cudaMemcpyHostToDevice);
+      cudaMemcpy(_d_gpu, hostCost._fk._d.data(), hostCost._fk._d.size() * sizeof(double), cudaMemcpyHostToDevice);
+      cudaMemcpy(_theta_gpu, hostCost._fk._theta_bias.data(), hostCost._fk._theta_bias.size() * sizeof(double), cudaMemcpyHostToDevice);
+      cudaMemcpy(_rad_gpu, _radii.data(), _radii.size() * sizeof(double), cudaMemcpyHostToDevice);
+      cudaMemcpy(_frames_gpu, hostCost._fk._frames.data(), hostCost._fk._frames.size() * sizeof(int), cudaMemcpyHostToDevice);
+      cudaMemcpy(_centers_gpu, hostCost._fk._centers.data(), hostCost._fk._centers.size() * sizeof(double), cudaMemcpyHostToDevice);
+
+      hostCost._sdf.data_array_ = _data_gpu;
+
+      hostCost._fk._a_data = _a_gpu;
+      hostCost._fk._alpha_data = _alpha_gpu;
+      hostCost._fk._d_data = _d_gpu;
+      hostCost._fk._theta_bias_data = _theta_gpu;
+      hostCost._fk._frames_data = _frames_gpu;
+      hostCost._fk._centers_data = _centers_gpu;
+
+      hostCost._radii_data = _rad_gpu;
+
+      cudaMalloc(&d_cost, sizeof(ObstacleCost));
+      cudaMemcpy(d_cost, &hostCost, sizeof(ObstacleCost), cudaMemcpyHostToDevice);
     }
 
     void Cuda_free() override{
-      cudaFree(_class_gpu);
+      cudaFree(d_cost);
       cudaFree(_a_gpu);
       cudaFree(_alpha_gpu);
       cudaFree(_d_gpu);
@@ -813,57 +826,64 @@ public:
       GH_parameters_free();
     }
 
-    void CudaIntegration(const MatrixXd& sigmapts, const MatrixXd& weights, MatrixXd& results, const MatrixXd& mean, int type);
-
     void costIntegration(const MatrixXd& sigmapts, VectorXd& results, const int sigmapts_cols);
 
-    __device__ double cost_obstacle(const VectorXd& theta, const SignedDistanceField& sdf, const ForwardKinematics& fk){
-      constexpr int MAX_BALLS = 128;
-      int n_balls = theta.size();
-      double slope = 1;
-      VectorXd pose = fk.compute_transformed_sphere_centers(theta);
+    struct ObstacleCost {
+      double _epsilon;
+      double _sigma;
+      double* _radii_data;
 
-      Point3 checkpoints[MAX_BALLS];
-      vec_balls(pose, n_balls, checkpoints);
+      SignedDistanceField _sdf;
+      ForwardKinematics _fk;
 
-      double signed_distance[MAX_BALLS] = {0};
-
-      sdf.getSignedDistance(checkpoints, n_balls, signed_distance);
-
-      double cost = 0;
-      for (int i = 0; i < n_balls; i++){
-        double err = 0.0;
-        if (signed_distance[i] > _epsilon + radius(i))
-          err =  0.0;
-        else
-          err =  (_epsilon + radius(i) - signed_distance[i]) * slope;
-        cost += err * err * _sigma;
+      __device__ double cost_obstacle(const VectorXd& theta){
+        constexpr int MAX_BALLS = 128;
+        int n_balls = _fk._num_spheres;
+        double slope = 1;
+        VectorXd pose = _fk.compute_transformed_sphere_centers(theta);
+  
+        Point3 checkpoints[MAX_BALLS];
+        vec_balls(pose, n_balls, checkpoints);
+  
+        double signed_distance[MAX_BALLS] = {0};
+  
+        _sdf.getSignedDistance(checkpoints, n_balls, signed_distance);
+  
+        double cost = 0;
+        for (int i = 0; i < n_balls; i++){
+          double err = 0.0;
+          if (signed_distance[i] > _epsilon + radius(i))
+            err =  0.0;
+          else
+            err =  (_epsilon + radius(i) - signed_distance[i]) * slope;
+          cost += err * err * _sigma;
+        }
+        
+        return cost;
       }
-      
-      return cost;
-    }
-
-    // Reshape from vector to a matrix
-    __device__ void vec_balls(const Eigen::VectorXd& x, int n_balls, Point3* pts) {
-      for (int i = 0; i < n_balls; i++) {
-        pts[i].x = x(3 * i);
-        pts[i].y = x(3 * i + 1);
-        pts[i].z = x(3 * i + 2);
+  
+      // Reshape from vector to a matrix
+      __device__ void vec_balls(const Eigen::VectorXd& x, int n_balls, Point3* pts) {
+        for (int i = 0; i < n_balls; i++) {
+          pts[i].x = x(3 * i);
+          pts[i].y = x(3 * i + 1);
+          pts[i].z = x(3 * i + 2);
+        }
       }
-    }
 
-    __host__ __device__ inline double radius(int i) const {
-      return _radii_data[i];
-    }
+      __device__ inline double radius(int i) const {
+        return _radii_data[i];
+      }
 
+    };
+
+  ObstacleCost hostCost;
+  ObstacleCost* d_cost;
+    
   VectorXd _radii;
-  double* _radii_data;
-  ForwardKinematics _fk;
 
   double *_a_gpu, *_alpha_gpu, *_d_gpu, *_theta_gpu, *_rad_gpu, *_centers_gpu;
   int *_frames_gpu;
-  CudaOperation_3dArm* _class_gpu;
-
 };
 
 
