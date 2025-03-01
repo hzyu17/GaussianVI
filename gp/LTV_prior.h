@@ -178,8 +178,11 @@ class LTV_GP : public LinearFactor{
         int gramian_ode_gsl(double t, const double Q_vec[], double dQ_dt[], void *params) {
             LTV_GP* obj = static_cast<LTV_GP*>(params);  // Convert params back to the LTV_GP class
             MatrixXd gramian = Eigen::Map<const MatrixXd>(Q_vec, obj->_dim_state, obj->_dim_state);
-            auto matrices = obj->system_param(t);
-            MatrixXd dQ = matrices.first * gramian + gramian * matrices.first.transpose() + matrices.second * matrices.second.transpose();
+            // auto matrices = obj->system_param(t);
+            // MatrixXd A = matrices.first;
+            // MatrixXd B = matrices.second;
+            auto [A, B] = obj->system_param(t);
+            MatrixXd dQ = A * gramian + gramian * A.transpose() + B * B.transpose();
             Eigen::Map<MatrixXd>(dQ_dt, obj->_dim_state, obj->_dim_state) = dQ;
             return GSL_SUCCESS;
         }

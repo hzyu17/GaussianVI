@@ -116,8 +116,6 @@ public:
      */
     VectorXd factor_cost_vector(const VectorXd& x, SpMat& Precision);
 
-    void time_test();
-
 // ******** Functions that differs in different algorithms ********
     /**
      * @brief Function which computes one step of update.

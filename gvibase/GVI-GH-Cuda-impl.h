@@ -266,6 +266,7 @@ std::tuple<double, VectorXd, VectorXd, SpMat> GVIGH<Factor>::factor_cost_vector_
     // Compute the cost and derivatives of the nonlinear factors
     _vec_nonlinear_factors[0]->dmuIntegration(sigmapts_mat, mean_mat, nonlinear_fac_cost, dmu_mat, ddmu_mat, _dim_conf);
     E_phi_mat = nonlinear_fac_cost;
+    // nonlinear_fac_cost = nonlinear_fac_cost / this ->_temperature * _delta_t; 
     nonlinear_fac_cost = nonlinear_fac_cost / this ->_temperature; 
 
     #pragma omp parallel for
@@ -335,13 +336,11 @@ std::tuple<double, VectorXd, VectorXd, SpMat> GVIGH<Factor>::factor_cost_vector_
     _Vdmu = Vdmu_sum;
     _Vddmu = Vddmu_sum;
 
-    SpMat dprecision(_dim, _dim);
-    dprecision.setZero();
-    dprecision = _Vddmu - _precision;
+    SpMat dprecision = _Vddmu - _precision;
+    VectorXd dmu = solveWithCuSolverQR(_Vddmu, -_Vdmu);
 
-    VectorXd dmu(_dim);
-    dmu.setZero();
-    dmu = solveWithCuSolverQR(_Vddmu, -_Vdmu);
+    // Eigen::ConjugateGradient<SpMat, Eigen::Upper> solver;
+    // VectorXd dmu = solver.compute(_Vddmu).solve(-_Vdmu);
 
     return std::make_tuple(cost, fac_costs, dmu, dprecision);
 }

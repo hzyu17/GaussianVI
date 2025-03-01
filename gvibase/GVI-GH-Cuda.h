@@ -71,7 +71,7 @@ protected:
     /// optimization variables
     int _dim, _niters, _niters_lowtemp, _niters_backtrack, _nfactors, _dim_state, _num_states, _sigma_rows, _dim_conf;
 
-    double _temperature, _high_temperature, _initial_precision_factor, _boundary_penalties;
+    double _temperature, _high_temperature, _initial_precision_factor, _boundary_penalties, _delta_t;
 
     double _stop_err;
 
@@ -233,6 +233,8 @@ public:
     inline void set_stop_err(double stop_err) { _stop_err = stop_err; }
 
     inline void set_alpha(double alpha) { _alpha = alpha; }
+
+    inline void set_delta_t(double delta_t) { _delta_t = delta_t; }
 
     inline void set_data_save(bool flag) { _save_data = flag; }
 

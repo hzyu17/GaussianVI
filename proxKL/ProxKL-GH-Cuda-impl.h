@@ -126,6 +126,10 @@ void ProxKLGH<Factor>::optimize(std::optional<bool> verbose)
     bool converged = false;
 
     Base::_vec_nonlinear_factors[0]->cuda_init(Base::_vec_nonlinear_factors.size());
+
+    if (_save_data){
+        Base::_res_recorder.init_data();
+    }
     
     for (int i_iter = 0; i_iter < Base::_niters; i_iter++)
     {   
@@ -155,7 +159,9 @@ void ProxKLGH<Factor>::optimize(std::optional<bool> verbose)
             // std::cout << "Factor Costs:" << fact_costs_iter.transpose() << std::endl;
         }
 
-        // Base::_res_recorder.update_data(this->_mu, this->_covariance, this->_precision, cost_iter, fact_costs_iter);
+        if (_save_data){
+            Base::_res_recorder.update_data(this->_mu, this->_covariance, this->_precision, cost_iter, fact_costs_iter);
+        }
         
         int cnt = 0;
         int B = 1;
@@ -207,9 +213,11 @@ void ProxKLGH<Factor>::optimize(std::optional<bool> verbose)
 
     Base::_vec_nonlinear_factors[0]->cuda_free();
 
-    // std::cout << "=========== Saving Data ===========" << std::endl;
-    // Base::save_data(is_verbose);
-
+    if (_save_data){
+        std::cout << "=========== Saving Data ===========" << std::endl;
+        Base::save_data(is_verbose);
+    }
+    
     std::cout << "Optimization Finished" << std::endl;
 
 }

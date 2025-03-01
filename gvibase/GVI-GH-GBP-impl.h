@@ -38,6 +38,8 @@ void GVIGH<Factor>::optimize(std::optional<bool> verbose)
     bool is_lowtemp = true;
     bool converged = false;
 
+    _res_recorder.init_data();
+
     for (int i_iter = 0; i_iter < _niters; i_iter++)
     {   
 
@@ -308,7 +310,6 @@ VectorXd GVIGH<Factor>::factor_cost_vector(const VectorXd& fill_joint_mean, SpMa
 template <typename Factor>
 double GVIGH<Factor>::cost_value(const VectorXd &mean, SpMat &Precision)
 {
-
     SpMat Cov = inverse_GBP(Precision);
 
     double value = 0.0;
