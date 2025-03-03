@@ -111,7 +111,7 @@ void GVIGH<Factor>::optimize(std::optional<bool> verbose)
         double step_size = _step_size_base;
 
         timer.start();
-        // backtracking 
+        // backtracking
         while (true)
         {
             // new step size
@@ -153,7 +153,7 @@ void GVIGH<Factor>::optimize(std::optional<bool> verbose)
 
                 // update_proposal(new_mu, new_precision);
                 break;
-            }                
+            }
         }
         std::cout << "backtracking time: " << B << std::endl;
         std::cout << "Time for backtracking: " << timer.end_mis() << " ms" << std::endl;
@@ -200,7 +200,7 @@ void GVIGH<Factor>::optimize_time_test()
         int B = 1;
         double step_size = _step_size_base;
 
-        // backtracking 
+        // backtracking
         while (true)
         {   
             // new step size
@@ -214,7 +214,7 @@ void GVIGH<Factor>::optimize_time_test()
 
             if (new_cost < cost_iter){
                 break;
-            }else{ 
+            }else{
                 cnt += 1;
             }
 
@@ -227,7 +227,7 @@ void GVIGH<Factor>::optimize_time_test()
                     converged = true;
                 }
                 break;
-            }                
+            }
         }
     }
 }
@@ -242,7 +242,7 @@ std::tuple<double, VectorXd, VectorXd, SpMat> GVIGH<Factor>::factor_cost_vector_
     fac_costs.setZero();
     nonlinear_fac_cost.setZero();
 
-    omp_set_num_threads(20); 
+    omp_set_num_threads(20);
 
     MatrixXd sigmapts_mat(_sigma_rows, n_nonlinear*_dim_conf);
     MatrixXd mean_mat(_dim_conf, n_nonlinear);
@@ -266,15 +266,15 @@ std::tuple<double, VectorXd, VectorXd, SpMat> GVIGH<Factor>::factor_cost_vector_
     // Compute the cost and derivatives of the nonlinear factors
     _vec_nonlinear_factors[0]->dmuIntegration(sigmapts_mat, mean_mat, nonlinear_fac_cost, dmu_mat, ddmu_mat, _dim_conf);
     E_phi_mat = nonlinear_fac_cost;
-    // nonlinear_fac_cost = nonlinear_fac_cost / this ->_temperature * _delta_t; 
-    nonlinear_fac_cost = nonlinear_fac_cost / this ->_temperature; 
+    // nonlinear_fac_cost = nonlinear_fac_cost / this ->_temperature * _delta_t;
+    nonlinear_fac_cost = nonlinear_fac_cost / this ->_temperature;
 
     #pragma omp parallel for
     for (int i = 0; i < _vec_factors.size(); i++)
     {
         auto &opt_k = _vec_factors[i];
         if (opt_k->linear_factor()) // matrix multiplication between dim_state x dim_state and dim_state * dim_state
-            fac_costs(i) = opt_k->fact_cost_value(_mu, _covariance); 
+            fac_costs(i) = opt_k->fact_cost_value(_mu, _covariance);
         else
             fac_costs(i) = nonlinear_fac_cost(opt_k->_start_index - 1);
     }
@@ -301,7 +301,7 @@ std::tuple<double, VectorXd, VectorXd, SpMat> GVIGH<Factor>::factor_cost_vector_
     Vdmu_sum.setZero();
     Vddmu_sum.setZero();
 
-    #pragma omp parallel 
+    #pragma omp parallel
     {
         // Thread-local storage to avoid race conditions
         VectorXd Vdmu_private(Vdmu_sum.size());
@@ -316,7 +316,7 @@ std::tuple<double, VectorXd, VectorXd, SpMat> GVIGH<Factor>::factor_cost_vector_
             }
             else{
                 int index = opt_k->index()-1;
-                MatrixXd ddmu_i = ddmu_mat.block(0, index*_dim_conf, _dim_conf, _dim_conf);;
+                MatrixXd ddmu_i = ddmu_mat.block(0, index*_dim_conf, _dim_conf, _dim_conf);
                 VectorXd dmu_i = dmu_mat.segment(index*_dim_conf, _dim_conf);
 
                 opt_k->calculate_partial_V(ddmu_i, dmu_i, E_phi_mat(index));
@@ -361,7 +361,7 @@ std::tuple<double, VectorXd, VectorXd, SpMat> GVIGH<Factor>::factor_cost_vector_
     // if (flag % 5 == 0)
     //     timer.start();
 
-    omp_set_num_threads(20); 
+    omp_set_num_threads(20);
 
     MatrixXd sigmapts_mat(_sigma_rows, _dim_conf*n_nonlinear);
     MatrixXd mean_mat(_dim_conf, n_nonlinear);
@@ -393,7 +393,7 @@ std::tuple<double, VectorXd, VectorXd, SpMat> GVIGH<Factor>::factor_cost_vector_
     // Compute the cost of the nonlinear factors
     _vec_nonlinear_factors[0]->dmuIntegration(sigmapts_mat, mean_mat, nonlinear_fac_cost, dmu_mat, ddmu_mat, _dim_conf);
     E_phi_mat = nonlinear_fac_cost;
-    nonlinear_fac_cost = nonlinear_fac_cost / this ->_temperature;     
+    nonlinear_fac_cost = nonlinear_fac_cost / this ->_temperature;
 
     // if (flag % 5 == 0)
     //     std::cout << "Cost computation time: " << timer.end_mus_output() << " us" << std::endl;
@@ -406,7 +406,7 @@ std::tuple<double, VectorXd, VectorXd, SpMat> GVIGH<Factor>::factor_cost_vector_
     {
         auto &opt_k = _vec_factors[i];
         if (opt_k->linear_factor()) // matrix multiplication between dim_state x dim_state and dim_state * dim_state
-            fac_costs(i) = opt_k->fact_cost_value(_mu, _covariance); 
+            fac_costs(i) = opt_k->fact_cost_value(_mu, _covariance);
         else
             fac_costs(i) = nonlinear_fac_cost(opt_k->_start_index - 1);
     }
@@ -446,7 +446,7 @@ std::tuple<double, VectorXd, VectorXd, SpMat> GVIGH<Factor>::factor_cost_vector_
     Vdmu_sum.setZero();
     Vddmu_sum.setZero();
 
-    #pragma omp parallel 
+    #pragma omp parallel
     {
         // Thread-local storage to avoid race conditions
         VectorXd Vdmu_private(Vdmu_sum.size());
@@ -606,7 +606,6 @@ void GVIGH<Factor>::time_test()
         std::cout << ", " << times_evaluation[i];
     }
     std::cout << " ]" << std::endl;
-    
 
     // std::vector<double> times_optimization;
     // times_optimization.reserve(n_repeat);
@@ -675,7 +674,7 @@ VectorXd GVIGH<Factor>::factor_cost_vector(const VectorXd& fill_joint_mean, SpMa
     for (int i = 0; i < _vec_factors.size(); ++i)
     {
         auto &opt_k = _vec_factors[i];
-        fac_costs(thread_cnt) = opt_k->fact_cost_value(fill_joint_mean, joint_cov); 
+        fac_costs(thread_cnt) = opt_k->fact_cost_value(fill_joint_mean, joint_cov);
         thread_cnt += 1;
     }
 
@@ -683,7 +682,7 @@ VectorXd GVIGH<Factor>::factor_cost_vector(const VectorXd& fill_joint_mean, SpMa
     {
         cnt += thread_cnt; // Safely update the global counter
     }
-    
+
     return fac_costs;
 }
 
@@ -720,7 +719,7 @@ double GVIGH<Factor>::cost_value_cuda(const VectorXd& fill_joint_mean, SpMat& jo
     for (int i = 0; i < _vec_linear_factors.size(); ++i)
     {
         auto &opt_k = _vec_linear_factors[i];
-        value += opt_k->fact_cost_value(fill_joint_mean, joint_cov); 
+        value += opt_k->fact_cost_value(fill_joint_mean, joint_cov);
     }
 
     value += nonlinear_fac_cost.sum();
@@ -747,7 +746,7 @@ double GVIGH<Factor>::cost_value(const VectorXd &mean, SpMat &Precision)
     {
         // Access the current element - ensure this is safe in a parallel context
         auto &opt_k = _vec_factors[i];
-        value += opt_k->fact_cost_value(mean, Cov); 
+        value += opt_k->fact_cost_value(mean, Cov);
     }
 
     SparseLDLT ldlt(Precision);

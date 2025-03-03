@@ -50,7 +50,7 @@ public:
 
   /// constructor with data
   PlanarSDF(const Vector2d& origin, double cell_size, const MatrixXd& data) :
-      origin_{origin(0), origin(1)}, field_rows_(data.rows()), 
+      origin_{origin(0), origin(1)}, field_rows_(data.rows()),
       field_cols_(data.cols()), cell_size_(cell_size){
         data_array_ = data.data(); // Has no use when we pass the data to the GPU
       }
@@ -168,7 +168,7 @@ public:
 
   /// constructor with data
   SignedDistanceField(const Eigen::Vector3d& origin, double cell_size, const std::vector<Eigen::MatrixXd>& data) :
-      origin_(origin), origin_device_{origin(0), origin(1), origin(2)}, field_rows_(data[0].rows()), field_cols_(data[0].cols()), 
+      origin_(origin), origin_device_{origin(0), origin(1), origin(2)}, field_rows_(data[0].rows()), field_cols_(data[0].cols()),
       field_z_(data.size()), cell_size_(cell_size), data_(data), data_matrix_(field_rows_, field_cols_ * field_z_)
       {
         for (int i = 0; i < field_z_; i++){
@@ -229,7 +229,7 @@ public:
   __device__ inline double signed_distance(const FloatIndex3& idx) const {
     const double lr = floor(idx.row), lc = floor(idx.col), lz = floor(idx.z);
     const double hr = lr + 1.0, hc = lc + 1.0, hz = lz + 1.0;
-    const int lri = static_cast<int>(lr), lci = static_cast<int>(lc), lzi = static_cast<int>(lz), 
+    const int lri = static_cast<int>(lr), lci = static_cast<int>(lc), lzi = static_cast<int>(lz),
               hri = static_cast<int>(hr), hci = static_cast<int>(hc), hzi = static_cast<int>(hz);
     // printf("lri = %d, lci = %d, lzi = %d, hri = %d, hci = %d, hzi = %d\n\n", lri, lci, lzi, hri, hci, hzi);
     return
@@ -339,7 +339,7 @@ public:
     // Constructors/Destructor
     ForwardKinematics() {}
 
-    ForwardKinematics(const Eigen::VectorXd& a, const Eigen::VectorXd& alpha, 
+    ForwardKinematics(const Eigen::VectorXd& a, const Eigen::VectorXd& alpha,
                       const Eigen::VectorXd& d, const Eigen::VectorXd& theta_bias, int num_spheres,
                       const Eigen::VectorXi& frames, const Eigen::MatrixXd& centers) :
       _a(a), _alpha(alpha), _d(d), _theta_bias(theta_bias), _num_spheres(num_spheres), _frames(frames), _centers(centers)
@@ -475,7 +475,7 @@ public:
 
     void Cuda_free_iter(){
       // cudaFree(_sigmapts_gpu);
-      // cudaFree(_func_value_gpu); 
+      // cudaFree(_func_value_gpu);
     }
 
     void update_sigmapts(const MatrixXd& covariance, const MatrixXd& mean, int dim_state, int num_states, MatrixXd& sigmapts);
@@ -522,7 +522,7 @@ public:
     {
         MatrixIO _m_io;
         std::string field_file = source_root + "/maps/2dpR/map2/field_multiobs_map2.csv";
-        MatrixXd field = _m_io.load_csv(field_file);      
+        MatrixXd field = _m_io.load_csv(field_file);
 
         Vector2d origin;
         origin.setZero();
@@ -595,12 +595,15 @@ public:
         MatrixIO _m_io;
         std::string field_file = source_root + "/python/sdf_robot/map/planar/" + map_name + "_field.csv";
         std::cout << "field_file: " << field_file << std::endl;
-        MatrixXd field = _m_io.load_csv(field_file);      
+        MatrixXd field = _m_io.load_csv(field_file);
 
         Vector2d origin;
         origin.setZero();
-        origin << -20.0, -20.0;
-        // origin << -50.0, -50.0;
+        if(map_name == "MultiObstacleLongRangeMap") {
+          origin << -50.0, -50.0;
+        } else {
+          origin << -20.0, -20.0;
+        }
 
         double cell_size = 0.1;
         _sdf = PlanarSDF{origin, cell_size, field};
@@ -659,7 +662,7 @@ public:
         return cost;
       }
 
-      __device__ void vec_balls(const double* pose, int n_balls, Point2* v_pts) {  
+      __device__ void vec_balls(const double* pose, int n_balls, Point2* v_pts) {
         double L = 5.0;
         double pos_x = pose[0];
         double pos_z = pose[1];
@@ -755,7 +758,7 @@ public:
                         double cost_sigma = 15.5, double epsilon = 0.5):
     _radii(radii), CudaOperation_Base(cost_sigma, epsilon)
     {
-        std::string sdf_file = source_root + "/maps/WAM/WAMDeskDataset_cereal.bin";  
+        std::string sdf_file = source_root + "/maps/WAM/WAMDeskDataset_cereal.bin";
         _sdf.loadSDF(sdf_file);
         
         hostCost._epsilon = _epsilon;
@@ -771,7 +774,7 @@ public:
     //                     double cost_sigma, double epsilon, gpmp2::SignedDistanceField sdf):
     // _radii(radii), CudaOperation_Base(cost_sigma, epsilon) // we can replace the input with the sdf class we defined
     // {
-    //     _sdf = SignedDistanceField{sdf.origin(), sdf.cell_size(), sdf.raw_data()}; 
+    //     _sdf = SignedDistanceField{sdf.origin(), sdf.cell_size(), sdf.raw_data()};
 
     //     _radii_data = _radii.data();
     //     const int num_spheres = frames.size();
@@ -879,7 +882,7 @@ public:
 
   ObstacleCost hostCost;
   ObstacleCost* d_cost;
-    
+  
   VectorXd _radii;
 
   double *_a_gpu, *_alpha_gpu, *_d_gpu, *_theta_gpu, *_rad_gpu, *_centers_gpu;

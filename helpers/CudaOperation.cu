@@ -84,7 +84,7 @@ void printGPUMemoryInfo() {
 // }
 
 template <typename RobotType>
-__global__ void cost_function(double* d_sigmapts, double* d_pts, int sigmapts_rows, int sigmapts_cols, 
+__global__ void cost_function(double* d_sigmapts, double* d_pts, int sigmapts_rows, int sigmapts_cols,
                                 int n_states, typename RobotType::ObstacleCost* d_cost){
     
     int row = blockIdx.y * blockDim.y + threadIdx.y;
@@ -103,7 +103,7 @@ __global__ void cost_function(double* d_sigmapts, double* d_pts, int sigmapts_ro
     }
 }
 
-__global__ void cost_function(double* d_sigmapts, double* d_pts, int sigmapts_rows, int sigmapts_cols, 
+__global__ void cost_function(double* d_sigmapts, double* d_pts, int sigmapts_rows, int sigmapts_cols,
                                 int n_states, CudaOperation_3dArm::ObstacleCost* d_cost){
     
     int row = blockIdx.y * blockDim.y + threadIdx.y;
@@ -139,7 +139,7 @@ __global__ void ddmu_function(double* d_sigmapts, double* d_mu, double* d_pts, d
     if (row < sigmapts_rows*sigmapts_cols && col < n_states*sigmapts_cols){
         int idx_x = col / sigmapts_cols; // Use which mu
         int idx_y = row / sigmapts_cols; // use which sigma
-        int mat_x = col % sigmapts_cols; // 
+        int mat_x = col % sigmapts_cols;
         int mat_y = row % sigmapts_cols;
 
         d_vec[col*sigmapts_rows*sigmapts_cols + row] = (d_sigmapts[(idx_x*sigmapts_cols + mat_x) * sigmapts_rows + idx_y] - d_mu[idx_x*sigmapts_cols + mat_x]) 
@@ -288,7 +288,7 @@ void CudaOperation_Base<SDFType>::update_sigmapts(const MatrixXd& covariance, co
     std::vector<const double*> h_B2_gemm(num_states);
     std::vector<double*> h_C2_gemm(num_states);
     for (int i = 0; i < num_states; i++) {
-        h_A2_gemm[i] = _zeromean_gpu; 
+        h_A2_gemm[i] = _zeromean_gpu;
         h_B2_gemm[i] = d_sqrtP + i * dim_conf * dim_conf; // sqrtP for current state
         h_C2_gemm[i] = _sigmapts_gpu + i * _sigmapts_rows * dim_conf;
     }
@@ -335,7 +335,7 @@ void CudaOperation_PlanarPR::costIntegration(const MatrixXd& sigmapts, VectorXd&
     double *result_gpu;
     cudaMalloc(&result_gpu, _n_states * sizeof(double));
 
-    // Kernel 1: Obtain the result of function 
+    // Kernel 1: Obtain the result of function
     dim3 threadperblock1(32, 32);
     dim3 blockSize1((_n_states + threadperblock1.x - 1) / threadperblock1.x, (_sigmapts_rows + threadperblock1.y - 1) / threadperblock1.y);
 
@@ -368,7 +368,7 @@ void CudaOperation_3dpR::costIntegration(const MatrixXd& sigmapts, VectorXd& res
 
     cudaMalloc(&result_gpu, _n_states * sizeof(double));
 
-    // Kernel 1: Obtain the result of function 
+    // Kernel 1: Obtain the result of function
     dim3 threadperblock1(32, 32);
     dim3 blockSize1((_n_states + threadperblock1.x - 1) / threadperblock1.x, (_sigmapts_rows + threadperblock1.y - 1) / threadperblock1.y);
 
@@ -401,7 +401,7 @@ void CudaOperation_Quad::costIntegration(const MatrixXd& sigmapts, VectorXd& res
     double *result_gpu;
     cudaMalloc(&result_gpu, _n_states * sizeof(double));
 
-    // Kernel 1: Obtain the result of function 
+    // Kernel 1: Obtain the result of function
     dim3 threadperblock1(32, 32);
     dim3 blockSize1((_n_states + threadperblock1.x - 1) / threadperblock1.x, (_sigmapts_rows + threadperblock1.y - 1) / threadperblock1.y);
 
@@ -439,7 +439,7 @@ void CudaOperation_Base<SDFType>::dmuIntegration(const MatrixXd& sigmapts, const
 
     cudaMemcpy(_mu_gpu, mu.data(), mu.size() * sizeof(double), cudaMemcpyHostToDevice);
 
-    // Kernel 1: Obtain the result of function 
+    // Kernel 1: Obtain the result of function
     dim3 threadperblock1(32, 32);
     dim3 blockSize1((results.size() + threadperblock1.x - 1) / threadperblock1.x, (_sigmapts_rows + threadperblock1.y - 1) / threadperblock1.y);
 
@@ -470,7 +470,7 @@ void CudaOperation_Base<SDFType>::ddmuIntegration(MatrixXd& results){
     cudaMalloc(&vec_gpu, _sigmapts_rows * results.size() * sizeof(double));
     cudaMalloc(&result_gpu, results.size() * sizeof(double));
 
-    // Kernel 1: Obtain the result of function 
+    // Kernel 1: Obtain the result of function
     dim3 threadperblock(32, 32); //1024
     dim3 blockSize1((results.cols() + threadperblock.x - 1) / threadperblock.x, (_sigmapts_rows * results.rows() + threadperblock.y - 1) / threadperblock.y);
 
@@ -506,7 +506,7 @@ void CudaOperation_Base<SDFType>::ddmuIntegration(MatrixXd& results){
 //     cudaMemcpy(sigmapts_gpu, sigmapts.data(), sigmapts.size() * sizeof(double), cudaMemcpyHostToDevice);
 //     cudaMemcpy(mu_gpu, mean.data(), sigmapts.cols() * sizeof(double), cudaMemcpyHostToDevice);
 
-//     // Kernel 1: Obtain the result of function 
+//     // Kernel 1: Obtain the result of function
 //     dim3 blockSize1(1024, 1024);
 //     dim3 threadperblock1((results.cols()*sigmapts.rows() + blockSize1.x - 1) / blockSize1.x, (results.rows() + blockSize1.y - 1) / blockSize1.y);
 
@@ -545,7 +545,7 @@ void CudaOperation_3dArm::costIntegration(const MatrixXd& sigmapts, VectorXd& re
     cudaMalloc(&result_gpu, results.size() * sizeof(double));
     // cudaMemcpy(_sigmapts_gpu, sigmapts.data(), sigmapts.size() * sizeof(double), cudaMemcpyHostToDevice);
 
-    // Kernel 1: Obtain the result of function 
+    // Kernel 1: Obtain the result of function
     dim3 threadperblock1(16, 16);
     dim3 blockSize1((results.size() + threadperblock1.x - 1) / threadperblock1.x, (sigmapts.rows() + threadperblock1.y - 1) / threadperblock1.y);
 
@@ -617,7 +617,7 @@ __global__ void covariance_function(double* d_sigmapts, double* d_x_bar, double*
         int mat_x = col % sigmapts_cols; // which element in x
         int mat_y = row % sigmapts_cols;
 
-        d_vec[col*sigmapts_rows*sigmapts_cols + row] = (d_sigmapts[(idx_x*sigmapts_cols + mat_y) * sigmapts_rows + idx_y] - d_x_bar[idx_x*sigmapts_cols + mat_y]) 
+        d_vec[col*sigmapts_rows*sigmapts_cols + row] = (d_sigmapts[(idx_x*sigmapts_cols + mat_y) * sigmapts_rows + idx_y] - d_x_bar[idx_x*sigmapts_cols + mat_y])
                                                      * (d_y_sigmapts[(idx_x*sigmapts_cols + mat_x) * sigmapts_rows + idx_y] - d_y_bar[idx_x*sigmapts_cols + mat_x]) ;
     }
 }
@@ -647,7 +647,7 @@ __global__ void obtain_y_bar(double* d_pts, double* d_weights, double* d_result,
 
 void CudaOperation_SLR::expectationIntegration(MatrixXd& y_bar){
 
-    // Kernel 1: Obtain the result of function 
+    // Kernel 1: Obtain the result of function
     dim3 threadperblock1(32, 32);
     dim3 blockSize1((_n_states + threadperblock1.x - 1) / threadperblock1.x, (_sigmapts_rows + threadperblock1.y - 1) / threadperblock1.y);
 
@@ -675,7 +675,7 @@ void CudaOperation_SLR::covarianceIntegration(MatrixXd& results){
     cudaMalloc(&vec_gpu, _sigmapts_rows * results.size() * sizeof(double));
     cudaMalloc(&result_gpu, results.size() * sizeof(double));
 
-    // Kernel 1: Obtain the result of function 
+    // Kernel 1: Obtain the result of function
     dim3 threadperblock(32, 32);
     dim3 blockSize1((results.cols() + threadperblock.x - 1) / threadperblock.x, (_sigmapts_rows * results.rows() + threadperblock.y - 1) / threadperblock.y);
 
