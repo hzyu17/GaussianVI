@@ -29,12 +29,12 @@ public:
     ///@param function_d Template function class which calculate the cost
     // ProxKLFactorizedBaseGH_Cuda(const int& dimension, const Function& function, const CostClass& cost_class_, const MatrixXd& Pk_):
     
-    ProxKLFactorizedBaseGH_Cuda(int dimension, int state_dim, int gh_degree, 
+    ProxKLFactorizedBaseGH_Cuda(int dimension, int state_dim, int gh_degree,
                         int num_states, int start_index,
                         double temperature, double high_temperature,
                         std::shared_ptr<QuadratureWeightsMap> weight_sigpts_map_option,
                         std::shared_ptr<CudaClass> cuda_ptr):
-                GVIBase(dimension, state_dim, num_states, start_index, 
+                GVIBase(dimension, state_dim, num_states, start_index,
                         temperature, high_temperature, weight_sigpts_map_option)
             {
                 GVIBase::_gh = std::make_shared<GH>(GH{gh_degree, GVIBase::_dim, GVIBase::_mu, GVIBase::_covariance, weight_sigpts_map_option});
@@ -46,25 +46,25 @@ public:
         this->_Vdmu.setZero();
         this->_Vddmu.setZero();
 
-        /// Integrate for E_q{_Vdmu} 
+        /// Integrate for E_q{_Vdmu}
         this->_Vdmu = Vdmu;
         this->_Vdmu = this->_precision * this->_Vdmu;
         
-        /// Integrate for partial V^2 / ddmu_ 
+        /// Integrate for partial V^2 / ddmu_
         MatrixXd E_xxphi = ddmu_mat;
 
         this->_Vddmu.triangularView<Upper>() = (this->_precision * E_xxphi * this->_precision - this->_precision * E_Phi).triangularView<Upper>();
         this->_Vddmu.triangularView<StrictlyLower>() = this->_Vddmu.triangularView<StrictlyUpper>().transpose();
     }
 
-    inline VectorXd local2joint_dmu_insertion() override{ 
+    inline VectorXd local2joint_dmu_insertion() override{
         VectorXd res(this->_joint_size);
         res.setZero();
         res.block(this->_state_dim * this->_start_index, 0, this->_dim, 1) = this->_Vdmu;
         return res;
     }
 
-    inline SpMat local2joint_dprecision_insertion() override{ 
+    inline SpMat local2joint_dprecision_insertion() override{
         SpMat res(this->_joint_size, this->_joint_size);
 
         for (int i = 0; i < this->_dim; ++i)
@@ -74,10 +74,10 @@ public:
         return res;
     }
 
-    inline SpMat local2joint_dprecision_triplet() override{ 
+    inline SpMat local2joint_dprecision_triplet() override{
         SpMat res(this->_joint_size, this->_joint_size);
         std::vector<Trip> triplets;
-        triplets.reserve(this->_dim * this->_dim);  
+        triplets.reserve(this->_dim * this->_dim);
 
         int offset = this->_state_dim * this->_start_index;
         for (int i = 0; i < this->_dim; ++i)
@@ -89,20 +89,22 @@ public:
     }
 
     /**
-     * @brief returns the (x-mu)*Phi(x) 
+     * @brief returns the (x-mu)*Phi(x)
      */
     inline MatrixXd xMu_negative_log_probability(const VectorXd& x) const{
         return _func_Vmu(x);
     }
 
     /**
-     * @brief returns the (x-mu)(x-mu)^T*Phi(x) 
+     * @brief returns the (x-mu)(x-mu)^T*Phi(x)
      */
     inline MatrixXd xMuxMuT_negative_log_probability(const VectorXd& x) const{
         return _func_Vmumu(x);
     }
 
     inline void cuda_init(const int n_states) override{
+        _sigma_rows = this -> _gh -> sigmapts().rows();
+        _dim_conf = this -> _gh -> sigmapts().cols();
         _cuda -> Cuda_init(this -> _gh -> weights(), this -> _gh ->zeromeanpts(), n_states);
     }
 
@@ -113,23 +115,27 @@ public:
     inline bool linear_factor() override { return _isLinear; }
 
     inline void newCostIntegration(const MatrixXd& sigmapts, VectorXd& results, const int sigmapts_cols) override{
-        _cuda -> Cuda_init_iter(sigmapts, results, sigmapts_cols);
+        // _cuda -> Cuda_init_iter(sigmapts, results, sigmapts_cols);
         _cuda -> costIntegration(sigmapts, results, sigmapts_cols);
         _cuda -> Cuda_free_iter();
     }
 
     inline void dmuIntegration(const MatrixXd& sigmapts, const MatrixXd& mean, VectorXd& E_phi_mat, VectorXd& dmu_mat, MatrixXd& ddmu_mat, const int sigmapts_cols) override{
-        _cuda -> Cuda_init_iter(sigmapts, E_phi_mat, sigmapts_cols);
+        // _cuda -> Cuda_init_iter(sigmapts, E_phi_mat, sigmapts_cols);
         _cuda -> costIntegration(sigmapts, E_phi_mat, sigmapts_cols);
         _cuda -> dmuIntegration(sigmapts, mean, dmu_mat, sigmapts_cols);
         _cuda -> ddmuIntegration(ddmu_mat);
         _cuda -> Cuda_free_iter();
     }
 
+    inline void compute_sigmapts(const MatrixXd& mean, const MatrixXd& covariance, int dim_conf, int num_states, MatrixXd& sigmapts) override{
+        _cuda->update_sigmapts(covariance, mean, dim_conf, num_states, sigmapts);
+    }
+
     void cuda_matrices(const VectorXd& fill_joint_mean, const SpMat& joint_cov, std::vector<MatrixXd>& vec_sigmapts, std::vector<VectorXd>& vec_mean) override {
 
         VectorXd mean_k = extract_mu_from_joint(fill_joint_mean);
-        MatrixXd Cov_k = extract_cov_from_joint(joint_cov);        
+        MatrixXd Cov_k = extract_cov_from_joint(joint_cov);
 
         updateGH(mean_k, Cov_k);
 
@@ -137,7 +143,7 @@ public:
         vec_sigmapts[_start_index-1] = this -> _gh -> sigmapts();
     }
 
-    void cuda_matrices(std::vector<MatrixXd>& vec_sigmapts, std::vector<VectorXd>& vec_mean) override {   
+    void cuda_matrices(std::vector<MatrixXd>& vec_sigmapts, std::vector<VectorXd>& vec_mean) override {
 
         updateGH(this->_mu, this->_covariance);
 

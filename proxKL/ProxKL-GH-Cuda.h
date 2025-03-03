@@ -22,6 +22,9 @@ namespace gvi{
 template <typename FactorizedOptimizer>
 class ProxKLGH: public GVIGH<FactorizedOptimizer>{
     using Base = GVIGH<FactorizedOptimizer>;
+    using Base::_dim_conf;
+    using Base::_sigma_rows;
+
 public:
 
     ProxKLGH(){}

@@ -15,8 +15,8 @@ std::tuple<double, VectorXd, SpMat> ProxKLGH<Factor>::onestep_linesearch(const d
                                                                             const VectorXd& dmu, 
                                                                             const SpMat& dprecision)
 {
-    SpMat new_precision; 
-    VectorXd new_mu; 
+    SpMat new_precision;
+    VectorXd new_mu;
     new_mu.setZero(); new_precision.setZero();
     double temperature = this->_temperature;
 
@@ -66,31 +66,34 @@ std::tuple<double, VectorXd, SpMat> ProxKLGH<Factor>::onestep_linesearch(const d
 template <typename Factor>
 std::tuple<double, VectorXd, SpMat> ProxKLGH<Factor>::bisection_update(const VectorXd& dmu, const SpMat& dprecision)
 {   
-    SpMat new_precision; 
-    VectorXd new_mu; 
+    SpMat new_precision;
+    VectorXd new_mu;
     new_mu.setZero(); new_precision.setZero();
     double temperature = this->_temperature;
 
     double log_lower = -2;
     double log_upper = 2;
-    double log_threshold = 0.01; 
+    double log_threshold = 0.01;
     double epsilon = this->_alpha;
 
     // update mu and precision matrix
     // Eigen::ConjugateGradient<SpMat> solver;
     Eigen::ConjugateGradient<SpMat, Eigen::Upper> solver;
 
-    while (log_upper - log_lower > log_threshold) 
+    while (log_upper - log_lower > log_threshold)
     {
         double log_mid = (log_lower + log_upper) / 2;
         double step_size = std::exp(log_mid);
-        // std::cout << "Step Size: " << step_size << std::endl;
 
         new_mu = solver.compute(_precision_prior / temperature + this->_precision / step_size).solve(-dmu / temperature + _precision_prior * _mu_prior / temperature + this->_precision * this->_mu / step_size);
+        // VectorXd mu_cuda = Base::solveWithCuSolverQR(_precision_prior / temperature + this->_precision / step_size, -dmu / temperature + _precision_prior * _mu_prior / temperature + this->_precision * this->_mu / step_size);
+        // std::cout << "Norm of dmu: " << new_mu.norm() << std::endl;
+        // std::cout << "Error of dmu CuSolver QR: " << (new_mu - mu_cuda).norm() << std::endl;
         new_precision = (dprecision / temperature + _precision_prior / temperature + this->_precision / step_size) * step_size / (step_size + 1);
 
         // Compute KL divergence and check for PD indirectly
         double KL = KL_Divergence(new_mu, this->_mu, new_precision, this->_precision);
+        std::cout << "KL Divergence: " << KL << std::endl << std::endl;
 
         if (std::isnan(KL) || KL >= epsilon) {
             log_upper = log_mid;
@@ -99,8 +102,16 @@ std::tuple<double, VectorXd, SpMat> ProxKLGH<Factor>::bisection_update(const Vec
         }
     }
 
+    Timer timer;
+
     double final_step_size = std::exp((log_lower + log_upper) / 2);
+    // timer.start();
     new_mu = solver.compute(_precision_prior / temperature + this->_precision / final_step_size).solve(-dmu / temperature + _precision_prior * _mu_prior / temperature + this->_precision * this->_mu / final_step_size);
+    // std::cout << "Solver Time: " << timer.end_mus_output() << " us" << std::endl;
+    // timer.start();
+    // VectorXd mu_cuda = Base::solveWithCuSolverQR(_precision_prior / temperature + this->_precision / final_step_size, -dmu / temperature + _precision_prior * _mu_prior / temperature + this->_precision * this->_mu / final_step_size);
+    // std::cout << "Norm of dmu: " << new_mu.norm() << std::endl;
+    // std::cout << "Error of dmu CuSolver QR: " << (new_mu - mu_cuda).norm() << std::endl;
     new_precision = (dprecision / temperature + _precision_prior / temperature + this->_precision / final_step_size) * final_step_size / (final_step_size + 1);
 
     // new cost
@@ -126,6 +137,9 @@ void ProxKLGH<Factor>::optimize(std::optional<bool> verbose)
     bool converged = false;
 
     Base::_vec_nonlinear_factors[0]->cuda_init(Base::_vec_nonlinear_factors.size());
+
+    _sigma_rows = Base::_vec_nonlinear_factors[0]->_sigma_rows;
+    _dim_conf = Base::_vec_nonlinear_factors[0]->_dim_conf;
 
     if (_save_data){
         Base::_res_recorder.init_data();
@@ -167,7 +181,7 @@ void ProxKLGH<Factor>::optimize(std::optional<bool> verbose)
         int B = 1;
         double step_size = Base::_step_size_base;
 
-        // backtracking 
+        // backtracking
         while (true)
         {   
             // new step size
@@ -207,7 +221,7 @@ void ProxKLGH<Factor>::optimize(std::optional<bool> verbose)
 
                 // update_proposal(new_mu, new_precision);
                 break;
-            }                
+            }
         }
     }
 
@@ -259,14 +273,14 @@ void ProxKLGH<Factor>::optimize_linear(std::optional<bool> verbose)
         int B = 1;
         double step_size = Base::_step_size_base;
 
-        // backtracking 
+        // backtracking
         while (true)
         {   
             // new step size
             step_size = step_size * 0.75;
 
-            SpMat new_precision; 
-            VectorXd new_mu; 
+            SpMat new_precision;
+            VectorXd new_mu;
             new_mu.setZero(); new_precision.setZero();
 
             Eigen::ConjugateGradient<SpMat> solver;
@@ -282,7 +296,7 @@ void ProxKLGH<Factor>::optimize_linear(std::optional<bool> verbose)
                 // update mean and covariance
                 this->update_proposal(new_mu, new_precision);
                 break;
-            }else{ 
+            }else{
                 // shrinking the step size
                 B += 1;
                 cnt += 1;
@@ -303,7 +317,7 @@ void ProxKLGH<Factor>::optimize_linear(std::optional<bool> verbose)
 
                 // update_proposal(new_mu, new_precision);
                 break;
-            }                
+            }
         }
     }
 
@@ -325,43 +339,31 @@ std::tuple<double, VectorXd, VectorXd, SpMat>ProxKLGH<Factor>::factor_cost_vecto
     fac_costs.setZero();
     nonlinear_fac_cost.setZero();
 
-    std::vector<MatrixXd> sigmapts_vec(n_nonlinear);
-    std::vector<VectorXd> mean_vec(n_nonlinear);
+    MatrixXd sigmapts_mat(_sigma_rows, n_nonlinear*_dim_conf);
+    MatrixXd mean_mat(_dim_conf, n_nonlinear);
+    MatrixXd covariance_matrix(_dim_conf, n_nonlinear*_dim_conf);
+    MatrixXd sigma(_sigma_rows, _dim_conf);
 
-    omp_set_num_threads(20); 
+    VectorXd E_phi_mat(n_nonlinear);
+    VectorXd E_Xphi_mat(_dim_conf * n_nonlinear);
+    MatrixXd E_XXphi_mat(_dim_conf, _dim_conf * n_nonlinear);
 
     #pragma omp parallel for
     for (int i = 0; i < n_nonlinear; i++)
     {
         auto &opt_k = Base::_vec_nonlinear_factors[i];
-        opt_k->cuda_matrices(sigmapts_vec, mean_vec); 
+        mean_mat.col(i) = opt_k->_mu;
+        covariance_matrix.block(0, i * _dim_conf, _dim_conf, _dim_conf) = opt_k->covariance();
     }
 
-    // Mean and Sigma points here only include states without velocity
-    int sigma_rows = sigmapts_vec[0].rows();
-    int sigma_cols = sigmapts_vec[0].cols();
-    int mean_size = mean_vec[0].size();
-
-    MatrixXd sigmapts_mat(sigma_rows, sigmapts_vec.size()*sigma_cols);
-    MatrixXd mean_mat(mean_size, mean_vec.size());
-
-    VectorXd E_phi_mat(n_nonlinear);
-    VectorXd E_Xphi_mat(sigma_cols * n_nonlinear);
-    MatrixXd E_XXphi_mat(sigma_cols, sigma_cols * n_nonlinear);
-
-    #pragma omp parallel for
-    for (int i = 0; i < n_nonlinear; i++)
-    {
-        sigmapts_mat.block(0, i * sigma_cols, sigma_rows, sigma_cols) = sigmapts_vec[i];
-        mean_mat.col(i) = mean_vec[i];
-    }
+    Base::_vec_nonlinear_factors[0]->compute_sigmapts(mean_mat, covariance_matrix, _dim_conf, n_nonlinear, sigma);
 
     // Compute the cost and derivatives of the nonlinear factors
-    Base::_vec_nonlinear_factors[0]->dmuIntegration(sigmapts_mat, mean_mat, nonlinear_fac_cost, E_Xphi_mat, E_XXphi_mat, sigma_cols);
+    Base::_vec_nonlinear_factors[0]->dmuIntegration(sigmapts_mat, mean_mat, nonlinear_fac_cost, E_Xphi_mat, E_XXphi_mat, _dim_conf);
     E_phi_mat = nonlinear_fac_cost;
 
-    nonlinear_fac_cost = nonlinear_fac_cost / this ->_temperature; 
-    // std::cout << "Nonlinear Costs: " << nonlinear_fac_cost.transpose() << std::endl;
+    nonlinear_fac_cost = nonlinear_fac_cost / this ->_temperature;
+    
 
     int cnt = 0;
 
@@ -374,7 +376,7 @@ std::tuple<double, VectorXd, VectorXd, SpMat>ProxKLGH<Factor>::factor_cost_vecto
         auto &opt_k = Base::_vec_factors[i];
         if (opt_k->linear_factor())
         {
-            double cost_value = opt_k->fact_cost_value(this->_mu, this->_covariance); 
+            double cost_value = opt_k->fact_cost_value(this->_mu, this->_covariance);
             fac_costs(thread_cnt) = cost_value;
         }
         else
@@ -397,9 +399,9 @@ std::tuple<double, VectorXd, VectorXd, SpMat>ProxKLGH<Factor>::factor_cost_vecto
     double collision_cost = nonlinear_fac_cost.sum();
     double prior_cost = fac_costs.sum() - collision_cost;
 
-    // std::cout << "Prior Cost: " << prior_cost << std::endl;
-    // std::cout << "Collision Cost: " << collision_cost << std::endl;
-    // std::cout << "Entropy: " << entropy << std::endl;
+    std::cout << "Prior Cost: " << prior_cost << std::endl;
+    std::cout << "Collision Cost: " << collision_cost << std::endl;
+    std::cout << "Entropy: " << entropy << std::endl;
 
     // SparseLDLT ldlt_prior(_precision_prior);
 
@@ -421,7 +423,7 @@ std::tuple<double, VectorXd, VectorXd, SpMat>ProxKLGH<Factor>::factor_cost_vecto
     Vdmu_sum.setZero();
     Vddmu_sum.setZero();
 
-    #pragma omp parallel 
+    #pragma omp parallel
     {
         // Thread-local storage to avoid race conditions
         VectorXd Vdmu_private(Vdmu_sum.size());
@@ -432,8 +434,8 @@ std::tuple<double, VectorXd, VectorXd, SpMat>ProxKLGH<Factor>::factor_cost_vecto
         #pragma omp for nowait // Nowait allows threads to continue without waiting at the end of the loop
         for (auto &opt_k : Base::_vec_nonlinear_factors) {
             int index = opt_k->index()-1;
-            MatrixXd ddmu_i = E_XXphi_mat.block(0, index*sigma_cols, sigma_cols, sigma_cols);
-            VectorXd dmu_i = E_Xphi_mat.segment(index*sigma_cols, sigma_cols);
+            MatrixXd ddmu_i = E_XXphi_mat.block(0, index*_dim_conf, _dim_conf, _dim_conf);
+            VectorXd dmu_i = E_Xphi_mat.segment(index*_dim_conf, _dim_conf);
 
             opt_k->calculate_partial_V(ddmu_i, dmu_i, E_phi_mat(index));
 
@@ -472,27 +474,21 @@ double ProxKLGH<Factor>::cost_value_cuda(const VectorXd& fill_joint_mean, SpMat&
 
     SpMat joint_cov = Base::inverse_GBP(joint_precision);
 
-    std::vector<MatrixXd> sigmapts_vec(n_nonlinear);
-    std::vector<VectorXd> mean_vec(n_nonlinear);
+    MatrixXd sigmapts_mat(_sigma_rows, n_nonlinear*_dim_conf);
+    MatrixXd mean_mat(_dim_conf, n_nonlinear);
+    MatrixXd covariance_matrix(_dim_conf, n_nonlinear*_dim_conf);
+    MatrixXd sigma(_sigma_rows, _dim_conf);
 
     #pragma omp parallel for
     for (int i = 0; i < n_nonlinear; i++)
     {
-        auto &opt_k = Base::_vec_nonlinear_factors[i];
-        opt_k->cuda_matrices(fill_joint_mean, joint_cov, sigmapts_vec, mean_vec); 
+        mean_mat.col(i) = fill_joint_mean.segment((i+1)*this->_dim_state, _dim_conf);
+        covariance_matrix.block(0, i * _dim_conf, _dim_conf, _dim_conf) = joint_cov.block((i+1)*this->_dim_state, (i+1)*this->_dim_state, _dim_conf, _dim_conf);
     }
 
-    int sigma_rows = sigmapts_vec[0].rows();
-    int sigma_cols = sigmapts_vec[0].cols();
-    int mean_size = mean_vec[0].size();
-
-    MatrixXd sigmapts_mat(sigma_rows, sigmapts_vec.size()*sigma_cols);
-
-    for (int i = 0; i < n_nonlinear; i++)
-        sigmapts_mat.block(0, i * sigma_cols, sigma_rows, sigma_cols) = sigmapts_vec[i];
-
     // Compute the cost of the nonlinear factors
-    Base::_vec_nonlinear_factors[0]->newCostIntegration(sigmapts_mat, nonlinear_fac_cost, sigma_cols);
+    Base::_vec_nonlinear_factors[0]->compute_sigmapts(mean_mat, covariance_matrix, _dim_conf, n_nonlinear, sigma);
+    Base::_vec_nonlinear_factors[0]->newCostIntegration(sigmapts_mat, nonlinear_fac_cost, _dim_conf);
 
     nonlinear_fac_cost = nonlinear_fac_cost / this ->_temperature;
 
@@ -502,7 +498,7 @@ double ProxKLGH<Factor>::cost_value_cuda(const VectorXd& fill_joint_mean, SpMat&
     for (int i = 0; i < Base::_vec_linear_factors.size(); ++i)
     {
         auto &opt_k = Base::_vec_linear_factors[i];
-        value += opt_k->fact_cost_value(fill_joint_mean, joint_cov); 
+        value += opt_k->fact_cost_value(fill_joint_mean, joint_cov);
     }
 
     // std::cout << "Prior Cost: " << value << std::endl;
@@ -565,7 +561,7 @@ double ProxKLGH<Factor>::cost_value_linear(const VectorXd& fill_joint_mean, cons
     for (int i = 0; i < Base::_vec_linear_factors.size(); ++i)
     {
         auto &opt_k = Base::_vec_linear_factors[i];
-        double cost_value = opt_k->fact_cost_value(fill_joint_mean, joint_cov); 
+        double cost_value = opt_k->fact_cost_value(fill_joint_mean, joint_cov);
         fac_costs(i) = cost_value;
     }
 
