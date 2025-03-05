@@ -332,6 +332,7 @@ public:
 
   int* _frames_data;
   double* _centers_data;
+  int _num_joints;
 
 private:
 
@@ -340,9 +341,9 @@ public:
     ForwardKinematics() {}
 
     ForwardKinematics(const Eigen::VectorXd& a, const Eigen::VectorXd& alpha,
-                      const Eigen::VectorXd& d, const Eigen::VectorXd& theta_bias, int num_spheres,
+                      const Eigen::VectorXd& d, const Eigen::VectorXd& theta_bias,
                       const Eigen::VectorXi& frames, const Eigen::MatrixXd& centers) :
-      _a(a), _alpha(alpha), _d(d), _theta_bias(theta_bias), _num_spheres(num_spheres), _frames(frames), _centers(centers)
+      _a(a), _alpha(alpha), _d(d), _theta_bias(theta_bias), _num_spheres(frames.size()), _frames(frames), _centers(centers), _num_joints(a.size())
       {
           _a_data = _a.data();
           _alpha_data = _alpha.data();
@@ -354,48 +355,112 @@ public:
 
     ~ForwardKinematics() {}
 
-    // Compute 3D pose of the center of each sphere on the arm
-    __host__ __device__ inline Eigen::VectorXd compute_transformed_sphere_centers(const Eigen::VectorXd& theta) const {
-        Eigen::VectorXd pose = Eigen::VectorXd::Zero(3*_num_spheres);
-        for(int i=0; i<_num_spheres; ++i){
-            Eigen::Vector3d center(centers(i, 0), centers(i, 1), centers(i, 2));
-            pose.segment(3*i, 3) = forward_kinematics(theta, frames(i), center);
+    __device__ inline void compute_transformed_sphere_centers(const double* theta, double* pose) const {
+        // Precompute DH matrices for all joints.
+        constexpr int MATRIX_ELEMENTS = 16;
+        constexpr int MAX_JOINTS = 10;
+        double dh_mats[MATRIX_ELEMENTS * MAX_JOINTS];
+        precompute_dh_matrices(theta, dh_mats, _num_joints);
+
+        for (int i = 0; i < _num_spheres; ++i) {
+            int frame = frames(i);
+            double center[3] = {centers(i, 0), centers(i, 1), centers(i, 2)};
+            double pos[3];
+            forward_kinematics(dh_mats, frame, center, pos);
+            pose[3 * i]     = pos[0];
+            pose[3 * i + 1] = pos[1];
+            pose[3 * i + 2] = pos[2];
         }
-        return pose;
     }
 
-    // Forward kinematics computed by DH algorithm
-    __host__ __device__ inline Eigen::Vector3d forward_kinematics(const Eigen::VectorXd& theta, int frame, const Eigen::Vector3d& center) const {
-        Eigen::Matrix4d T = Eigen::Matrix4d::Identity();
-        for(int i=0; i<=frame; ++i){
-            T = T*dh_matrix(i, theta(i)+theta_bias(i));
+    __device__ inline void precompute_dh_matrices(const double* theta, double* dh_mats, int n) const {
+        constexpr int matrix_element = 16;
+        double T[matrix_element];
+        double mul_result[matrix_element];
+        identity(T); // Set T to the identity matrix in column-major order
+        
+        for (int i = 0; i < n; i++) {
+          double th = theta[i] + theta_bias(i);
+          double dh_mat[matrix_element];
+          dh_matrix(i, th, dh_mat);
+          mat_mul(T, dh_mat, mul_result, 4);
+          for (int j = 0; j < matrix_element; j++) {
+            T[j] = mul_result[j];
+            dh_mats[i*matrix_element + j] = mul_result[j];
+          }
         }
-        Eigen::Vector3d base_pos(T(0, 3), T(1, 3), T(2, 3));
-        Eigen::Matrix3d base_rot;
-        base_rot << T(0, 0), T(0, 1), T(0, 2),
-                    T(1, 0), T(1, 1), T(1, 2),
-                    T(2, 0), T(2, 1), T(2, 2);
-        Eigen::Vector3d pos = base_pos + base_rot*center;
-        return pos;
     }
 
-    // Helper function for computing DH matrices
-    __host__ __device__ inline Eigen::Matrix4d dh_matrix(int i, double theta) const {
-        Eigen::Matrix4d mat;
-        mat << cosf(theta), -sinf(theta)*cosf(alpha(i)),  sinf(theta)*sinf(alpha(i)), a(i)*cosf(theta),
-               sinf(theta),  cosf(theta)*cosf(alpha(i)), -cosf(theta)*sinf(alpha(i)), a(i)*sinf(theta),
-                         0,              sinf(alpha(i)),              cosf(alpha(i)),             d(i),
-                         0,                           0,                           0,                1;
-        return mat;
+    __device__ inline void forward_kinematics(const double* dh_mats, int frame, const double* center, double* pos) const {
+        constexpr int matrix_element = 16;
+        // Retrieve the cumulative transformation matrix for the given frame (column-major order)
+        const double* T = &dh_mats[frame * matrix_element];
+        // Extract the translation component from T (last column: indices 12, 13, 14)
+        double base_pos[3] = { T[12], T[13], T[14] };
+        // Compute the rotated center using the upper 3x3 rotation matrix from T
+        double rotated[3];
+        rotated[0] = T[0] * center[0] + T[4] * center[1] + T[8]  * center[2];
+        rotated[1] = T[1] * center[0] + T[5] * center[1] + T[9]  * center[2];
+        rotated[2] = T[2] * center[0] + T[6] * center[1] + T[10] * center[2];
+        // Compute final position as the sum of translation and rotated center
+        pos[0] = base_pos[0] + rotated[0];
+        pos[1] = base_pos[1] + rotated[1];
+        pos[2] = base_pos[2] + rotated[2];
+    }
+
+    __device__ inline void identity(double* M) const {
+        M[0]  = 1; M[1]  = 0; M[2]  = 0; M[3]  = 0;
+        M[4]  = 0; M[5]  = 1; M[6]  = 0; M[7]  = 0;
+        M[8]  = 0; M[9]  = 0; M[10] = 1; M[11] = 0;
+        M[12] = 0; M[13] = 0; M[14] = 0; M[15] = 1;
+    }
+
+    __device__ inline void mat_mul(const double* A, const double* B, double* C, const int dim) const {
+      for (int col = 0; col < dim; col++) {
+        for (int row = 0; row < dim; row++) {
+            double sum = 0.0;
+            for (int k = 0; k < dim; k++) {
+                sum += A[row + k*dim] * B[k + col*dim];
+            }
+            C[row + col*dim] = sum;
+              }
+          }
+    }
+
+    __device__ inline void dh_matrix(int i, double theta, double* mat) const {
+        double ct = cos(theta);
+        double st = sin(theta);
+        double ca = cos(alpha(i));
+        double sa = sin(alpha(i));
+        // Column 0
+        mat[0] = ct;
+        mat[1] = st;
+        mat[2] = 0;
+        mat[3] = 0;
+        // Column 1
+        mat[4] = -st * ca;
+        mat[5] = ct * ca;
+        mat[6] = sa;
+        mat[7] = 0;
+        // Column 2
+        mat[8]  = st * sa;
+        mat[9]  = -ct * sa;
+        mat[10] = ca;
+        mat[11] = 0;
+        // Column 3
+        mat[12] = a(i) * ct;
+        mat[13] = a(i) * st;
+        mat[14] = d(i);
+        mat[15] = 1;
     }
 
     // access functions
-    __host__ __device__ inline double a(int i) const { return _a_data[i]; }
-    __host__ __device__ inline double alpha(int i) const { return _alpha_data[i]; }
-    __host__ __device__ inline double d(int i) const { return _d_data[i]; }
-    __host__ __device__ inline double theta_bias(int i) const { return _theta_bias_data[i]; }
-    __host__ __device__ inline int frames(int i) const { return _frames_data[i]; }
-    __host__ __device__ inline double centers(int row, int col) const { return _centers_data[3*row + col]; }
+    __device__ inline double a(int i) const { return _a_data[i]; }
+    __device__ inline double alpha(int i) const { return _alpha_data[i]; }
+    __device__ inline double d(int i) const { return _d_data[i]; }
+    __device__ inline double theta_bias(int i) const { return _theta_bias_data[i]; }
+    __device__ inline int frames(int i) const { return _frames_data[i]; }
+    __device__ inline double centers(int row, int col) const { return _centers_data[3*row + col]; }
 };
 
 
@@ -561,7 +626,7 @@ public:
 
       PlanarSDF _sdf;
 
-      __device__ double cost_obstacle_planar(const double* pose){
+      __device__ double cost_obstacle(const double* pose){
         int n_balls = 1;
         double slope = 1;
 
@@ -638,7 +703,7 @@ public:
 
       PlanarSDF _sdf;
 
-      __device__ double cost_obstacle_planar(const double* pose){
+      __device__ double cost_obstacle(const double* pose){
         constexpr int n_balls = 5;
         double slope = 1.0; // I can use sigma to replace the slope
 
@@ -724,7 +789,7 @@ public:
 
       SignedDistanceField _sdf;
 
-      __device__ double cost_obstacle_planar(const double* pose){
+      __device__ double cost_obstacle(const double* pose){
         int n_balls = 1;
         double slope = 1;
 
@@ -764,7 +829,7 @@ public:
         hostCost._epsilon = _epsilon;
         hostCost._sigma = _sigma;
         hostCost._sdf = _sdf;
-        hostCost._fk = ForwardKinematics(a, alpha, d, theta_bias, frames.size(), frames, centers);
+        hostCost._fk = ForwardKinematics(a, alpha, d, theta_bias, frames, centers);
 
         _data_matrix = _sdf.data_matrix_;
     }
@@ -839,11 +904,14 @@ public:
       SignedDistanceField _sdf;
       ForwardKinematics _fk;
 
-      __device__ double cost_obstacle(const VectorXd& theta){
-        constexpr int MAX_BALLS = 128;
+      __device__ double cost_obstacle(const double* theta){
+        constexpr int MAX_BALLS = 32;
         int n_balls = _fk._num_spheres;
         double slope = 1;
-        VectorXd pose = _fk.compute_transformed_sphere_centers(theta);
+
+        double pose[3 * MAX_BALLS];
+
+        _fk.compute_transformed_sphere_centers(theta, pose);
   
         Point3 checkpoints[MAX_BALLS];
         vec_balls(pose, n_balls, checkpoints);
@@ -866,11 +934,11 @@ public:
       }
   
       // Reshape from vector to a matrix
-      __device__ void vec_balls(const Eigen::VectorXd& x, int n_balls, Point3* pts) {
+      __device__ void vec_balls(const double* x, int n_balls, Point3* pts) {
         for (int i = 0; i < n_balls; i++) {
-          pts[i].x = x(3 * i);
-          pts[i].y = x(3 * i + 1);
-          pts[i].z = x(3 * i + 2);
+          pts[i].x = x[3 * i];
+          pts[i].y = x[3 * i + 1];
+          pts[i].z = x[3 * i + 2];
         }
       }
 

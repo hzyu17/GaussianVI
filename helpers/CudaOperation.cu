@@ -91,28 +91,13 @@ __global__ void cost_function(double* d_sigmapts, double* d_pts, int sigmapts_ro
     int col = blockIdx.x * blockDim.x + threadIdx.x;
 
     if (row < sigmapts_rows && col < n_states){
-        constexpr int MAX_SIGMAPTS_COLS = 10; // Maximum number of columns in sigmapts
+        constexpr int MAX_SIGMAPTS_COLS = 15; // Maximum number of columns in sigmapts
         double pose[MAX_SIGMAPTS_COLS];
         for(int i = 0; i < sigmapts_cols; i++){
             pose[i] = d_sigmapts[col*sigmapts_rows*sigmapts_cols + i*sigmapts_rows + row];
         }
 
-        double function_value = d_cost -> cost_obstacle_planar(pose);
-
-        d_pts[col*sigmapts_rows + row] = function_value;
-    }
-}
-
-__global__ void cost_function(double* d_sigmapts, double* d_pts, int sigmapts_rows, int sigmapts_cols,
-                                int n_states, CudaOperation_3dArm::ObstacleCost* d_cost){
-    
-    int row = blockIdx.y * blockDim.y + threadIdx.y;
-    int col = blockIdx.x * blockDim.x + threadIdx.x;
-
-    if (row < sigmapts_rows && col < n_states){
-        Eigen::Map<MatrixXd> sigmapts(d_sigmapts + col*sigmapts_rows*sigmapts_cols, sigmapts_rows, sigmapts_cols);
-
-        double function_value = d_cost -> cost_obstacle(sigmapts.row(row));
+        double function_value = d_cost -> cost_obstacle(pose);
 
         d_pts[col*sigmapts_rows + row] = function_value;
     }
@@ -549,7 +534,7 @@ void CudaOperation_3dArm::costIntegration(const MatrixXd& sigmapts, VectorXd& re
     dim3 threadperblock1(16, 16);
     dim3 blockSize1((results.size() + threadperblock1.x - 1) / threadperblock1.x, (sigmapts.rows() + threadperblock1.y - 1) / threadperblock1.y);
 
-    cost_function<<<blockSize1, threadperblock1>>>(_sigmapts_gpu, _func_value_gpu, _sigmapts_rows, _dim_conf, _n_states, d_cost);
+    cost_function<CudaOperation_3dArm><<<blockSize1, threadperblock1>>>(_sigmapts_gpu, _func_value_gpu, _sigmapts_rows, _dim_conf, _n_states, d_cost);
     cudaDeviceSynchronize();
 
     cudaError_t err = cudaGetLastError();
