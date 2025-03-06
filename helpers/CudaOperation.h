@@ -463,8 +463,7 @@ public:
     __device__ inline double centers(int row, int col) const { return _centers_data[3*row + col]; }
 };
 
-
-template <typename SDFType>
+template <typename Derived>
 class CudaOperation_Base{
 
 public:
@@ -547,18 +546,17 @@ public:
 
     virtual void CudaIntegration(const MatrixXd& sigmapts, const MatrixXd& weights, MatrixXd& results, const MatrixXd& mean, int type){}
 
-    virtual void costIntegration(const MatrixXd& sigmapts, VectorXd& results, const int sigmapts_cols){}
+    void costIntegration(const MatrixXd& sigmapts, VectorXd& results, const int sigmapts_cols);
 
     void dmuIntegration(const MatrixXd& sigmapts, const MatrixXd& mu, VectorXd& results, const int sigmapts_cols);
 
     void ddmuIntegration(MatrixXd& results);
 
   double _epsilon, _radius, _sigma;
-  SDFType _sdf; // define sdf in the derived class
 
   MatrixXd _data_matrix;
 
-  int _sigmapts_rows, _dim_conf, _n_states, num_streams;
+  int _sigmapts_rows, _dim_conf, _n_states;
   double *_weight_gpu, *_data_gpu, *_func_value_gpu, *_sigmapts_gpu, *_mu_gpu, *_zeromean_gpu;
 
   double* covariance_gpu, *mean_gpu, *d_sigmapt_cuda;  // sigmapts size: _sigmapts_rows x (dim_conf * num_states)
@@ -580,7 +578,7 @@ public:
 };
 
 
-class CudaOperation_PlanarPR : public CudaOperation_Base<PlanarSDF>{
+class CudaOperation_PlanarPR : public CudaOperation_Base<CudaOperation_PlanarPR>{
 public:
     CudaOperation_PlanarPR(double cost_sigma = 15.5, double epsilon = 0.5, double radius = 1):
     CudaOperation_Base(cost_sigma, epsilon, radius)
@@ -594,12 +592,11 @@ public:
         origin << -20.0, -10.0;
 
         double cell_size = 0.1;
-        _sdf = PlanarSDF{origin, cell_size, field};
 
         hostCost._epsilon = _epsilon;
         hostCost._radius = _radius;
         hostCost._sigma = _sigma;
-        hostCost._sdf = _sdf;
+        hostCost._sdf = PlanarSDF{origin, cell_size, field};
 
         _data_matrix = field;
     }
@@ -616,8 +613,6 @@ public:
       cudaFree(d_cost);
       GH_parameters_free();
     }
-
-    void costIntegration(const MatrixXd& sigmapts, VectorXd& results, const int sigmapts_cols);
 
     struct ObstacleCost {
       double _epsilon;
@@ -652,7 +647,7 @@ public:
 };
 
 
-class CudaOperation_Quad : public CudaOperation_Base<PlanarSDF>{
+class CudaOperation_Quad : public CudaOperation_Base<CudaOperation_Quad>{
 public:
     CudaOperation_Quad(double cost_sigma = 15.5, double epsilon = 0.5, double radius = 1, const std::string& map_name = ""):
     CudaOperation_Base(cost_sigma, epsilon, radius)
@@ -671,12 +666,11 @@ public:
         }
 
         double cell_size = 0.1;
-        _sdf = PlanarSDF{origin, cell_size, field};
 
         hostCost._epsilon = _epsilon;
         hostCost._radius = _radius;
         hostCost._sigma = _sigma;
-        hostCost._sdf = _sdf;
+        hostCost._sdf = PlanarSDF{origin, cell_size, field};
 
         _data_matrix = field;
     }
@@ -693,8 +687,6 @@ public:
       cudaFree(d_cost);
       GH_parameters_free();
     }
-
-    void costIntegration(const MatrixXd& sigmapts, VectorXd& results, const int sigmapts_cols);
 
     struct ObstacleCost {
       double _epsilon;
@@ -751,20 +743,19 @@ public:
 };
 
 
-class CudaOperation_3dpR : public CudaOperation_Base<SignedDistanceField>{
+class CudaOperation_3dpR : public CudaOperation_Base<CudaOperation_3dpR>{
 public:
     CudaOperation_3dpR(double cost_sigma = 15.5, double epsilon = 0.5, double radius = 1):
     CudaOperation_Base(cost_sigma, epsilon, radius)
     {
         std::string sdf_file = source_root + "/maps/3dpR/pRSDF3D_cereal.bin";
-        _sdf.loadSDF(sdf_file);
 
         hostCost._epsilon = _epsilon;
         hostCost._radius = _radius;
         hostCost._sigma = _sigma;
-        hostCost._sdf = _sdf;
+        hostCost._sdf.loadSDF(sdf_file);
 
-        _data_matrix = _sdf.data_matrix_;
+        _data_matrix = hostCost._sdf.data_matrix_;
     }
 
     void Cuda_init(const MatrixXd& weights, const MatrixXd& zeromean, const int n_states) override{
@@ -779,8 +770,6 @@ public:
       cudaFree(d_cost);
       GH_parameters_free();
     }
-
-    void costIntegration(const MatrixXd& sigmapts, VectorXd& results, const int sigmapts_cols);
 
     struct ObstacleCost {
       double _epsilon;
@@ -797,7 +786,6 @@ public:
         double signed_distance = 0.0;
 
         _sdf.getSignedDistance(&checkpoint, n_balls, &signed_distance);
-        // printf("signed_distance of pt: (%lf, %lf, %lf) = %lf\n", pose(0), pose(1), pose(2), signed_distance(0));
         
         double err = 0.0;
         if (signed_distance > _epsilon + _radius)
@@ -816,7 +804,7 @@ public:
 };
 
 
-class CudaOperation_3dArm : public CudaOperation_Base<SignedDistanceField>{
+class CudaOperation_3dArm : public CudaOperation_Base<CudaOperation_3dArm>{
 public:
     CudaOperation_3dArm(const Eigen::VectorXd& a, const Eigen::VectorXd& alpha, const Eigen::VectorXd& d, const Eigen::VectorXd& theta_bias,
                         const Eigen::VectorXd& radii, const Eigen::VectorXi& frames, const Eigen::MatrixXd& centers,
@@ -824,14 +812,13 @@ public:
     _radii(radii), CudaOperation_Base(cost_sigma, epsilon)
     {
         std::string sdf_file = source_root + "/maps/WAM/WAMDeskDataset_cereal.bin";
-        _sdf.loadSDF(sdf_file);
         
         hostCost._epsilon = _epsilon;
         hostCost._sigma = _sigma;
-        hostCost._sdf = _sdf;
+        hostCost._sdf.loadSDF(sdf_file);
         hostCost._fk = ForwardKinematics(a, alpha, d, theta_bias, frames, centers);
 
-        _data_matrix = _sdf.data_matrix_;
+        _data_matrix = hostCost._sdf.data_matrix_;
     }
 
     // CudaOperation_3dArm(const Eigen::VectorXd& a, const Eigen::VectorXd& alpha, const Eigen::VectorXd& d, const Eigen::VectorXd& theta_bias,
@@ -893,8 +880,6 @@ public:
       cudaFree(_centers_gpu);
       GH_parameters_free();
     }
-
-    void costIntegration(const MatrixXd& sigmapts, VectorXd& results, const int sigmapts_cols);
 
     struct ObstacleCost {
       double _epsilon;
