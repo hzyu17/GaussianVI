@@ -21,7 +21,6 @@ std::tuple<double, VectorXd, SpMat> ProxKLGH<Factor>::onestep_linesearch(const d
     double temperature = this->_temperature;
 
     // update mu and precision matrix
-    // Eigen::ConjugateGradient<SpMat> solver;
     Eigen::ConjugateGradient<SpMat, Eigen::Upper> solver;
 
     // std::cout << "mu_prior" << _mu_prior.transpose() << std::endl << std::endl;
@@ -86,9 +85,6 @@ std::tuple<double, VectorXd, SpMat> ProxKLGH<Factor>::bisection_update(const Vec
         double step_size = std::exp(log_mid);
 
         new_mu = solver.compute(_precision_prior / temperature + this->_precision / step_size).solve(-dmu / temperature + _precision_prior * _mu_prior / temperature + this->_precision * this->_mu / step_size);
-        // VectorXd mu_cuda = Base::solveWithCuSolverQR(_precision_prior / temperature + this->_precision / step_size, -dmu / temperature + _precision_prior * _mu_prior / temperature + this->_precision * this->_mu / step_size);
-        // std::cout << "Norm of dmu: " << new_mu.norm() << std::endl;
-        // std::cout << "Error of dmu CuSolver QR: " << (new_mu - mu_cuda).norm() << std::endl;
         new_precision = (dprecision / temperature + _precision_prior / temperature + this->_precision / step_size) * step_size / (step_size + 1);
 
         // Compute KL divergence and check for PD indirectly
@@ -102,16 +98,9 @@ std::tuple<double, VectorXd, SpMat> ProxKLGH<Factor>::bisection_update(const Vec
         }
     }
 
-    Timer timer;
-
     double final_step_size = std::exp((log_lower + log_upper) / 2);
-    // timer.start();
+    
     new_mu = solver.compute(_precision_prior / temperature + this->_precision / final_step_size).solve(-dmu / temperature + _precision_prior * _mu_prior / temperature + this->_precision * this->_mu / final_step_size);
-    // std::cout << "Solver Time: " << timer.end_mus_output() << " us" << std::endl;
-    // timer.start();
-    // VectorXd mu_cuda = Base::solveWithCuSolverQR(_precision_prior / temperature + this->_precision / final_step_size, -dmu / temperature + _precision_prior * _mu_prior / temperature + this->_precision * this->_mu / final_step_size);
-    // std::cout << "Norm of dmu: " << new_mu.norm() << std::endl;
-    // std::cout << "Error of dmu CuSolver QR: " << (new_mu - mu_cuda).norm() << std::endl;
     new_precision = (dprecision / temperature + _precision_prior / temperature + this->_precision / final_step_size) * final_step_size / (final_step_size + 1);
 
     // new cost
@@ -233,7 +222,6 @@ void ProxKLGH<Factor>::optimize(std::optional<bool> verbose)
     }
     
     std::cout << "Optimization Finished" << std::endl;
-
 }
 
 
