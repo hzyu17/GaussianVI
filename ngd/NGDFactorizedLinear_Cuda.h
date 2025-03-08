@@ -107,8 +107,6 @@ public:
     }
 
     void calculate_partial_V() override{
-        // Timer timer;
-
         _Vdmu.setZero();
         _Vddmu.setZero();
 
@@ -116,35 +114,27 @@ public:
         MatrixXd tmp{MatrixXd::Zero(_dim, _dim)};
         MatrixXd tmp_cuda{MatrixXd::Zero(_dim, _dim)};
 
-        // partial V / partial mu           
+        // partial V / partial mu
         this->_Vdmu = (2 * _Lambda.transpose() * _target_precision * (_Lambda*_mu - _Psi*_target_mean)) * constant();
         this->_Vdmu = this->_Vdmu / this->temperature();
 
         MatrixXd AT_precision_A = _Lambda.transpose() * _target_precision * _Lambda;
 
-        // timer.start();
-
         // partial V^2 / partial mu*mu^T
         // update tmp matrix
 
-        for (int i=0; i<(_dim); i++){
-            for (int j=0; j<(_dim); j++) {
-                for (int k=0; k<(_dim); k++){
-                    for (int l=0; l<(_dim); l++){
-                        tmp(i, j) += (_covariance(i, j)*_covariance(k, l) + _covariance(i,k)*_covariance(j,l) + _covariance(i,l)*_covariance(j,k))*AT_precision_A(k,l);
-                    }
-                }
-            }
-        }
+        // for (int i=0; i<(_dim); i++){
+        //     for (int j=0; j<(_dim); j++) {
+        //         for (int k=0; k<(_dim); k++){
+        //             for (int l=0; l<(_dim); l++){
+        //                 tmp(i, j) += (_covariance(i, j)*_covariance(k, l) + _covariance(i,k)*_covariance(j,l) + _covariance(i,l)*_covariance(j,k))*AT_precision_A(k,l);
+        //             }
+        //         }
+        //     }
+        // }
+        // this->_Vddmu = (_precision * tmp * _precision - _precision * (AT_precision_A*_covariance).trace()) * constant();
 
-        // computeTmp_CUDA(tmp, _covariance, AT_precision_A);
-
-        // MatrixXd tmp_error = tmp - tmp_cuda;
-        // std::cout << "tmp norm = " << tmp.norm() << std::endl << "tmp error = " << std::endl << tmp_error << std::endl;
-
-        // std::cout << std::endl << "tmp: " << timer.end_sec() * 1000 << "ms" << std::endl;
-
-        this->_Vddmu = (_precision * tmp * _precision - _precision * (AT_precision_A*_covariance).trace()) * constant();
+        this->_Vddmu = 2 * AT_precision_A * constant();
         this->_Vddmu = this->_Vddmu / this->temperature();
     }
 
