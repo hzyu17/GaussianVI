@@ -24,7 +24,10 @@ using namespace Eigen;
 
 namespace gvi{
 
-template <typename FactorizedOptimizer>
+using GHFunction = std::function<MatrixXd(const VectorXd&)>;
+using GH = SparseGaussHermite_Cuda<GHFunction>;
+
+template <typename FactorizedOptimizer, typename CudaClass>
 class GVIGH{
 public:
     /**
@@ -40,7 +43,9 @@ public:
      */
     GVIGH(const std::vector<std::shared_ptr<FactorizedOptimizer>>& vec_fact_optimizers, 
           int dim_state, 
-          int num_states, 
+          int num_states,
+          std::shared_ptr<CudaClass> cuda_ptr,
+          std::shared_ptr<GH> gh_ptr,
           int niterations=5,
           double temperature=1.0, 
           double high_temperature=100.0):
@@ -60,7 +65,9 @@ public:
             _covariance{SpMat(_dim, _dim)},
             _res_recorder{niterations, dim_state, num_states, _nfactors},
             _Vdmu(VectorXd::Zero(_dim)),
-            _Vddmu(SpMat(_dim, _dim))
+            _Vddmu(SpMat(_dim, _dim)),
+            _cuda{cuda_ptr},
+            _gh{gh_ptr}
     {
         // construct_sparse_precision();
         _Vdmu.setZero();
@@ -85,6 +92,9 @@ protected:
     std::vector<std::shared_ptr<FactorizedOptimizer>> _vec_factors;
     std::vector<std::shared_ptr<FactorizedOptimizer>> _vec_linear_factors;
     std::vector<std::shared_ptr<FactorizedOptimizer>> _vec_nonlinear_factors;
+
+    std::shared_ptr<CudaClass> _cuda;
+    std::shared_ptr<GH> _gh;
 
     VectorXd _mu;
 
@@ -125,12 +135,10 @@ public:
     /**
      * @brief Compute the total cost function value given a mean and covariace.
      */
-    double cost_value(const VectorXd &mean, SpMat &Precision);
+    double cost_value_cuda(const VectorXd& fill_joint_mean, SpMat& joint_precision);
 
-    /**
-     * @brief Compute the costs of all factors for a given mean and cov.
-     */
-    VectorXd factor_cost_vector(const VectorXd& x, SpMat& Precision);
+    double cost_value_cuda(){ return cost_value_cuda(_mu, _precision); }
+
 
     /**
      * @brief Compute the costs and derivatives of all factors for a given mean and cov.
@@ -139,7 +147,9 @@ public:
 
     std::tuple<double, VectorXd, VectorXd, SpMat> factor_cost_vector_cuda_time(const VectorXd& fill_joint_mean, SpMat& joint_precision);
 
-    double cost_value_cuda(const VectorXd& fill_joint_mean, SpMat& joint_precision);
+    std::tuple<double, VectorXd, VectorXd, SpMat> factor_cost_vector_cuda() { return factor_cost_vector_cuda(_mu, _precision); }
+
+    std::tuple<double, VectorXd, VectorXd, SpMat> factor_cost_vector_cuda_time() { return factor_cost_vector_cuda_time(_mu, _precision); }
 
     void time_test();
 
@@ -172,11 +182,7 @@ public:
 
     virtual std::tuple<double, VectorXd, SpMat> onestep_linesearch(const double &step_size, const VectorXd& dmu, const SpMat& dprecision){};
 
-    virtual double bisection_stepsize(const VectorXd& dmu, const SpMat& dprecision){};
-
     virtual inline void update_proposal(const VectorXd& new_mu, const SpMat& new_precision){};
-
-    virtual double cost_value(){};
 
     /**
      * @brief given a state, compute the total cost function value without the entropy term, using current values.
@@ -186,13 +192,6 @@ public:
     /**
      * @brief Default computation of the cost vector.
      */
-    virtual VectorXd factor_cost_vector(){};
-
-    virtual std::tuple<double, VectorXd, VectorXd, SpMat> factor_cost_vector_cuda(){};
-
-    virtual std::tuple<double, VectorXd, VectorXd, SpMat> factor_cost_vector_cuda_time(){};
-
-    virtual double cost_value_cuda(){};
 
 /// **************************************************************
 /// Internal data IO
@@ -221,6 +220,33 @@ public:
     inline Message calculate_variable_message(const Message &input_message, const Message &prior_message) {
         return {prior_message.first, input_message.second + prior_message.second};
     }
+
+    inline void cuda_init(const int n_states){
+        _sigma_rows = _gh -> zeromeanpts().rows();
+        _dim_conf = _gh -> zeromeanpts().cols();
+        _cuda -> Cuda_init(_gh -> weights(), _gh ->zeromeanpts(), n_states);
+    }
+
+    inline void cuda_free(){
+        _cuda -> Cuda_free();
+    }
+
+    inline void compute_sigmapts(const MatrixXd& mean, const MatrixXd& covariance, int dim_conf, int num_states, MatrixXd& sigmapts){
+        _cuda->update_sigmapts(covariance, mean, dim_conf, num_states, sigmapts);
+    }
+
+    inline void dmuIntegration(const MatrixXd& sigmapts, const MatrixXd& mean, VectorXd& E_phi_mat, VectorXd& dmu_mat, MatrixXd& ddmu_mat, const int sigmapts_cols){
+        _cuda -> costIntegration(sigmapts, E_phi_mat, sigmapts_cols);
+        _cuda -> dmuIntegration(sigmapts, mean, dmu_mat, sigmapts_cols);
+        _cuda -> ddmuIntegration(ddmu_mat);
+        _cuda -> Cuda_free_iter();
+    }
+
+    inline void newCostIntegration(const MatrixXd& sigmapts, VectorXd& results, const int sigmapts_cols){
+        _cuda -> costIntegration(sigmapts, results, sigmapts_cols);
+        _cuda -> Cuda_free_iter();
+    }
+
 
     /// update the step sizes
     inline void set_step_size(double step_size){ 
@@ -461,7 +487,7 @@ public:
             for (int j=0; j<nmesh; j++){
                 SpMat precision(1, 1);
                 precision.coeffRef(0, 0) = (y_start + j*res_y);
-                Z(j, i) = cost_value(mean, precision); /// the order of the matrix in cpp and in matlab
+                Z(j, i) = cost_value_cuda(mean, precision); /// the order of the matrix in cpp and in matlab
             }
         }
         return Z;

@@ -22,9 +22,9 @@
 using namespace Eigen;
 namespace gvi{
 
-template <typename FactorizedOptimizer>
-class NGDGH: public GVIGH<FactorizedOptimizer>{
-    using Base = GVIGH<FactorizedOptimizer>;
+template <typename FactorizedOptimizer, typename CudaClass>
+class NGDGH: public GVIGH<FactorizedOptimizer, CudaClass>{
+    using Base = GVIGH<FactorizedOptimizer, CudaClass>;
 public:
     /**
      * @brief Default Constructor
@@ -40,10 +40,12 @@ public:
     NGDGH(const std::vector<std::shared_ptr<FactorizedOptimizer>>& vec_fact_optimizers,
           int dim_state,
           int num_states,
+          std::shared_ptr<CudaClass> cuda_ptr,
+          std::shared_ptr<GH> gh_ptr,
           int niterations = 5,
           double temperature = 1.0,
           double high_temperature = 100.0) :
-        GVIGH<FactorizedOptimizer>(vec_fact_optimizers, dim_state, num_states, niterations, temperature, high_temperature)
+        GVIGH<FactorizedOptimizer, CudaClass>(vec_fact_optimizers, dim_state, num_states, cuda_ptr, gh_ptr, niterations, temperature, high_temperature)
     {}
 
 public:
@@ -56,31 +58,14 @@ public:
 
     std::tuple<double, VectorXd, SpMat> onestep_linesearch(const double &step_size, const VectorXd& dmu, const SpMat& dprecision) override;
 
-    double bisection_stepsize(const VectorXd& dmu, const SpMat& dprecision) override;
+    double bisection_stepsize(const VectorXd& dmu, const SpMat& dprecision);
 
     inline void update_proposal(const VectorXd& new_mu, const SpMat& new_precision) override;
-
-    /**
-     * @brief Compute the total cost function value given a state, using current values.
-     */
-    double cost_value() override;
-
-    double cost_value_cuda() override;
 
     /**
      * @brief given a state, compute the total cost function value without the entropy term, using current values.
      */
     double cost_value_no_entropy() override;
-
-    /**
-     * @brief Compute the costs of all factors, using current values.
-     */
-    VectorXd factor_cost_vector() override;
-
-    std::tuple<double, VectorXd, VectorXd, SpMat> factor_cost_vector_cuda() override;
-
-    std::tuple<double, VectorXd, VectorXd, SpMat> factor_cost_vector_cuda_time() override;
-
     double KL_Divergence(const VectorXd& mean_former, const VectorXd& mean_latter, const SpMat& precision_former, const SpMat& precision_latter);
 
     bool isPositiveDefinite(const SpMat& precision);

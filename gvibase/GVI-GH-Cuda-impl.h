@@ -16,8 +16,8 @@ using namespace Eigen;
 
 namespace gvi{
 
-template <typename Factor>
-void GVIGH<Factor>::switch_to_high_temperature(){
+template <typename Factor, typename CudaClass>
+void GVIGH<Factor, CudaClass>::switch_to_high_temperature(){
     std::cout << "Switching to high temperature.." << std::endl;
     #pragma omp parallel for
     for (auto& i_factor : _vec_factors) {
@@ -27,8 +27,8 @@ void GVIGH<Factor>::switch_to_high_temperature(){
     // this->initilize_precision_matrix();
 }
 
-template <typename Factor>
-void GVIGH<Factor>::classify_factors(){
+template <typename Factor, typename CudaClass>
+void GVIGH<Factor, CudaClass>::classify_factors(){
     for (auto& i_factor : _vec_factors) {
         if (i_factor->linear_factor())
             _vec_linear_factors.push_back(i_factor);
@@ -40,8 +40,8 @@ void GVIGH<Factor>::classify_factors(){
 /**
  * @brief optimize with backtracking
  */ 
-template <typename Factor>
-void GVIGH<Factor>::optimize(std::optional<bool> verbose)
+template <typename Factor, typename CudaClass>
+void GVIGH<Factor, CudaClass>::optimize(std::optional<bool> verbose)
 {
     // default verbose
     bool is_verbose = verbose.value_or(true);
@@ -53,10 +53,7 @@ void GVIGH<Factor>::optimize(std::optional<bool> verbose)
     }
 
     // Initialize the cuda and give value to _sigma_rows and _dim_conf
-    _vec_nonlinear_factors[0]->cuda_init(_vec_nonlinear_factors.size());
-
-    _sigma_rows = _vec_nonlinear_factors[0]->_sigma_rows;
-    _dim_conf = _vec_nonlinear_factors[0]->_dim_conf;
+    cuda_init(_vec_nonlinear_factors.size());
 
     // VectorXd mu_EMA(_mu.size());
     // SpMat precision_EMA(_precision.rows(), _precision.cols());
@@ -85,11 +82,7 @@ void GVIGH<Factor>::optimize(std::optional<bool> verbose)
         // timer.start();
 
         // 135 ms when n_states = 500
-        auto result_cuda = factor_cost_vector_cuda();
-        double cost_iter = std::get<0>(result_cuda);
-        VectorXd fact_costs_iter = std::get<1>(result_cuda);
-        VectorXd dmu = std::get<2>(result_cuda);
-        SpMat dprecision = std::get<3>(result_cuda);
+        auto [cost_iter, fact_costs_iter, dmu, dprecision] = factor_cost_vector_cuda(this->_mu, this->_precision);
 
         // std::cout << "Time for computing factor costs: " << timer.end_mis() << " ms" << std::endl;
 
@@ -160,7 +153,7 @@ void GVIGH<Factor>::optimize(std::optional<bool> verbose)
 
     }
 
-    _vec_nonlinear_factors[0]->cuda_free();
+    cuda_free();
 
     if (_save_data){
         std::cout << "=========== Saving Data ===========" << std::endl;
@@ -169,14 +162,11 @@ void GVIGH<Factor>::optimize(std::optional<bool> verbose)
 
 }
 
-template <typename Factor>
-void GVIGH<Factor>::optimize_time_test()
+template <typename Factor, typename CudaClass>
+void GVIGH<Factor, CudaClass>::optimize_time_test()
 {
     bool is_lowtemp = true;
     bool converged = false;
-
-    _sigma_rows = _vec_nonlinear_factors[0]->_sigma_rows;
-    _dim_conf = _vec_nonlinear_factors[0]->_dim_conf;
 
     for (int i_iter = 0; i_iter < _niters; i_iter++)
     {
@@ -232,8 +222,8 @@ void GVIGH<Factor>::optimize_time_test()
     }
 }
 
-template <typename Factor>
-std::tuple<double, VectorXd, VectorXd, SpMat> GVIGH<Factor>::factor_cost_vector_cuda(const VectorXd& fill_joint_mean, SpMat& joint_precision)
+template <typename Factor, typename CudaClass>
+std::tuple<double, VectorXd, VectorXd, SpMat> GVIGH<Factor, CudaClass>::factor_cost_vector_cuda(const VectorXd& fill_joint_mean, SpMat& joint_precision)
 {
     int n_nonlinear = _vec_nonlinear_factors.size();
 
@@ -261,10 +251,10 @@ std::tuple<double, VectorXd, VectorXd, SpMat> GVIGH<Factor>::factor_cost_vector_
         covariance_matrix.block(0, i * _dim_conf, _dim_conf, _dim_conf) = opt_k->covariance();
     }
 
-    _vec_nonlinear_factors[0]->compute_sigmapts(mean_mat, covariance_matrix, _dim_conf, n_nonlinear, sigma);
+    compute_sigmapts(mean_mat, covariance_matrix, _dim_conf, n_nonlinear, sigma);
 
     // Compute the cost and derivatives of the nonlinear factors
-    _vec_nonlinear_factors[0]->dmuIntegration(sigmapts_mat, mean_mat, nonlinear_fac_cost, dmu_mat, ddmu_mat, _dim_conf);
+    dmuIntegration(sigmapts_mat, mean_mat, nonlinear_fac_cost, dmu_mat, ddmu_mat, _dim_conf);
     E_phi_mat = nonlinear_fac_cost;
     // nonlinear_fac_cost = nonlinear_fac_cost / this ->_temperature * _delta_t;
     nonlinear_fac_cost = nonlinear_fac_cost / this ->_temperature;
@@ -345,8 +335,8 @@ std::tuple<double, VectorXd, VectorXd, SpMat> GVIGH<Factor>::factor_cost_vector_
     return std::make_tuple(cost, fac_costs, dmu, dprecision);
 }
 
-template <typename Factor>
-std::tuple<double, VectorXd, VectorXd, SpMat> GVIGH<Factor>::factor_cost_vector_cuda_time(const VectorXd& fill_joint_mean, SpMat& joint_precision)
+template <typename Factor, typename CudaClass>
+std::tuple<double, VectorXd, VectorXd, SpMat> GVIGH<Factor, CudaClass>::factor_cost_vector_cuda_time(const VectorXd& fill_joint_mean, SpMat& joint_precision)
 {
     static int flag = 0;
     Timer timer;
@@ -381,7 +371,7 @@ std::tuple<double, VectorXd, VectorXd, SpMat> GVIGH<Factor>::factor_cost_vector_
     }
     
     // copied sigma here
-    _vec_nonlinear_factors[0]->compute_sigmapts(mean_mat, covariance_matrix, _dim_conf, n_nonlinear, sigma);
+    compute_sigmapts(mean_mat, covariance_matrix, _dim_conf, n_nonlinear, sigma);
 
     // if (flag % 5 == 0)
     //     std::cout << "Sigma Points computaiton time: " << timer.end_mus_output() << " us" << std::endl;
@@ -391,7 +381,7 @@ std::tuple<double, VectorXd, VectorXd, SpMat> GVIGH<Factor>::factor_cost_vector_
     //     timer.start();
 
     // Compute the cost of the nonlinear factors
-    _vec_nonlinear_factors[0]->dmuIntegration(sigmapts_mat, mean_mat, nonlinear_fac_cost, dmu_mat, ddmu_mat, _dim_conf);
+    dmuIntegration(sigmapts_mat, mean_mat, nonlinear_fac_cost, dmu_mat, ddmu_mat, _dim_conf);
     E_phi_mat = nonlinear_fac_cost;
     nonlinear_fac_cost = nonlinear_fac_cost / this ->_temperature;
 
@@ -572,12 +562,10 @@ std::tuple<double, VectorXd, VectorXd, SpMat> GVIGH<Factor>::factor_cost_vector_
 }
 
 
-template <typename Factor>
-void GVIGH<Factor>::time_test()
+template <typename Factor, typename CudaClass>
+void GVIGH<Factor, CudaClass>::time_test()
 {
-    _vec_nonlinear_factors[0]->cuda_init(_vec_nonlinear_factors.size());
-    _sigma_rows = _vec_nonlinear_factors[0]->_sigma_rows;
-    _dim_conf = _vec_nonlinear_factors[0]->_dim_conf;
+    cuda_init(_vec_nonlinear_factors.size());
 
     Timer timer;
     int n_repeat = 20;
@@ -633,12 +621,12 @@ void GVIGH<Factor>::time_test()
     // }
     // std::cout << " ]" << std::endl;
 
-    _vec_nonlinear_factors[0]->cuda_free();
+    cuda_free();
 
 }
 
-template <typename Factor>
-inline void GVIGH<Factor>::set_precision(const SpMat &new_precision)
+template <typename Factor, typename CudaClass>
+inline void GVIGH<Factor, CudaClass>::set_precision(const SpMat &new_precision)
 {
     _precision = new_precision;
     // // sparse inverse
@@ -657,37 +645,10 @@ inline void GVIGH<Factor>::set_precision(const SpMat &new_precision)
 }
 
 /**
- * @brief Compute the costs of all factors for a given mean and cov.
+ * @brief Compute the total cost function value given a state.
  */
-template <typename Factor>
-VectorXd GVIGH<Factor>::factor_cost_vector(const VectorXd& fill_joint_mean, SpMat& joint_precision)
-{
-    VectorXd fac_costs(_nfactors);
-    fac_costs.setZero();
-    int cnt = 0;
-    SpMat joint_cov = inverse_GBP(joint_precision);
-
-    // Use a private counter for each thread to avoid race conditions
-    int thread_cnt = 0;
-
-    #pragma omp for
-    for (int i = 0; i < _vec_factors.size(); ++i)
-    {
-        auto &opt_k = _vec_factors[i];
-        fac_costs(thread_cnt) = opt_k->fact_cost_value(fill_joint_mean, joint_cov);
-        thread_cnt += 1;
-    }
-
-    #pragma omp critical
-    {
-        cnt += thread_cnt; // Safely update the global counter
-    }
-
-    return fac_costs;
-}
-
-template <typename Factor>
-double GVIGH<Factor>::cost_value_cuda(const VectorXd& fill_joint_mean, SpMat& joint_precision)
+template <typename Factor, typename CudaClass>
+double GVIGH<Factor, CudaClass>::cost_value_cuda(const VectorXd& fill_joint_mean, SpMat& joint_precision)
 {
     int n_nonlinear = _vec_nonlinear_factors.size();
     VectorXd nonlinear_fac_cost(n_nonlinear);
@@ -707,10 +668,10 @@ double GVIGH<Factor>::cost_value_cuda(const VectorXd& fill_joint_mean, SpMat& jo
         covariance_matrix.block(0, i * _dim_conf, _dim_conf, _dim_conf) = joint_cov.block((i+1)*_dim_state, (i+1)*_dim_state, _dim_conf, _dim_conf);
     }
 
-    _vec_nonlinear_factors[0]->compute_sigmapts(mean_mat, covariance_matrix, _dim_conf, n_nonlinear, sigma);
+    compute_sigmapts(mean_mat, covariance_matrix, _dim_conf, n_nonlinear, sigma);
 
     // Compute the cost of the nonlinear factors
-    _vec_nonlinear_factors[0]->newCostIntegration(sigmapts_mat, nonlinear_fac_cost, _dim_conf);
+    newCostIntegration(sigmapts_mat, nonlinear_fac_cost, _dim_conf);
     nonlinear_fac_cost = nonlinear_fac_cost / this ->_temperature;
 
     double value = 0.0;
@@ -730,30 +691,6 @@ double GVIGH<Factor>::cost_value_cuda(const VectorXd& fill_joint_mean, SpMat& jo
     return value + vec_D.array().log().sum() / 2;
 }
 
-/**
- * @brief Compute the total cost function value given a state.
- */
-template <typename Factor>
-double GVIGH<Factor>::cost_value(const VectorXd &mean, SpMat &Precision)
-{
-    SpMat Cov = inverse_GBP(Precision);
-
-    double value = 0.0;
-
-    // sum up the factor costs
-    #pragma omp parallel for reduction(+:value)
-    for (int i = 0; i < _vec_factors.size(); ++i)
-    {
-        // Access the current element - ensure this is safe in a parallel context
-        auto &opt_k = _vec_factors[i];
-        value += opt_k->fact_cost_value(mean, Cov);
-    }
-
-    SparseLDLT ldlt(Precision);
-    VectorXd vec_D = ldlt.vectorD();
-
-    return value + vec_D.array().log().sum() / 2;
-}
 
 /**
  * @brief Compute the covariances using Residual Splash based Gaussian Belief Propagation.
@@ -764,8 +701,8 @@ double GVIGH<Factor>::cost_value(const VectorXd &mean, SpMat &Precision)
  * region centered at that node. The algorithm terminates when all residuals fall below the tolerance
  * or the maximum number of iterations is reached.
  */
-template <typename Factor>
-SpMat GVIGH<Factor>::residual_splash_GBP(const SpMat &Precision)
+template <typename Factor, typename CudaClass>
+SpMat GVIGH<Factor, CudaClass>::residual_splash_GBP(const SpMat &Precision)
 {
     std::vector<Message> factors(2 * _num_states - 1);
     std::vector<Message> joint_factors(_num_states - 1);
@@ -897,8 +834,8 @@ SpMat GVIGH<Factor>::residual_splash_GBP(const SpMat &Precision)
 
 // ChainSplash based Gaussian Belief Propagation with OpenMP parallelization.
 // The number of threads is chosen as approximately sqrt(_num_states).
-template <typename Factor>
-SpMat GVIGH<Factor>::chain_splash_GBP(const SpMat &Precision)
+template <typename Factor, typename CudaClass>
+SpMat GVIGH<Factor, CudaClass>::chain_splash_GBP(const SpMat &Precision)
 {
     std::vector<Message> factors(2*_num_states-1);
     std::vector<Message> joint_factors(_num_states-1);
@@ -1082,8 +1019,8 @@ SpMat GVIGH<Factor>::chain_splash_GBP(const SpMat &Precision)
 /**
  * @brief Compute the covariances using Gaussian Belief Propagation.
  */
-template <typename Factor>
-SpMat GVIGH<Factor>::inverse_GBP(const SpMat &Precision)
+template <typename Factor, typename CudaClass>
+SpMat GVIGH<Factor, CudaClass>::inverse_GBP(const SpMat &Precision)
 {
     std::vector<Message> factors(2*_num_states-1);
     std::vector<Message> joint_factors(_num_states-1);
@@ -1151,8 +1088,8 @@ SpMat GVIGH<Factor>::inverse_GBP(const SpMat &Precision)
 /**
  * @brief Compute the message of factors in GBP.
  */
-template <typename Factor>
-Message GVIGH<Factor>::calculate_factor_message(const Message &input_message, int target, const Message &factor_potential) {
+template <typename Factor, typename CudaClass>
+Message GVIGH<Factor, CudaClass>::calculate_factor_message(const Message &input_message, int target, const Message &factor_potential) {
     Message message;
     message.first = VectorXd::Constant(1, target);
 
@@ -1193,8 +1130,8 @@ Message GVIGH<Factor>::calculate_factor_message(const Message &input_message, in
 //   Vdmu:  Dense vector b (of type Eigen::VectorXd)
 // Output:
 //   Returns the solution vector x.
-template <typename Factor>
-VectorXd GVIGH<Factor>::solveWithCuSolverQR(const SpMat& Vddmu, const VectorXd& Vdmu)
+template <typename Factor, typename CudaClass>
+VectorXd GVIGH<Factor, CudaClass>::solveWithCuSolverQR(const SpMat& Vddmu, const VectorXd& Vdmu)
 {
     // Convert the input sparse matrix to row-major format (CSR representation)
     Eigen::SparseMatrix<double, Eigen::RowMajor> A = Vddmu;

@@ -10,8 +10,8 @@ using namespace Eigen;
 
 namespace gvi{
 
-template <typename Factor>
-std::tuple<double, VectorXd, SpMat> ProxKLGH<Factor>::onestep_linesearch(const double &step_size, 
+template <typename Factor, typename CudaClass>
+std::tuple<double, VectorXd, SpMat> ProxKLGH<Factor, CudaClass>::onestep_linesearch(const double &step_size, 
                                                                             const VectorXd& dmu, 
                                                                             const SpMat& dprecision)
 {
@@ -62,8 +62,8 @@ std::tuple<double, VectorXd, SpMat> ProxKLGH<Factor>::onestep_linesearch(const d
     return std::make_tuple(new_cost, new_mu, new_precision);
 }
 
-template <typename Factor>
-std::tuple<double, VectorXd, SpMat> ProxKLGH<Factor>::bisection_update(const VectorXd& dmu, const SpMat& dprecision)
+template <typename Factor, typename CudaClass>
+std::tuple<double, VectorXd, SpMat> ProxKLGH<Factor, CudaClass>::bisection_update(const VectorXd& dmu, const SpMat& dprecision)
 {   
     SpMat new_precision;
     VectorXd new_mu;
@@ -117,8 +117,8 @@ std::tuple<double, VectorXd, SpMat> ProxKLGH<Factor>::bisection_update(const Vec
 }
 
 
-template <typename Factor>
-void ProxKLGH<Factor>::optimize(std::optional<bool> verbose)
+template <typename Factor, typename CudaClass>
+void ProxKLGH<Factor, CudaClass>::optimize(std::optional<bool> verbose)
 {
     // default verbose
     bool is_verbose = verbose.value_or(true);
@@ -150,11 +150,7 @@ void ProxKLGH<Factor>::optimize(std::optional<bool> verbose)
             is_lowtemp = false;
         }
 
-        auto result_cuda = factor_cost_vector_cuda(this->_mu, this->_precision);
-        double cost_iter = std::get<0>(result_cuda);
-        VectorXd fact_costs_iter = std::get<1>(result_cuda);
-        VectorXd dmu = std::get<2>(result_cuda);
-        SpMat dprecision = std::get<3>(result_cuda);
+        auto [cost_iter, fact_costs_iter, dmu, dprecision] = factor_cost_vector_cuda(this->_mu, this->_precision);
 
         if (is_verbose){
             std::cout << "========= iteration " << i_iter << " ========= " << std::endl;
@@ -225,8 +221,8 @@ void ProxKLGH<Factor>::optimize(std::optional<bool> verbose)
 }
 
 
-template <typename Factor>
-void ProxKLGH<Factor>::optimize_linear(std::optional<bool> verbose)
+template <typename Factor, typename CudaClass>
+void ProxKLGH<Factor, CudaClass>::optimize_linear(std::optional<bool> verbose)
 {
     // default verbose
     bool is_verbose = verbose.value_or(true);
@@ -317,8 +313,11 @@ void ProxKLGH<Factor>::optimize_linear(std::optional<bool> verbose)
 }
 
 
-template <typename Factor>
-std::tuple<double, VectorXd, VectorXd, SpMat>ProxKLGH<Factor>::factor_cost_vector_cuda(const VectorXd& fill_joint_mean, SpMat& joint_precision)
+/**
+ * @brief Compute the costs of all factors, using current values.
+ */
+template <typename Factor, typename CudaClass>
+std::tuple<double, VectorXd, VectorXd, SpMat>ProxKLGH<Factor, CudaClass>::factor_cost_vector_cuda(const VectorXd& fill_joint_mean, SpMat& joint_precision)
 {
     int n_nonlinear = Base::_vec_nonlinear_factors.size();
 
@@ -453,8 +452,8 @@ std::tuple<double, VectorXd, VectorXd, SpMat>ProxKLGH<Factor>::factor_cost_vecto
 }
 
 
-template <typename Factor>
-double ProxKLGH<Factor>::cost_value_cuda(const VectorXd& fill_joint_mean, SpMat& joint_precision)
+template <typename Factor, typename CudaClass>
+double ProxKLGH<Factor, CudaClass>::cost_value_cuda(const VectorXd& fill_joint_mean, SpMat& joint_precision)
 {
     int n_nonlinear = Base::_vec_nonlinear_factors.size();
     VectorXd nonlinear_fac_cost(n_nonlinear);
@@ -519,8 +518,8 @@ double ProxKLGH<Factor>::cost_value_cuda(const VectorXd& fill_joint_mean, SpMat&
     // return cost_joint + vec_D.array().log().sum() / 2;
 }
 
-template <typename Factor>
-inline void ProxKLGH<Factor>::update_proposal(const VectorXd& new_mu, const SpMat& new_precision)
+template <typename Factor, typename CudaClass>
+inline void ProxKLGH<Factor, CudaClass>::update_proposal(const VectorXd& new_mu, const SpMat& new_precision)
 {
     Base::set_mu(new_mu);
     Base::set_precision(new_precision);
@@ -528,17 +527,9 @@ inline void ProxKLGH<Factor>::update_proposal(const VectorXd& new_mu, const SpMa
     // std::cout << "Updated proposal" << std::endl;
 }
 
-/**
- * @brief Compute the costs of all factors, using current values.
- */
-template <typename Factor>
-VectorXd ProxKLGH<Factor>::factor_cost_vector()
-{   
-    return Base::factor_cost_vector(this->_mu, this->_precision);
-}
 
-template <typename Factor>
-double ProxKLGH<Factor>::cost_value_linear(const VectorXd& fill_joint_mean, const SpMat& joint_precision)
+template <typename Factor, typename CudaClass>
+double ProxKLGH<Factor, CudaClass>::cost_value_linear(const VectorXd& fill_joint_mean, const SpMat& joint_precision)
 {   
     SpMat joint_cov = Base::inverse_GBP(joint_precision); // The result of matrix multiplication will keeps the same because of the sparse structure.
 
@@ -599,17 +590,8 @@ double ProxKLGH<Factor>::cost_value_linear(const VectorXd& fill_joint_mean, cons
 }
 
 
-/**
- * @brief Compute the total cost function value given a state, using current values.
- */
-template <typename Factor>
-double ProxKLGH<Factor>::cost_value()
-{
-    return Base::cost_value(this->_mu, this->_precision);
-}
-
-template <typename Factor>
-double ProxKLGH<Factor>::cost_value_no_entropy()
+template <typename Factor, typename CudaClass>
+double ProxKLGH<Factor, CudaClass>::cost_value_no_entropy()
 {
     
     SpMat Cov = this->inverse(this->_precision);
@@ -622,8 +604,8 @@ double ProxKLGH<Factor>::cost_value_no_entropy()
     return value; // / _temperature;
 }
 
-template <typename Factor>
-double ProxKLGH<Factor>::KL_Divergence(const VectorXd& mean_former, const VectorXd& mean_latter, const SpMat& precision_former, const SpMat& precision_latter)
+template <typename Factor, typename CudaClass>
+double ProxKLGH<Factor, CudaClass>::KL_Divergence(const VectorXd& mean_former, const VectorXd& mean_latter, const SpMat& precision_former, const SpMat& precision_latter)
 {
     // Compute the KL divergence
     SparseLDLT ldlt_former(precision_former);

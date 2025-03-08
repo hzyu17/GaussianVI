@@ -19,9 +19,9 @@
 using namespace Eigen;
 namespace gvi{
 
-template <typename FactorizedOptimizer>
-class ProxKLGH: public GVIGH<FactorizedOptimizer>{
-    using Base = GVIGH<FactorizedOptimizer>;
+template <typename FactorizedOptimizer, typename CudaClass>
+class ProxKLGH: public GVIGH<FactorizedOptimizer, CudaClass>{
+    using Base = GVIGH<FactorizedOptimizer, CudaClass>;
     using Base::_dim_conf;
     using Base::_sigma_rows;
 
@@ -38,10 +38,12 @@ public:
     ProxKLGH(const std::vector<std::shared_ptr<FactorizedOptimizer>>& vec_fact_optimizers,
             int dim_state,
             int num_states,
+            std::shared_ptr<CudaClass> cuda_ptr,
+            std::shared_ptr<GH> gh_ptr,
             int niterations = 5,
             double temperature = 1.0,
             double high_temperature = 100.0) :
-            GVIGH<FactorizedOptimizer>(vec_fact_optimizers, dim_state, num_states, niterations, temperature, high_temperature),
+            GVIGH<FactorizedOptimizer, CudaClass>(vec_fact_optimizers, dim_state, num_states, cuda_ptr, gh_ptr, niterations, temperature, high_temperature),
             _Vdmu(VectorXd::Zero(Base::_dim)),
             _Vddmu(SpMat(Base::_dim, Base::_dim))
         {
@@ -94,6 +96,9 @@ public:
 
 /// Optimizations related
 
+    /**
+     * @brief Compute the costs of all factors, using current values.
+     */
     std::tuple<double, VectorXd, VectorXd, SpMat> factor_cost_vector_cuda(const VectorXd& fill_joint_mean, SpMat& joint_precision);
 
     virtual std::tuple<double, VectorXd, SpMat> onestep_linesearch(const double &step_size, const VectorXd& dmu, const SpMat& dprecision) override;
@@ -111,8 +116,6 @@ public:
     /**
      * @brief Compute the total cost function value given a state, using current values.
      */
-    double cost_value() override;
-
     double cost_value_cuda(const VectorXd& fill_joint_mean, SpMat& joint_precision);
 
     double cost_value_linear(const VectorXd& fill_joint_mean, const SpMat& joint_precision);
@@ -121,11 +124,6 @@ public:
      * @brief given a state, compute the total cost function value without the entropy term, using current values.
      */
     double cost_value_no_entropy() override;
-
-    /**
-     * @brief Compute the costs of all factors, using current values.
-     */
-    VectorXd factor_cost_vector() override;
 
 }; //class
 
