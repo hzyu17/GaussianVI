@@ -21,20 +21,18 @@ std::tuple<double, VectorXd, SpMat> ProxKLGH<Factor, CudaClass>::onestep_linesea
     double temperature = this->_temperature;
 
     // update mu and precision matrix
-    Eigen::ConjugateGradient<SpMat, Eigen::Upper> solver;
+    Eigen::BiCGSTAB<SpMat, IncompleteLUT<double>> solver;
+    solver.setTolerance(1e-6);
 
-    // std::cout << "mu_prior" << _mu_prior.transpose() << std::endl << std::endl;
-    // std::cout << "mu" << this->_mu.transpose() << std::endl << std::endl;
-
-    VectorXd prior_term = _precision_prior * _mu_prior / temperature;
-    VectorXd dmu_term = -dmu / temperature;
-    double threshold = 1e-9;
-    for (int i = 0; i < prior_term.size(); ++i) {
-        if (std::abs(prior_term[i]) < threshold)
-            prior_term[i] = 0;
-        if (std::abs(dmu_term[i]) < threshold)
-            dmu_term[i] = 0;
-    }
+    // VectorXd prior_term = _precision_prior * _mu_prior / temperature;
+    // VectorXd dmu_term = -dmu / temperature;
+    // double threshold = 1e-9;
+    // for (int i = 0; i < prior_term.size(); ++i) {
+    //     if (std::abs(prior_term[i]) < threshold)
+    //         prior_term[i] = 0;
+    //     if (std::abs(dmu_term[i]) < threshold)
+    //         dmu_term[i] = 0;
+    // }
 
     // std::cout << "dmu" << dmu_term.transpose() << std::endl << std::endl;
     // std::cout << "K_inv * mu" << prior_term.transpose() << std::endl << std::endl;
@@ -47,19 +45,63 @@ std::tuple<double, VectorXd, SpMat> ProxKLGH<Factor, CudaClass>::onestep_linesea
     new_mu = solver.compute(_precision_prior / temperature + this->_precision / step_size).solve(-dmu / temperature + _precision_prior * _mu_prior / temperature + this->_precision * this->_mu / step_size);
     new_precision = (dprecision / temperature + _precision_prior / temperature + this->_precision / step_size) * step_size / (step_size + 1);
 
-    double KL = KL_Divergence(new_mu, this->_mu, new_precision, this->_precision);
-    std::cout << "KL Divergence: " << KL << std::endl << std::endl;
+    // double KL = KL_Divergence(new_mu, this->_mu, new_precision, this->_precision);
+    // std::cout << "KL Divergence: " << KL << std::endl << std::endl;
 
     // new cost
-    double new_cost = cost_value_cuda(new_mu, new_precision);
+    double new_cost;
+    if (this->isPositiveDefinite(new_precision))
+        new_cost = Base::cost_value_cuda(new_mu, new_precision);
+    else
+        new_cost = std::numeric_limits<double>::infinity();
 
-    if (std::isnan(new_cost)) {
-        std::cerr << "Error: Detected NaN in cost calculation. Exiting program." << std::endl;
-        std::exit(EXIT_FAILURE);
+    // if (std::isnan(new_cost)) {
+    //     std::cerr << "Error: Detected NaN in cost calculation. Exiting program." << std::endl;
+    //     std::exit(EXIT_FAILURE);
+    // }
+
+    return std::make_tuple(new_cost, new_mu, new_precision);
+}
+
+template <typename Factor, typename CudaClass>
+double ProxKLGH<Factor, CudaClass>::bisection_stepsize(const VectorXd& dmu, const SpMat& dprecision)
+{   
+    SpMat new_precision;
+    VectorXd new_mu;
+    new_mu.setZero(); new_precision.setZero();
+    double temperature = this->_temperature;
+
+    double log_lower = -2;
+    double log_upper = 2;
+    double log_threshold = 0.01;
+    double epsilon = this->_alpha;
+
+    // update mu and precision matrix
+    Eigen::BiCGSTAB<SpMat, IncompleteLUT<double>> solver;
+    solver.setTolerance(1e-6);
+
+    while (log_upper - log_lower > log_threshold)
+    {
+        double log_mid = (log_lower + log_upper) / 2;
+        double step_size = std::exp(log_mid);
+
+        solver.compute(_precision_prior / temperature + this->_precision / step_size);
+        new_mu = solver.solve(-dmu / temperature + _precision_prior * _mu_prior / temperature + this->_precision * this->_mu / step_size);
+        
+        new_precision = (dprecision / temperature + _precision_prior / temperature + this->_precision / step_size) * step_size / (step_size + 1);
+
+        // Compute KL divergence and check for PD indirectly
+        double KL = KL_Divergence(new_mu, this->_mu, new_precision, this->_precision);
+        // std::cout << "KL Divergence: " << KL << std::endl << std::endl;
+
+        if (std::isnan(KL) || KL >= epsilon) {
+            log_upper = log_mid;
+        } else {
+            log_lower = log_mid;
+        }
     }
 
-    // std::cout << "New cost = " << new_cost << std::endl << std::endl;
-    return std::make_tuple(new_cost, new_mu, new_precision);
+    return std::exp((log_lower + log_upper) / 2);
 }
 
 template <typename Factor, typename CudaClass>
@@ -76,15 +118,17 @@ std::tuple<double, VectorXd, SpMat> ProxKLGH<Factor, CudaClass>::bisection_updat
     double epsilon = this->_alpha;
 
     // update mu and precision matrix
-    // Eigen::ConjugateGradient<SpMat> solver;
-    Eigen::ConjugateGradient<SpMat, Eigen::Upper> solver;
+    Eigen::BiCGSTAB<SpMat, IncompleteLUT<double>> solver;
+    solver.setTolerance(1e-6);
 
     while (log_upper - log_lower > log_threshold)
     {
         double log_mid = (log_lower + log_upper) / 2;
         double step_size = std::exp(log_mid);
 
-        new_mu = solver.compute(_precision_prior / temperature + this->_precision / step_size).solve(-dmu / temperature + _precision_prior * _mu_prior / temperature + this->_precision * this->_mu / step_size);
+        solver.compute(_precision_prior / temperature + this->_precision / step_size);
+        new_mu = solver.solve(-dmu / temperature + _precision_prior * _mu_prior / temperature + this->_precision * this->_mu / step_size);
+        
         new_precision = (dprecision / temperature + _precision_prior / temperature + this->_precision / step_size) * step_size / (step_size + 1);
 
         // Compute KL divergence and check for PD indirectly
@@ -125,12 +169,12 @@ void ProxKLGH<Factor, CudaClass>::optimize(std::optional<bool> verbose)
     bool is_lowtemp = true;
     bool converged = false;
 
-    Base::_vec_nonlinear_factors[0]->cuda_init(Base::_vec_nonlinear_factors.size());
+    Base::cuda_init(Base::_vec_nonlinear_factors.size());
 
-    _sigma_rows = Base::_vec_nonlinear_factors[0]->_sigma_rows;
-    _dim_conf = Base::_vec_nonlinear_factors[0]->_dim_conf;
+    // _sigma_rows = Base::_vec_nonlinear_factors[0]->_sigma_rows;
+    // _dim_conf = Base::_vec_nonlinear_factors[0]->_dim_conf;
 
-    if (_save_data){
+    if (this->_save_data){
         Base::_res_recorder.init_data();
     }
     
@@ -158,23 +202,17 @@ void ProxKLGH<Factor, CudaClass>::optimize(std::optional<bool> verbose)
             // std::cout << "Factor Costs:" << fact_costs_iter.transpose() << std::endl;
         }
 
-        if (_save_data){
+        if (this->_save_data){
             Base::_res_recorder.update_data(this->_mu, this->_covariance, this->_precision, cost_iter, fact_costs_iter);
         }
         
         int cnt = 0;
-        int B = 1;
-        double step_size = Base::_step_size_base;
+        double step_size = bisection_stepsize(dmu, dprecision);
 
         // backtracking
         while (true)
         {   
-            // new step size
-            // step_size = pow(_step_size_base, B);
-            step_size = step_size * 0.75;
-
-            // auto onestep_res = onestep_linesearch(step_size, dmu, dprecision);
-            auto onestep_res = bisection_update(dmu, dprecision);
+            auto onestep_res = onestep_linesearch(step_size, dmu, dprecision);
 
             double new_cost = std::get<0>(onestep_res);
             VectorXd new_mu = std::get<1>(onestep_res);
@@ -187,7 +225,6 @@ void ProxKLGH<Factor, CudaClass>::optimize(std::optional<bool> verbose)
                 break;
             }else{ 
                 // shrinking the step size
-                B += 1;
                 cnt += 1;
             }
 
@@ -204,15 +241,17 @@ void ProxKLGH<Factor, CudaClass>::optimize(std::optional<bool> verbose)
                     converged = true;
                 }
 
-                // update_proposal(new_mu, new_precision);
                 break;
             }
+
+            // new step size
+            step_size = step_size * 0.75;
         }
     }
 
-    Base::_vec_nonlinear_factors[0]->cuda_free();
+    Base::cuda_free();
 
-    if (_save_data){
+    if (this->_save_data){
         std::cout << "=========== Saving Data ===========" << std::endl;
         Base::save_data(is_verbose);
     }
@@ -245,10 +284,13 @@ void ProxKLGH<Factor, CudaClass>::optimize_linear(std::optional<bool> verbose)
             is_lowtemp = false;
         }
 
+        if (is_verbose){
+            std::cout << "========= iteration " << i_iter << " ========= " << std::endl;
+        }
+
         double cost_iter = cost_value_linear(this->_mu, this->_precision);
 
         if (is_verbose){
-            std::cout << "========= iteration " << i_iter << " ========= " << std::endl;
             std::cout << "--- cost_iter ---" << std::endl << cost_iter << std::endl << std::endl;
             // std::cout << "Factor Costs:" << fact_costs_iter.transpose() << std::endl;
         }
@@ -343,10 +385,10 @@ std::tuple<double, VectorXd, VectorXd, SpMat>ProxKLGH<Factor, CudaClass>::factor
         covariance_matrix.block(0, i * _dim_conf, _dim_conf, _dim_conf) = opt_k->covariance();
     }
 
-    Base::_vec_nonlinear_factors[0]->compute_sigmapts(mean_mat, covariance_matrix, _dim_conf, n_nonlinear, sigma);
+    Base::compute_sigmapts(mean_mat, covariance_matrix, _dim_conf, n_nonlinear, sigma);
 
     // Compute the cost and derivatives of the nonlinear factors
-    Base::_vec_nonlinear_factors[0]->dmuIntegration(sigmapts_mat, mean_mat, nonlinear_fac_cost, E_Xphi_mat, E_XXphi_mat, _dim_conf);
+    Base::dmuIntegration(sigmapts_mat, mean_mat, nonlinear_fac_cost, E_Xphi_mat, E_XXphi_mat, _dim_conf);
     E_phi_mat = nonlinear_fac_cost;
 
     nonlinear_fac_cost = nonlinear_fac_cost / this ->_temperature;
@@ -474,8 +516,8 @@ double ProxKLGH<Factor, CudaClass>::cost_value_cuda(const VectorXd& fill_joint_m
     }
 
     // Compute the cost of the nonlinear factors
-    Base::_vec_nonlinear_factors[0]->compute_sigmapts(mean_mat, covariance_matrix, _dim_conf, n_nonlinear, sigma);
-    Base::_vec_nonlinear_factors[0]->newCostIntegration(sigmapts_mat, nonlinear_fac_cost, _dim_conf);
+    Base::compute_sigmapts(mean_mat, covariance_matrix, _dim_conf, n_nonlinear, sigma);
+    Base::newCostIntegration(sigmapts_mat, nonlinear_fac_cost, _dim_conf);
 
     nonlinear_fac_cost = nonlinear_fac_cost / this ->_temperature;
 

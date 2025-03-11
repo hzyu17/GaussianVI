@@ -10,6 +10,7 @@ using namespace Eigen;
 #include <optional>
 #include <omp.h>
 #include "helpers/CudaOperation.h"
+#include <Eigen/IterativeLinearSolvers>
 
 #define STRING(x) #x
 #define XSTRING(x) STRING(x)
@@ -51,9 +52,12 @@ void GVIGH<Factor, CudaClass>::optimize(std::optional<bool> verbose)
     if (_save_data){
         _res_recorder.init_data();
     }
+    Timer timer;
 
     // Initialize the cuda and give value to _sigma_rows and _dim_conf
+    timer.start();
     cuda_init(_vec_nonlinear_factors.size());
+    std::cout << "Time for initializing cuda: " << timer.end_mis() << " ms" << std::endl;
 
     // VectorXd mu_EMA(_mu.size());
     // SpMat precision_EMA(_precision.rows(), _precision.cols());
@@ -78,26 +82,23 @@ void GVIGH<Factor, CudaClass>::optimize(std::optional<bool> verbose)
         if (is_verbose){
             std::cout << "========= iteration " << i_iter << " ========= " << std::endl;
         }
-        Timer timer;
-        // timer.start();
+
+        timer.start();
 
         // 135 ms when n_states = 500
-        auto [cost_iter, fact_costs_iter, dmu, dprecision] = factor_cost_vector_cuda(this->_mu, this->_precision);
-
-        // std::cout << "Time for computing factor costs: " << timer.end_mis() << " ms" << std::endl;
+        auto [cost_iter, fact_costs_iter, dmu, dprecision] = factor_cost_vector_cuda_time();
 
         if (is_verbose){
             std::cout << "--- cost_iter ---" << std::endl << cost_iter << std::endl;
             // std::cout << "Factor Costs:" << fact_costs_iter.transpose() << std::endl;
         }
 
-        // timer.start();
+        std::cout << "Time for computing factor costs: " << timer.end_mus_output() << " us" << std::endl;
 
         // This update_data takes about 80 ms each iteration
         if (_save_data){
             _res_recorder.update_data(_mu, _covariance, _precision, cost_iter, fact_costs_iter);
         }
-        // std::cout << "Time for updating data: " << timer.end_mis() << " ms" << std::endl;
         
         int cnt = 0;
         int B = 1;
@@ -123,7 +124,6 @@ void GVIGH<Factor, CudaClass>::optimize(std::optional<bool> verbose)
                 // mu_EMA = _alpha * new_mu + (1-_alpha) * mu_EMA;
                 // precision_EMA = _alpha * new_precision + (1-_alpha) * precision_EMA;
                 this->update_proposal(_alpha * new_mu + (1-_alpha) * this->_mu, _alpha * new_precision + (1-_alpha) * this->_precision); // Update using EMA
-                // std::cout << "back tracking time: "<< cnt << std::endl;
                 break;
             }else{ 
                 // shrinking the step size
@@ -144,13 +144,11 @@ void GVIGH<Factor, CudaClass>::optimize(std::optional<bool> verbose)
                     converged = true;
                 }
 
-                // update_proposal(new_mu, new_precision);
                 break;
             }
         }
         std::cout << "backtracking time: " << B << std::endl;
-        std::cout << "Time for backtracking: " << timer.end_mis() << " ms" << std::endl;
-
+        std::cout << "Time for backtracking: " << timer.end_mus_output() << " us" << std::endl;
     }
 
     cuda_free();
@@ -327,10 +325,11 @@ std::tuple<double, VectorXd, VectorXd, SpMat> GVIGH<Factor, CudaClass>::factor_c
     _Vddmu = Vddmu_sum;
 
     SpMat dprecision = _Vddmu - _precision;
-    VectorXd dmu = solveWithCuSolverQR(_Vddmu, -_Vdmu);
 
-    // Eigen::ConjugateGradient<SpMat, Eigen::Upper> solver;
-    // VectorXd dmu = solver.compute(_Vddmu).solve(-_Vdmu);
+    // BiCGSTAB solver is much faster than the QR solver while maintaining the same accuracy
+    Eigen::BiCGSTAB<SpMat, IncompleteLUT<double>> solver;
+    solver.setTolerance(1e-6);
+    VectorXd dmu = solver.compute(_Vddmu).solve(-_Vdmu);
 
     return std::make_tuple(cost, fac_costs, dmu, dprecision);
 }
@@ -348,9 +347,6 @@ std::tuple<double, VectorXd, VectorXd, SpMat> GVIGH<Factor, CudaClass>::factor_c
     fac_costs.setZero();
     nonlinear_fac_cost.setZero();
 
-    // if (flag % 5 == 0)
-    //     timer.start();
-
     omp_set_num_threads(20);
 
     MatrixXd sigmapts_mat(_sigma_rows, _dim_conf*n_nonlinear);
@@ -362,6 +358,23 @@ std::tuple<double, VectorXd, VectorXd, SpMat> GVIGH<Factor, CudaClass>::factor_c
     VectorXd dmu_mat(_dim_conf * n_nonlinear);
     MatrixXd ddmu_mat(_dim_conf, _dim_conf * n_nonlinear);
 
+    // if (flag % 5 == 0)
+    //     timer.start();
+    
+    // #pragma omp parallel for
+    // for (int i = 0; i < n_nonlinear; i++)
+    // {
+    //     auto &opt_k = _vec_nonlinear_factors[i];
+    //     sigmapts_mat.block(0, i*_dim_conf, _sigma_rows, _dim_conf) = opt_k->sigma_matrix();
+    // }
+    // copySigmaPoints(sigmapts_mat);
+
+    // if (flag % 5 == 0)
+    //     std::cout << "Sigma Points CPU time: " << timer.end_mus_output() << " us" << std::endl;
+
+    if (flag % 5 == 0)
+        timer.start();
+
     #pragma omp parallel for
     for (int i = 0; i < n_nonlinear; i++)
     {
@@ -370,26 +383,24 @@ std::tuple<double, VectorXd, VectorXd, SpMat> GVIGH<Factor, CudaClass>::factor_c
         covariance_matrix.block(0, i * _dim_conf, _dim_conf, _dim_conf) = opt_k->covariance();
     }
     
-    // copied sigma here
     compute_sigmapts(mean_mat, covariance_matrix, _dim_conf, n_nonlinear, sigma);
 
-    // if (flag % 5 == 0)
-    //     std::cout << "Sigma Points computaiton time: " << timer.end_mus_output() << " us" << std::endl;
+    if (flag % 5 == 0)
+        std::cout << "Sigma Points computaiton time: " << timer.end_mus_output() << " us" << std::endl;
     
-    
-    // if (flag % 5 == 0)
-    //     timer.start();
+    if (flag % 5 == 0)
+        timer.start();
 
     // Compute the cost of the nonlinear factors
     dmuIntegration(sigmapts_mat, mean_mat, nonlinear_fac_cost, dmu_mat, ddmu_mat, _dim_conf);
     E_phi_mat = nonlinear_fac_cost;
     nonlinear_fac_cost = nonlinear_fac_cost / this ->_temperature;
 
-    // if (flag % 5 == 0)
-    //     std::cout << "Cost computation time: " << timer.end_mus_output() << " us" << std::endl;
+    if (flag % 5 == 0)
+        std::cout << "Nonlinear Factors computation time: " << timer.end_mus_output() << " us" << std::endl;
 
-    // if (flag % 5 == 0)
-    //     timer.start();
+    if (flag % 5 == 0)
+        timer.start();
 
     #pragma omp parallel for
     for (int i = 0; i < _vec_factors.size(); i++)
@@ -407,6 +418,8 @@ std::tuple<double, VectorXd, VectorXd, SpMat> GVIGH<Factor, CudaClass>::factor_c
 
     double cost = value + vec_D.array().log().sum() / 2;
 
+    if (flag % 5 == 0)
+        std::cout << "Cost computation time: " << timer.end_mus_output() << " us" << std::endl;
 
     // double entropy = vec_D.array().log().sum() / 2;
     // double collision_cost = nonlinear_fac_cost.sum();
@@ -416,17 +429,8 @@ std::tuple<double, VectorXd, VectorXd, SpMat> GVIGH<Factor, CudaClass>::factor_c
     // std::cout << "Collision Cost: " << collision_cost << std::endl;
     // std::cout << "Entropy: " << entropy << std::endl;
 
-
-    // if (flag % 5 == 0)
-    //     std::cout << "Factor cost computation time: " << timer.end_mus_output() << " us" << std::endl;
-
-    // for (int i = 0; i < n_nonlinear; i++){
-    //     std::cout << "dmu " << i << ": " << std::endl << dmu_mat.segment(i*_dim_conf, _dim_conf).transpose() << std::endl;
-    //     std::cout << "ddmu " << i << ": " << std::endl << ddmu_mat.block(0, i*_dim_conf, _dim_conf, _dim_conf) << std::endl;
-    // }
-
-    // if (flag % 5 == 0)
-    //     timer.start();
+    if (flag % 5 == 0)
+        timer.start();
 
     _Vdmu.setZero();
     _Vddmu.setZero();
@@ -471,92 +475,47 @@ std::tuple<double, VectorXd, VectorXd, SpMat> GVIGH<Factor, CudaClass>::factor_c
     _Vdmu = Vdmu_sum;
     _Vddmu = Vddmu_sum;
 
-    // if (flag % 5 == 0)
-    //     std::cout << "Derivative computation time: " << timer.end_mis() << " ms" << std::endl;
+    if (flag % 5 == 0)
+        std::cout << "Derivative computation time: " << timer.end_mus_output() << " us" << std::endl;
 
-    // if (flag % 5 == 0)
+    if (flag % 5 == 0)
+        timer.start();
+
+    SpMat dprecision = _Vddmu - _precision;
+
+    Eigen::BiCGSTAB<SpMat, IncompleteLUT<double>> solver;
+    solver.setTolerance(1e-6);
+    solver.compute(_Vddmu);
+    VectorXd dmu = solver.solve(-_Vdmu);
+
+    // The speed of BiCGSTAB is much faster then QR solver, while still maintaining the same accuracy
+    // VectorXd dmu = solveWithCuSolverQR(_Vddmu, -_Vdmu);
+
+    if (flag % 5 == 0)
+        std::cout << "Solver time: " << timer.end_mus_output() << " us" << std::endl;
+
+
+    // Compare the solvers
+    // if (flag % 5 == 0){
     //     timer.start();
+    //     Eigen::ConjugateGradient<SpMat, Eigen::Upper, Eigen::IncompleteLUT<double>> solver_lut;
+    //     VectorXd dmu_lut = solver_lut.compute(_Vddmu).solve(-_Vdmu);
+    //     std::cout << "Solver time lut: " << timer.end_mus_output() << " us" << std::endl;
 
-    SpMat dprecision(_dim, _dim);
-    dprecision.setZero();
-    dprecision = _Vddmu - _precision;
+    //     timer.start();
+    //     Eigen::BiCGSTAB<SpMat, IncompleteLUT<double>> bicgstab_solver;
+    //     bicgstab_solver.setTolerance(1e-6);
+    //     bicgstab_solver.compute(_Vddmu);
+    //     VectorXd dmu_bicgstab = bicgstab_solver.solve(-_Vdmu);
+    //     std::cout << "Solver time bicgstab: " << timer.end_mus_output() << " us" << std::endl;
 
-    VectorXd dmu(_dim);
-    dmu.setZero();
-
-    // dmu = solveWithCuSolverQR(_Vddmu, -_Vdmu);
-
-    Eigen::ConjugateGradient<SpMat, Eigen::Upper, Eigen::IncompleteLUT<double>> solver_lut;
-    dmu = solver_lut.compute(_Vddmu).solve(-_Vdmu);
-
-    // if (flag % 5 == 0)
-    //     std::cout << "Solver time: " << timer.end_mis() << " ms" << std::endl << std::endl;
-
-    // Eigen::ConjugateGradient<SpMat, Eigen::Upper> solver;
-    // Eigen::ConjugateGradient<SpMat, Eigen::Upper, Eigen::IncompleteCholesky<double>> solver_cho;
-    // Eigen::ConjugateGradient<SpMat, Eigen::Upper, Eigen::IncompleteLUT<double>> solver_lut;
-
-    // Right now the matrix is not positive definite, sometimes not even symmetric
-    // The condition number is very high, that's why the solver appoximation it not accurate
-    // Eigen::SimplicialLLT<SpMat> chol(_Vddmu);
-    // if (_Vddmu.isApprox(_Vddmu.transpose(), 1e-8))
-    // {
-    //     // If the Cholesky decomposition is successful, the matrix is SPD
-    //     if(chol.info() == Eigen::Success) {
-    //         std::cout << "SPD." << std::endl;
-    //     } else {
-    //         std::cout << "Not SPD." << std::endl;
-    //     }
-        
-    //     // Convert the sparse matrix to a dense matrix for eigenvalue computation
-    //     Eigen::MatrixXd denseMat = Eigen::MatrixXd(_Vddmu);
-        
-    //     // Compute the eigenvalues using SelfAdjointEigenSolver
-    //     Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> eigensolver(denseMat);
-    //     if(eigensolver.info() == Eigen::Success) {
-    //         std::cout << "Eigenvalues:\n" << eigensolver.eigenvalues().transpose() << std::endl;
-    //     } else {
-    //         std::cout << "Eigenvalue computation failed." << std::endl;
-    //     }
+    //     double Vdmu_norm = _Vdmu.norm();
+    //     std::cout << "Ratio of QR solver: " << (_Vdmu + _Vddmu * dmu).norm() / Vdmu_norm * 100 << "%" << std::endl;
+    //     std::cout << "Ratio of Conjugate Gradient solver: " << (_Vdmu + _Vddmu * dmu_lut).norm() / Vdmu_norm * 100 << "%" << std::endl;
+    //     std::cout << "Ratio of BiCGSTAB solver: " << (_Vdmu + _Vddmu * dmu_bicgstab).norm() / Vdmu_norm * 100 << "%" << std::endl << std::endl;
     // }
-    // else
-    // {
-    //     std::cout << "Not symmetric." << std::endl;
-    // }
-
     
-    // dmu = solver.compute(_Vddmu).solve(-_Vdmu);
-    
-    // if (flag % 5 == 0)
-    //     timer.start();
-    
-    // VectorXd dmu_lut = solver_lut.compute(_Vddmu).solve(-_Vdmu);
-
-    // if (flag % 5 == 0)
-    //     std::cout << "Solver time lut: " << timer.end_mis() << " ms" << std::endl << std::endl;
-
-    // if (flag % 5 == 0)
-    //     timer.start();
-    
-    // VectorXd dmu_cuda = solveWithCuSolverQR(_Vddmu, -_Vdmu);
-
-    // if (flag % 5 == 0)
-    //     std::cout << "Solver time cuda: " << timer.end_mis() << " ms" << std::endl << std::endl;
-
-    // if (flag % 5 == 0)
-    //     timer.start();
-    
-    // VectorXd dmu_cuda_cho = solveWithCuSolverChol(_Vddmu, -_Vdmu);
-
-    // if (flag % 5 == 0)
-    //     std::cout << "Solver time cuda_cho: " << timer.end_mis() << " ms" << std::endl << std::endl;
-
-    // std::cout << "Norm of dmu: " << dmu.norm() << std::endl;
-    // std::cout << "Error of lut pre-conditioner: " << (dmu - dmu_lut).norm() << std::endl;
-    // std::cout << "Error of dmu CuSolver QR: " << (dmu - dmu_cuda).norm() << std::endl;
-    // std::cout << "Error of dmu CuSolver Cholesky: " << (dmu - dmu_cuda_cho).norm() << std::endl;
-    
-    // flag++;
+    flag++;
 
     return std::make_tuple(cost, fac_costs, dmu, dprecision);
 }
@@ -629,18 +588,13 @@ template <typename Factor, typename CudaClass>
 inline void GVIGH<Factor, CudaClass>::set_precision(const SpMat &new_precision)
 {
     _precision = new_precision;
-    // // sparse inverse
-    // inverse_inplace();
     _covariance = inverse_GBP(_precision);
     // _covariance = chain_splash_GBP(_precision);
 
-    #pragma omp parallel
+    #pragma omp parallel for
+    for (auto &factor : _vec_factors)
     {
-        #pragma omp for nowait // Nowait allows threads to continue without waiting at the end of the loop
-        for (auto &factor : _vec_factors)
-        {
-            factor->update_precision_from_joint(_covariance);
-        }
+        factor->update_precision_from_joint(_covariance);
     }
 }
 
@@ -650,11 +604,20 @@ inline void GVIGH<Factor, CudaClass>::set_precision(const SpMat &new_precision)
 template <typename Factor, typename CudaClass>
 double GVIGH<Factor, CudaClass>::cost_value_cuda(const VectorXd& fill_joint_mean, SpMat& joint_precision)
 {
+    Timer timer;
+    static int flag = 0;
+
     int n_nonlinear = _vec_nonlinear_factors.size();
     VectorXd nonlinear_fac_cost(n_nonlinear);
     nonlinear_fac_cost.setZero();
 
+    if (flag % 5 == 0)
+        timer.start();
+
     SpMat joint_cov = inverse_GBP(joint_precision);
+
+    if (flag % 5 == 0)
+        std::cout << "GBP Inverse computation time: " << timer.end_mus_output() << " us" << std::endl;
 
     MatrixXd sigmapts_mat(_sigma_rows, n_nonlinear*_dim_conf);
     MatrixXd mean_mat(_dim_conf, n_nonlinear);
@@ -687,6 +650,8 @@ double GVIGH<Factor, CudaClass>::cost_value_cuda(const VectorXd& fill_joint_mean
 
     SparseLDLT ldlt(joint_precision);
     VectorXd vec_D = ldlt.vectorD();
+
+    flag++;
 
     return value + vec_D.array().log().sum() / 2;
 }

@@ -115,17 +115,13 @@ public:
     inline bool linear_factor() override { return _isLinear; }
 
     inline void newCostIntegration(const MatrixXd& sigmapts, VectorXd& results, const int sigmapts_cols) override{
-        // _cuda -> Cuda_init_iter(sigmapts, results, sigmapts_cols);
         _cuda -> costIntegration(sigmapts, results, sigmapts_cols);
-        _cuda -> Cuda_free_iter();
     }
 
     inline void dmuIntegration(const MatrixXd& sigmapts, const MatrixXd& mean, VectorXd& E_phi_mat, VectorXd& dmu_mat, MatrixXd& ddmu_mat, const int sigmapts_cols) override{
-        // _cuda -> Cuda_init_iter(sigmapts, E_phi_mat, sigmapts_cols);
         _cuda -> costIntegration(sigmapts, E_phi_mat, sigmapts_cols);
         _cuda -> dmuIntegration(sigmapts, mean, dmu_mat, sigmapts_cols);
         _cuda -> ddmuIntegration(ddmu_mat);
-        _cuda -> Cuda_free_iter();
     }
 
     inline void compute_sigmapts(const MatrixXd& mean, const MatrixXd& covariance, int dim_conf, int num_states, MatrixXd& sigmapts) override{
