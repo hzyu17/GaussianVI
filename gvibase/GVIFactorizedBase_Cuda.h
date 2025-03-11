@@ -154,6 +154,8 @@ public:
 
     virtual void cuda_matrices(std::vector<MatrixXd>& vec_sigmapts, std::vector<VectorXd>& vec_mean) {}
 
+    virtual MatrixXd sigma_matrix(){}
+
     // /**
     //  * @brief Compute the cost function. V(x) = E_q(\phi(x)) using the current values.
     //  */

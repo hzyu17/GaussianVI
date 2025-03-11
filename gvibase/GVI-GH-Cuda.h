@@ -143,7 +143,7 @@ public:
     /**
      * @brief Compute the costs and derivatives of all factors for a given mean and cov.
      */
-    std::tuple<double, VectorXd, VectorXd, SpMat> factor_cost_vector_cuda(const VectorXd& fill_joint_mean, SpMat& joint_precision);
+    virtual std::tuple<double, VectorXd, VectorXd, SpMat> factor_cost_vector_cuda(const VectorXd& fill_joint_mean, SpMat& joint_precision);
 
     std::tuple<double, VectorXd, VectorXd, SpMat> factor_cost_vector_cuda_time(const VectorXd& fill_joint_mean, SpMat& joint_precision);
 
@@ -235,18 +235,25 @@ public:
         _cuda->update_sigmapts(covariance, mean, dim_conf, num_states, sigmapts);
     }
 
+    inline void copySigmaPoints(const MatrixXd& sigmapts){
+        _cuda -> copy_sigma(sigmapts);
+    }
+
     inline void dmuIntegration(const MatrixXd& sigmapts, const MatrixXd& mean, VectorXd& E_phi_mat, VectorXd& dmu_mat, MatrixXd& ddmu_mat, const int sigmapts_cols){
         _cuda -> costIntegration(sigmapts, E_phi_mat, sigmapts_cols);
         _cuda -> dmuIntegration(sigmapts, mean, dmu_mat, sigmapts_cols);
         _cuda -> ddmuIntegration(ddmu_mat);
-        _cuda -> Cuda_free_iter();
     }
 
     inline void newCostIntegration(const MatrixXd& sigmapts, VectorXd& results, const int sigmapts_cols){
         _cuda -> costIntegration(sigmapts, results, sigmapts_cols);
-        _cuda -> Cuda_free_iter();
     }
 
+    inline bool isPositiveDefinite(const SpMat& precision){
+        SparseLDLT ldlt(precision);
+        VectorXd diag = ldlt.vectorD();
+        return (diag.array() > 0).all();
+    }
 
     /// update the step sizes
     inline void set_step_size(double step_size){ 
@@ -270,8 +277,9 @@ public:
     inline void set_max_iter_backtrack(double max_backtrack_iter){ _niters_backtrack = max_backtrack_iter; }
 
     inline void set_mu(const VectorXd& mean){
-        _mu = mean; 
-        for (std::shared_ptr<FactorizedOptimizer> & opt_fact : _vec_factors){
+        _mu = mean;
+        #pragma omp parallel for
+        for (auto & opt_fact : _vec_factors){
             opt_fact->update_mu_from_joint(_mu);
         }
     }

@@ -205,21 +205,17 @@ public:
     inline bool linear_factor() override { return _isLinear; }
 
     inline void cuda_iter_init(const MatrixXd& sigmapts, VectorXd& results, const int sigmapts_cols) override{
-        _cuda -> Cuda_init_iter(sigmapts, results, sigmapts_cols);
+        _cuda -> copy_sigma(sigmapts);
     }
 
     inline void newCostIntegration(const MatrixXd& sigmapts, VectorXd& results, const int sigmapts_cols) override{
-        // _cuda -> Cuda_init_iter(sigmapts, results, sigmapts_cols);
         _cuda -> costIntegration(sigmapts, results, sigmapts_cols);
-        _cuda -> Cuda_free_iter();
     }
 
     inline void dmuIntegration(const MatrixXd& sigmapts, const MatrixXd& mean, VectorXd& E_phi_mat, VectorXd& dmu_mat, MatrixXd& ddmu_mat, const int sigmapts_cols) override{
-        // _cuda -> Cuda_init_iter(sigmapts, E_phi_mat, sigmapts_cols);
         _cuda -> costIntegration(sigmapts, E_phi_mat, sigmapts_cols);
         _cuda -> dmuIntegration(sigmapts, mean, dmu_mat, sigmapts_cols);
         _cuda -> ddmuIntegration(ddmu_mat);
-        _cuda -> Cuda_free_iter();
     }
 
     inline void compute_sigmapts(const MatrixXd& mean, const MatrixXd& covariance, int dim_conf, int num_states, MatrixXd& sigmapts) override{
@@ -247,12 +243,15 @@ public:
     }
 
     void cuda_matrices(std::vector<MatrixXd>& vec_sigmapts, std::vector<VectorXd>& vec_mean) override {   
-
         updateGH(this->_mu, this->_covariance);
 
         vec_mean[_start_index-1] = this->_mu;
         vec_sigmapts[_start_index-1] = this -> _gh -> sigmapts();
+    }
 
+    MatrixXd sigma_matrix() override{
+        updateGH(this->_mu, this->_covariance);
+        return this -> _gh -> sigmapts();
     }
 
     

@@ -355,7 +355,7 @@ public:
 
     ~ForwardKinematics() {}
 
-    __device__ inline void compute_transformed_sphere_centers(const double* theta, double* pose) const {
+    __device__ inline void compute_transformed_sphere_centers(const double* theta, Point3* pose) const {
         // Precompute DH matrices for all joints.
         constexpr int MATRIX_ELEMENTS = 16;
         constexpr int MAX_JOINTS = 10;
@@ -367,9 +367,9 @@ public:
             double center[3] = {centers(i, 0), centers(i, 1), centers(i, 2)};
             double pos[3];
             forward_kinematics(dh_mats, frame, center, pos);
-            pose[3 * i]     = pos[0];
-            pose[3 * i + 1] = pos[1];
-            pose[3 * i + 2] = pos[2];
+            pose[i].x = pos[0];
+            pose[i].y = pos[1];
+            pose[i].z = pos[2];
         }
     }
 
@@ -533,13 +533,8 @@ public:
     }
     
 
-    void Cuda_init_iter(const MatrixXd& sigmapts, VectorXd& results, const int sigmapts_cols){
+    void copy_sigma(const MatrixXd& sigmapts){
       cudaMemcpy(_sigmapts_gpu, sigmapts.data(), sigmapts.size() * sizeof(double), cudaMemcpyHostToDevice);
-    }
-
-    void Cuda_free_iter(){
-      // cudaFree(_sigmapts_gpu);
-      // cudaFree(_func_value_gpu);
     }
 
     void update_sigmapts(const MatrixXd& covariance, const MatrixXd& mean, int dim_state, int num_states, MatrixXd& sigmapts);
@@ -894,15 +889,10 @@ public:
         int n_balls = _fk._num_spheres;
         double slope = 1;
 
-        double pose[3 * MAX_BALLS];
-
-        _fk.compute_transformed_sphere_centers(theta, pose);
-  
         Point3 checkpoints[MAX_BALLS];
-        vec_balls(pose, n_balls, checkpoints);
+        _fk.compute_transformed_sphere_centers(theta, checkpoints);
   
         double signed_distance[MAX_BALLS] = {0};
-  
         _sdf.getSignedDistance(checkpoints, n_balls, signed_distance);
   
         double cost = 0;
@@ -916,15 +906,6 @@ public:
         }
         
         return cost;
-      }
-  
-      // Reshape from vector to a matrix
-      __device__ void vec_balls(const double* x, int n_balls, Point3* pts) {
-        for (int i = 0; i < n_balls; i++) {
-          pts[i].x = x[3 * i];
-          pts[i].y = x[3 * i + 1];
-          pts[i].z = x[3 * i + 2];
-        }
       }
 
       __device__ inline double radius(int i) const {

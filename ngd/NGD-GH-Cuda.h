@@ -66,9 +66,8 @@ public:
      * @brief given a state, compute the total cost function value without the entropy term, using current values.
      */
     double cost_value_no_entropy() override;
+    
     double KL_Divergence(const VectorXd& mean_former, const VectorXd& mean_latter, const SpMat& precision_former, const SpMat& precision_latter);
-
-    bool isPositiveDefinite(const SpMat& precision);
 
 
 }; //class

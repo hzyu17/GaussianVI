@@ -121,19 +121,6 @@ public:
         MatrixXd AT_precision_A = _Lambda.transpose() * _target_precision * _Lambda;
 
         // partial V^2 / partial mu*mu^T
-        // update tmp matrix
-
-        // for (int i=0; i<(_dim); i++){
-        //     for (int j=0; j<(_dim); j++) {
-        //         for (int k=0; k<(_dim); k++){
-        //             for (int l=0; l<(_dim); l++){
-        //                 tmp(i, j) += (_covariance(i, j)*_covariance(k, l) + _covariance(i,k)*_covariance(j,l) + _covariance(i,l)*_covariance(j,k))*AT_precision_A(k,l);
-        //             }
-        //         }
-        //     }
-        // }
-        // this->_Vddmu = (_precision * tmp * _precision - _precision * (AT_precision_A*_covariance).trace()) * constant();
-
         this->_Vddmu = 2 * AT_precision_A * constant();
         this->_Vddmu = this->_Vddmu / this->temperature();
     }

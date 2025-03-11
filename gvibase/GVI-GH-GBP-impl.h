@@ -40,6 +40,8 @@ void GVIGH<Factor>::optimize(std::optional<bool> verbose)
 
     _res_recorder.init_data();
 
+    Timer timer;
+
     for (int i_iter = 0; i_iter < _niters; i_iter++)
     {   
 
@@ -56,6 +58,7 @@ void GVIGH<Factor>::optimize(std::optional<bool> verbose)
             is_lowtemp = false;
         }
 
+        timer.start();
         // ============= Cost at current iteration =============
         double cost_iter = this->cost_value(); // -> Base::cost_value(this->_mu, this->_precision);
 
@@ -68,18 +71,24 @@ void GVIGH<Factor>::optimize(std::optional<bool> verbose)
         VectorXd fact_costs_iter = this->factor_cost_vector();
         // std::cout << "Factor Costs:" << fact_costs_iter.transpose() << std::endl;
 
+        std::cout << "Time for cost: " << timer.end_mus_output() << " us" << std::endl;
+
         _res_recorder.update_data(_mu, _covariance, _precision, cost_iter, fact_costs_iter);
 
         // gradients
+        timer.start();
         std::tuple<VectorXd, SpMat> gradients = compute_gradients(); //Used calculate partial V here
 
         VectorXd dmu = std::get<0>(gradients);
         SpMat dprecision = std::get<1>(gradients);
 
+        std::cout << "Time for gradients: " << timer.end_mus_output() << " us" << std::endl;
+
         int cnt = 0;
         int B = 1;
         double step_size = _step_size_base;
 
+        timer.start();
         // backtracking 
         while (true)
         {   
@@ -121,6 +130,8 @@ void GVIGH<Factor>::optimize(std::optional<bool> verbose)
                 break;
             }                
         }
+        std::cout << "backtracking time: " << B << std::endl;
+        std::cout << "Time for backtracking: " << timer.end_mus_output() << " us" << std::endl;
     }
 
     std::cout << "=========== Saving Data ===========" << std::endl;

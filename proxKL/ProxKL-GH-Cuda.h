@@ -57,9 +57,6 @@ protected:
     VectorXd _mu_prior;
     SpMat _precision_prior;
 
-    bool _save_data = true;
-
-
 public:
 /// ************************* Override functions for Prox-GVI algorithm *************************************
     bool isSymmetric(const Eigen::MatrixXd& matrix, double precision = 1e-10) {
@@ -92,18 +89,18 @@ public:
         _precision_prior = precision_prior;
     }
 
-    inline void set_save_data(bool flag){ _save_data = flag; }
-
 /// Optimizations related
 
     /**
      * @brief Compute the costs of all factors, using current values.
      */
-    std::tuple<double, VectorXd, VectorXd, SpMat> factor_cost_vector_cuda(const VectorXd& fill_joint_mean, SpMat& joint_precision);
+    std::tuple<double, VectorXd, VectorXd, SpMat> factor_cost_vector_cuda(const VectorXd& fill_joint_mean, SpMat& joint_precision) override;
 
-    virtual std::tuple<double, VectorXd, SpMat> onestep_linesearch(const double &step_size, const VectorXd& dmu, const SpMat& dprecision) override;
+    std::tuple<double, VectorXd, SpMat> onestep_linesearch(const double &step_size, const VectorXd& dmu, const SpMat& dprecision) override;
 
     std::tuple<double, VectorXd, SpMat> bisection_update(const VectorXd& dmu, const SpMat& dprecision);
+
+    double bisection_stepsize(const VectorXd& dmu, const SpMat& dprecision);
 
     inline void update_proposal(const VectorXd& new_mu, const SpMat& new_precision) override;
 

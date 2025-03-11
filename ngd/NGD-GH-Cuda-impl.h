@@ -80,22 +80,21 @@ std::tuple<double, VectorXd, SpMat> NGDGH<FactorizedOptimizer, CudaClass>::onest
     new_precision = this->_precision + step_size * dprecision;
 
     double new_cost;
-    if (isPositiveDefinite(new_precision))
+    if (this->isPositiveDefinite(new_precision))
         new_cost = Base::cost_value_cuda(new_mu, new_precision);
     else
         new_cost = std::numeric_limits<double>::infinity();
     
-    // std::cout << "New cost = " << new_cost << std::endl;
     return std::make_tuple(new_cost, new_mu, new_precision);
 }
 
-template <typename FactorizedOptimizer, typename CudaClass>
-bool NGDGH<FactorizedOptimizer, CudaClass>::isPositiveDefinite(const SpMat& precision)
-{
-    SparseLDLT ldlt(precision);
-    VectorXd diag = ldlt.vectorD();
-    return (diag.array() > 0).all();
-}
+// template <typename FactorizedOptimizer, typename CudaClass>
+// bool NGDGH<FactorizedOptimizer, CudaClass>::isPositiveDefinite(const SpMat& precision)
+// {
+//     SparseLDLT ldlt(precision);
+//     VectorXd diag = ldlt.vectorD();
+//     return (diag.array() > 0).all();
+// }
 
 template <typename FactorizedOptimizer, typename CudaClass>
 double NGDGH<FactorizedOptimizer, CudaClass>::bisection_stepsize(const VectorXd& dmu, const SpMat& dprecision)
