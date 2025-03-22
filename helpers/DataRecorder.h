@@ -4,9 +4,9 @@
  * @brief Data buffer class which is used for backtracking and cost analysis.
  * @version 0.1
  * @date 2023-04-20
- * 
+ *
  * @copyright Copyright (c) 2023
- * 
+ *
  */
 
 #pragma once
@@ -23,13 +23,14 @@ using namespace Eigen;
 namespace gvi{
 
 class VIMPResults{
-private:    
+private:
 
         int _niters, _dimension, _nfactors, _dim_state, _nstates;
         int _cur_iter = 0;
+        bool _record_covariance = true;
 
         // collection of all iterations
-        Matrix3D _res_mean; 
+        Matrix3D _res_mean;
         Matrix3D _res_covariances, _res_joint_covariances;
         Matrix3D _res_precisions, _res_joint_precisions;
         // last iteration results
@@ -57,7 +58,7 @@ private:
 public:
     /**
      * @brief Constructor
-     * 
+     *
      * @param niters number of iterations
      * @param nstates number of states
      * @param dim_state dimension of state
@@ -86,40 +87,46 @@ public:
             // _res_factor_costs.setZero();
         }
 
-    void init_data(){
+    void init_data(bool record_covariance=true){
+        _record_covariance = record_covariance;
         _res_mean.setZero();
-        _res_joint_covariances.setZero();
-        _res_joint_precisions.setZero();
-        _res_covariances.setZero();
-        _res_precisions.setZero();
         _res_costs.setZero();
         _res_factor_costs.setZero();
+        if (record_covariance){
+            _res_joint_covariances.setZero();
+            _res_joint_precisions.setZero();
+            _res_covariances.setZero();
+            _res_precisions.setZero();
+        }
     }
 
     /**
-     * @brief update the content of data 
-     * 
+     * @brief update the content of data
+     *
      * @param new_mean the new coming mean vector
      * @param new_cov the new coming covariance matrix
      * @param new_precision the new coming precision matrix
      */
-    void update_data(const Eigen::VectorXd& new_mean, const Eigen::MatrixXd& new_joint_cov, 
-                    const Eigen::MatrixXd& new_joint_precision, const double& new_cost, 
+    void update_data(const Eigen::VectorXd& new_mean, const Eigen::MatrixXd& new_joint_cov,
+                    const Eigen::MatrixXd& new_joint_precision, const double& new_cost,
                     const Eigen::VectorXd& new_factor_costs){
         if (_cur_iter < _niters){
-            Matrix3D marginal_cov(_dim_state, _dim_state, _nstates);
-            marginal_cov = joint2marginals(new_joint_cov);
-            Matrix3D marginal_precision(_dim_state, _dim_state, _nstates);
-            marginal_precision = joint2marginals(new_joint_precision);
-
             _ei.compress3d(new_mean, _res_mean, _cur_iter);
-            _ei.compress3d(marginal_cov, _res_covariances, _cur_iter);    
-            _ei.compress3d(marginal_precision, _res_precisions, _cur_iter);   
-            _ei.compress3d(new_factor_costs, _res_factor_costs, _cur_iter);   
-            _ei.compress3d(new_joint_precision, _res_joint_precisions, _cur_iter);
-            _ei.compress3d(new_joint_cov, _res_joint_covariances, _cur_iter);
-
+            _ei.compress3d(new_factor_costs, _res_factor_costs, _cur_iter);
             _res_costs(_cur_iter) = new_cost;
+
+            if(_record_covariance){
+                Matrix3D marginal_cov(_dim_state, _dim_state, _nstates);
+                marginal_cov = joint2marginals(new_joint_cov);
+                Matrix3D marginal_precision(_dim_state, _dim_state, _nstates);
+                marginal_precision = joint2marginals(new_joint_precision);
+
+                _ei.compress3d(marginal_cov, _res_covariances, _cur_iter);
+                _ei.compress3d(marginal_precision, _res_precisions, _cur_iter);
+                _ei.compress3d(new_joint_precision, _res_joint_precisions, _cur_iter);
+                _ei.compress3d(new_joint_cov, _res_joint_covariances, _cur_iter);
+            }
+
             _cur_iter += 1;
         }
         else{
@@ -128,10 +135,10 @@ public:
     }
 
     /**
-     * @brief Construct 3d marginal covariance or precision 
+     * @brief Construct 3d marginal covariance or precision
      * matrices (with time information) from a big joint matrix.
-     * @param joint 
-     * @return Matrix3D 
+     * @param joint
+     * @return Matrix3D
      */
     inline Matrix3D joint2marginals(const MatrixXd& joint){
         Matrix3D res(_dim_state, _dim_state, _nstates);
@@ -144,8 +151,8 @@ public:
 
     /**
      * @brief print the ith iteration data.
-     * 
-     * @param i_iter 
+     *
+     * @param i_iter
      */
     inline void print_data(int i_iter){
         assert(i_iter < _niters);
@@ -157,14 +164,14 @@ public:
 
     /**
      * @brief update filenames
-     * 
+     *
      * @param file_mean filename for the means
      * @param file_cov filename for the covariances
      */
-    inline void update_file_names(const std::string& file_mean, 
-                                    const std::string& file_cov, 
+    inline void update_file_names(const std::string& file_mean,
+                                    const std::string& file_cov,
                                     const std::string& file_joint_cov,
-                                    const std::string& file_precision, 
+                                    const std::string& file_precision,
                                     const std::string& file_joint_precision,
                                     const std::string& file_cost,
                                     const std::string& file_factor_costs,
@@ -193,18 +200,6 @@ public:
         /// save mean
         _m_io.saveData(_file_mean, _res_mean, verbose);
 
-        /// save covariances
-        _m_io.saveData(_file_cov, _res_covariances, verbose);
-
-        /// save precisions
-        _m_io.saveData(_file_precision, _res_precisions, verbose);
-
-        /// save covariances
-        _m_io.saveData(_file_joint_cov, _res_joint_covariances, verbose);
-
-        /// save precisions
-        _m_io.saveData(_file_joint_precision, _res_joint_precisions, verbose);
-
         /// save costs
         _m_io.saveData(_file_cost, _res_costs, verbose);
 
@@ -213,20 +208,32 @@ public:
 
         /// save last iteration results
         // Last iteration means
-        // MatrixXd l_iter_mean(_nstates*_dim_state, 1);
-        // l_iter_mean.setZero();
         MatrixXd zk_sdf(_dim_state, _nstates);
         zk_sdf.setZero();
         _ei.decomp3d(_res_mean, zk_sdf, _dim_state, _nstates, _niters-1);
 
         _m_io.saveData(_file_zk_sdf, zk_sdf, verbose);
 
-        // Last iteration covariances
-        MatrixXd Sk_sdf(_dim_state*_dim_state, _nstates);
-        Sk_sdf.setZero();
-        _ei.decomp3d(_res_covariances, Sk_sdf, _dim_state*_dim_state, _nstates, _niters-1);
+        if (_record_covariance){
+            /// save covariances
+            _m_io.saveData(_file_cov, _res_covariances, verbose);
 
-        _m_io.saveData(_file_Sk_sdf, Sk_sdf, verbose);
+            /// save precisions
+            _m_io.saveData(_file_precision, _res_precisions, verbose);
+
+            /// save covariances
+            _m_io.saveData(_file_joint_cov, _res_joint_covariances, verbose);
+
+            /// save precisions
+            _m_io.saveData(_file_joint_precision, _res_joint_precisions, verbose);
+
+            // Last iteration covariances
+            MatrixXd Sk_sdf(_dim_state*_dim_state, _nstates);
+            Sk_sdf.setZero();
+            _ei.decomp3d(_res_covariances, Sk_sdf, _dim_state*_dim_state, _nstates, _niters-1);
+
+            _m_io.saveData(_file_Sk_sdf, Sk_sdf, verbose);
+        }
 
         if (verbose){
             std::cout << "All data saved" << std::endl;

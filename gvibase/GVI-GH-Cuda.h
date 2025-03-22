@@ -84,7 +84,7 @@ protected:
 
     double _alpha = 1.0;
 
-    bool _save_data = true;
+    bool _save_data = true, _save_covariance = true;
 
     // Put step size decrease rate in config
 
@@ -270,6 +270,8 @@ public:
     inline void set_delta_t(double delta_t) { _delta_t = delta_t; }
 
     inline void set_data_save(bool flag) { _save_data = flag; }
+
+    inline void set_save_covariance(bool flag) { _save_covariance = flag; }
 
     /// The base step size in backtracking
     inline void set_step_size_base(double step_size_base){ _step_size_base = step_size_base; }

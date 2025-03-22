@@ -50,7 +50,7 @@ void GVIGH<Factor, CudaClass>::optimize(std::optional<bool> verbose)
     bool converged = false;
 
     if (_save_data){
-        _res_recorder.init_data();
+        _res_recorder.init_data(_save_covariance);
     }
     Timer timer;
 
@@ -86,7 +86,7 @@ void GVIGH<Factor, CudaClass>::optimize(std::optional<bool> verbose)
         timer.start();
 
         // 135 ms when n_states = 500
-        auto [cost_iter, fact_costs_iter, dmu, dprecision] = factor_cost_vector_cuda_time();
+        auto [cost_iter, fact_costs_iter, dmu, dprecision] = factor_cost_vector_cuda();
 
         if (is_verbose){
             std::cout << "--- cost_iter ---" << std::endl << cost_iter << std::endl;
@@ -274,12 +274,14 @@ std::tuple<double, VectorXd, VectorXd, SpMat> GVIGH<Factor, CudaClass>::factor_c
     double cost = value + vec_D.array().log().sum() / 2;
 
     double entropy = vec_D.array().log().sum() / 2;
-    double collision_cost = nonlinear_fac_cost.cwiseAbs().sum();
+    double collision_cost = nonlinear_fac_cost.sum();
     double prior_cost = fac_costs.sum() - collision_cost;
 
     std::cout << "Prior Cost: " << prior_cost << std::endl;
     std::cout << "Collision Cost: " << collision_cost << std::endl;
     std::cout << "Entropy: " << entropy << std::endl;
+    if (prior_cost < 0 || collision_cost < 0 || entropy < 0)
+        std::cout << "Negative cost: " << fac_costs.transpose() << std::endl;
 
     _Vdmu.setZero();
     _Vddmu.setZero();
@@ -330,6 +332,10 @@ std::tuple<double, VectorXd, VectorXd, SpMat> GVIGH<Factor, CudaClass>::factor_c
     Eigen::BiCGSTAB<SpMat, IncompleteLUT<double>> solver;
     solver.setTolerance(1e-6);
     VectorXd dmu = solver.compute(_Vddmu).solve(-_Vdmu);
+
+    double error_solver = (_Vddmu * dmu + _Vdmu).norm() / _Vdmu.norm();
+    if (error_solver > 1e-10)
+        std::cout << "Error of the solver: " << error_solver * 100 << "%" << std::endl;
 
     return std::make_tuple(cost, fac_costs, dmu, dprecision);
 }
@@ -527,32 +533,34 @@ void GVIGH<Factor, CudaClass>::time_test()
     cuda_init(_vec_nonlinear_factors.size());
 
     Timer timer;
-    int n_repeat = 20;
-    std::vector<double> times_evaluation;
-    times_evaluation.reserve(n_repeat);
+    int n_repeat = 50;
 
-    for (int i=0; i < n_repeat+1; i++){
-        timer.start();
-        auto result_cuda = factor_cost_vector_cuda_time();
-        double time = timer.end_mis();
-        if (i != 0)
-        times_evaluation.push_back(time);  // The first time need to initialize
-    }
+    // Time Test for Nonlinear Cost Evaluation
+    // std::vector<double> times_evaluation;
+    // times_evaluation.reserve(n_repeat);
 
-    double average_time = std::accumulate(times_evaluation.begin(), times_evaluation.end(), 0.0) / n_repeat;
-    double min_time = *std::min_element(times_evaluation.begin(), times_evaluation.end());
-    double max_time = *std::max_element(times_evaluation.begin(), times_evaluation.end());
+    // for (int i=0; i < n_repeat+1; i++){
+    //     timer.start();
+    //     auto result_cuda = factor_cost_vector_cuda_time();
+    //     double time = timer.end_mis();
+    //     if (i != 0)
+    //     times_evaluation.push_back(time);  // The first time need to initialize
+    // }
 
-    std::cout << "% " << _vec_nonlinear_factors.size() + 2 << std::endl;
-    std::cout << "% GPU average: " << average_time << " ms" << std::endl;
-    std::cout << "% GPU min: " << min_time << " ms" << std::endl;
-    std::cout << "% GPU max: " << max_time << " ms" << std::endl;
+    // double average_time = std::accumulate(times_evaluation.begin(), times_evaluation.end(), 0.0) / n_repeat;
+    // double min_time = *std::min_element(times_evaluation.begin(), times_evaluation.end());
+    // double max_time = *std::max_element(times_evaluation.begin(), times_evaluation.end());
 
-    std::cout << "% [ " << times_evaluation[0];
-    for (int i = 1; i < times_evaluation.size(); ++i) {
-        std::cout << ", " << times_evaluation[i];
-    }
-    std::cout << " ]" << std::endl;
+    // std::cout << "% " << _vec_nonlinear_factors.size() + 2 << std::endl;
+    // std::cout << "% GPU average: " << average_time << " ms" << std::endl;
+    // std::cout << "% GPU min: " << min_time << " ms" << std::endl;
+    // std::cout << "% GPU max: " << max_time << " ms" << std::endl;
+
+    // std::cout << "% [ " << times_evaluation[0];
+    // for (int i = 1; i < times_evaluation.size(); ++i) {
+    //     std::cout << ", " << times_evaluation[i];
+    // }
+    // std::cout << " ]" << std::endl;
 
     // std::vector<double> times_optimization;
     // times_optimization.reserve(n_repeat);
@@ -579,6 +587,47 @@ void GVIGH<Factor, CudaClass>::time_test()
     //     std::cout << ", " << times_optimization[i];
     // }
     // std::cout << " ]" << std::endl;
+
+
+    // // Inverse Time Comparison
+    // std::vector<double> times_GBP, times_inverse;
+    // times_GBP.reserve(n_repeat);
+    // times_inverse.reserve(n_repeat);
+
+    // for (int i=0; i < n_repeat+1; i++){
+    //     timer.start();
+    //     _covariance = inverse_GBP(_precision);
+    //     double time = timer.end_mis();
+    //     if (i != 0)
+    //     times_GBP.push_back(time);  // The first time need to initialize
+    // }
+
+    // for (int i=0; i < n_repeat+1; i++){
+    //     timer.start();
+    //     _covariance = inverse(_precision);
+    //     double time = timer.end_mis();
+    //     if (i != 0)
+    //     times_inverse.push_back(time);  // The first time need to initialize
+    // }
+
+    // double average_time = std::accumulate(times_GBP.begin(), times_GBP.end(), 0.0) / n_repeat;
+
+    // std::cout << "Dimension: " << _dim << std::endl;
+    // std::cout << "% GBP average: " << average_time << " ms" << std::endl;
+
+    // std::cout << "% [" << times_GBP[0];
+    // for (int i = 1; i < times_GBP.size(); ++i) {
+    //     std::cout << ", " << times_GBP[i];
+    // }
+    // std::cout << "]" << std::endl;
+
+    // average_time = std::accumulate(times_inverse.begin(), times_inverse.end(), 0.0) / n_repeat;
+    // std::cout << "% Inverse average: " << average_time << " ms" << std::endl;
+    // std::cout << "% [" << times_inverse[0];
+    // for (int i = 1; i < times_inverse.size(); ++i) {
+    //     std::cout << ", " << times_inverse[i];
+    // }
+    // std::cout << "]" << std::endl;
 
     cuda_free();
 
