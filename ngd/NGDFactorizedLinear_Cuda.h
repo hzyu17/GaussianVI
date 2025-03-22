@@ -112,7 +112,6 @@ public:
 
         // helper vectors
         MatrixXd tmp{MatrixXd::Zero(_dim, _dim)};
-        MatrixXd tmp_cuda{MatrixXd::Zero(_dim, _dim)};
 
         // partial V / partial mu
         this->_Vdmu = (2 * _Lambda.transpose() * _target_precision * (_Lambda*_mu - _Psi*_target_mean)) * constant();
@@ -121,7 +120,7 @@ public:
         MatrixXd AT_precision_A = _Lambda.transpose() * _target_precision * _Lambda;
 
         // partial V^2 / partial mu*mu^T
-        this->_Vddmu = 2 * AT_precision_A * constant();
+        this->_Vddmu = (AT_precision_A + AT_precision_A.transpose()) * constant();
         this->_Vddmu = this->_Vddmu / this->temperature();
     }
 

@@ -327,12 +327,12 @@ public:
 
   // Body sphere variables
   int _num_spheres;
+  int _num_joints;
   Eigen::VectorXi _frames;
   Eigen::MatrixXd _centers; // Note: centers must be constructed in row-major form (each center belongs to a row)
 
   int* _frames_data;
   double* _centers_data;
-  int _num_joints;
 
 private:
 
@@ -343,7 +343,8 @@ public:
     ForwardKinematics(const Eigen::VectorXd& a, const Eigen::VectorXd& alpha,
                       const Eigen::VectorXd& d, const Eigen::VectorXd& theta_bias,
                       const Eigen::VectorXi& frames, const Eigen::MatrixXd& centers) :
-      _a(a), _alpha(alpha), _d(d), _theta_bias(theta_bias), _num_spheres(frames.size()), _frames(frames), _centers(centers), _num_joints(a.size())
+      _a(a), _alpha(alpha), _d(d), _theta_bias(theta_bias), _frames(frames), _centers(centers), 
+      _num_joints(a.size()), _num_spheres(frames.size())
       {
           _a_data = _a.data();
           _alpha_data = _alpha.data();
@@ -409,10 +410,10 @@ public:
     }
 
     __device__ inline void identity(double* M) const {
-        M[0]  = 1; M[1]  = 0; M[2]  = 0; M[3]  = 0;
-        M[4]  = 0; M[5]  = 1; M[6]  = 0; M[7]  = 0;
-        M[8]  = 0; M[9]  = 0; M[10] = 1; M[11] = 0;
-        M[12] = 0; M[13] = 0; M[14] = 0; M[15] = 1;
+        M[0]  = 1; M[4]  = 0; M[8]  = 0; M[12] = 0;
+        M[1]  = 0; M[5]  = 1; M[9]  = 0; M[13] = 0;
+        M[2]  = 0; M[6]  = 0; M[10] = 1; M[14] = 0;
+        M[3]  = 0; M[7]  = 0; M[11] = 0; M[15] = 1;
     }
 
     __device__ inline void mat_mul(const double* A, const double* B, double* C, const int dim) const {
@@ -432,26 +433,11 @@ public:
         double st = sin(theta);
         double ca = cos(alpha(i));
         double sa = sin(alpha(i));
-        // Column 0
-        mat[0] = ct;
-        mat[1] = st;
-        mat[2] = 0;
-        mat[3] = 0;
-        // Column 1
-        mat[4] = -st * ca;
-        mat[5] = ct * ca;
-        mat[6] = sa;
-        mat[7] = 0;
-        // Column 2
-        mat[8]  = st * sa;
-        mat[9]  = -ct * sa;
-        mat[10] = ca;
-        mat[11] = 0;
-        // Column 3
-        mat[12] = a(i) * ct;
-        mat[13] = a(i) * st;
-        mat[14] = d(i);
-        mat[15] = 1;
+        // DH Matrix
+        mat[0] = ct; mat[4] = -st * ca; mat[8]  = st * sa;  mat[12] = a(i) * ct;
+        mat[1] = st; mat[5] = ct * ca;  mat[9]  = -ct * sa; mat[13] = a(i) * st;
+        mat[2] = 0;  mat[6] = sa;       mat[10] = ca;       mat[14] = d(i);
+        mat[3] = 0;  mat[7] = 0;        mat[11] = 0;        mat[15] = 1;
     }
 
     // access functions
@@ -692,7 +678,7 @@ public:
 
       __device__ double cost_obstacle(const double* pose){
         constexpr int n_balls = 5;
-        double slope = 1.0; // I can use sigma to replace the slope
+        double slope = 1.0;
 
         Point2 checkpoints[n_balls];
         vec_balls(pose, n_balls, checkpoints);
@@ -802,11 +788,11 @@ public:
 class CudaOperation_3dArm : public CudaOperation_Base<CudaOperation_3dArm>{
 public:
     CudaOperation_3dArm(const Eigen::VectorXd& a, const Eigen::VectorXd& alpha, const Eigen::VectorXd& d, const Eigen::VectorXd& theta_bias,
-                        const Eigen::VectorXd& radii, const Eigen::VectorXi& frames, const Eigen::MatrixXd& centers,
+                        const Eigen::VectorXd& radii, const Eigen::VectorXi& frames, const Eigen::MatrixXd& centers, const std::string& sdf_name,
                         double cost_sigma = 15.5, double epsilon = 0.5):
     _radii(radii), CudaOperation_Base(cost_sigma, epsilon)
     {
-        std::string sdf_file = source_root + "/maps/WAM/WAMDeskDataset_cereal.bin";
+        std::string sdf_file = source_root + sdf_name + "_cereal.bin";
         
         hostCost._epsilon = _epsilon;
         hostCost._sigma = _sigma;
@@ -815,20 +801,6 @@ public:
 
         _data_matrix = hostCost._sdf.data_matrix_;
     }
-
-    // CudaOperation_3dArm(const Eigen::VectorXd& a, const Eigen::VectorXd& alpha, const Eigen::VectorXd& d, const Eigen::VectorXd& theta_bias,
-    //                     const Eigen::VectorXd& radii, const Eigen::VectorXi& frames, const Eigen::MatrixXd& centers,
-    //                     double cost_sigma, double epsilon, gpmp2::SignedDistanceField sdf):
-    // _radii(radii), CudaOperation_Base(cost_sigma, epsilon) // we can replace the input with the sdf class we defined
-    // {
-    //     _sdf = SignedDistanceField{sdf.origin(), sdf.cell_size(), sdf.raw_data()};
-
-    //     _radii_data = _radii.data();
-    //     const int num_spheres = frames.size();
-    //     _fk = ForwardKinematics(a, alpha, d, theta_bias, num_spheres, frames, centers);
-
-    //     _data_matrix = _sdf.data_matrix_;
-    // }
 
     void Cuda_init(const MatrixXd& weights, const MatrixXd& zeromean, const int n_states) override{
       GH_parameters_init(weights, zeromean, n_states);

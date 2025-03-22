@@ -331,6 +331,11 @@ void CudaOperation_Base<Derived>::ddmuIntegration(MatrixXd& results){
     ddmu_function<<<blockSize1, threadperblock>>>(_sigmapts_gpu, _mu_gpu, _func_value_gpu, vec_gpu, _sigmapts_rows, _dim_conf, _n_states);
     cudaDeviceSynchronize();
 
+    cudaError_t err = cudaGetLastError();
+    if (err != cudaSuccess) {
+        printf("ddmuComputation kernel error: %s\n", cudaGetErrorString(err));
+    }
+
     // Kernel 2: Obtain the result by multiplying the pts and the weights
     dim3 blockSize2((results.cols() + threadperblock.x - 1) / threadperblock.x, (results.rows() + threadperblock.y - 1) / threadperblock.y);
 
@@ -338,7 +343,7 @@ void CudaOperation_Base<Derived>::ddmuIntegration(MatrixXd& results){
     cudaDeviceSynchronize();
     cudaMemcpy(results.data(), result_gpu, results.size() * sizeof(double), cudaMemcpyDeviceToHost);
 
-    cudaError_t err = cudaGetLastError();
+    err = cudaGetLastError();
     if (err != cudaSuccess) {
         printf("ddmuIntegration kernel error: %s\n", cudaGetErrorString(err));
     }
