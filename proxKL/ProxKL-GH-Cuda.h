@@ -47,6 +47,7 @@ public:
             _Vdmu(VectorXd::Zero(Base::_dim)),
             _Vddmu(SpMat(Base::_dim, Base::_dim))
         {
+            Base::construct_sparse_precision();
             _Vdmu.setZero();
             _Vddmu.setZero();
         }
