@@ -56,6 +56,7 @@ std::tuple<double, VectorXd, SpMat> ProxKLGH<Factor, CudaClass>::onestep_linesea
 template <typename Factor, typename CudaClass>
 double ProxKLGH<Factor, CudaClass>::bisection_stepsize(const VectorXd& dmu, const SpMat& dprecision)
 {
+    Timer timer;
     SpMat new_precision;
     VectorXd new_mu;
     new_mu.setZero(); new_precision.setZero();
@@ -70,21 +71,35 @@ double ProxKLGH<Factor, CudaClass>::bisection_stepsize(const VectorXd& dmu, cons
     Eigen::BiCGSTAB<SpMat, IncompleteLUT<double>> solver;
     solver.setTolerance(1e-6);
 
+    // timer.start();
+    VectorXd prior_precision_mu = _precision_prior * _mu_prior / temperature;
+    VectorXd current_precision_mu = this->_precision * this->_mu;
+    SpMat precision_term = _precision_prior / temperature;
+    VectorXd dmu_term = -dmu / temperature;
+    SpMat dprecision_term = dprecision / temperature;
+    // std::cout << "Time for preparing the terms: " << timer.end_mus_output() << " us" << std::endl;
+
     while (log_upper - log_lower > log_threshold)
     {
         double log_mid = (log_lower + log_upper) / 2;
         double step_size = std::exp(log_mid);
 
-        SpMat combined_precision = _precision_prior / temperature + this->_precision / step_size;
-        VectorXd combined_mu = -dmu / temperature + _precision_prior * _mu_prior / temperature + this->_precision * this->_mu / step_size;
+        // timer.start();
+        SpMat combined_precision = precision_term + this->_precision / step_size;
+        VectorXd combined_mu = -dmu_term + prior_precision_mu + current_precision_mu / step_size;
+        // std::cout << "Time for preparing the combined terms: " << timer.end_mus_output() << " us" << std::endl;
 
+        // timer.start();
         new_mu = solver.compute(combined_precision).solve(combined_mu);
-        new_precision = (dprecision / temperature + _precision_prior / temperature + this->_precision / step_size) * step_size / (step_size + 1);
+        new_precision = (dprecision_term + precision_term + this->_precision / step_size) * step_size / (step_size + 1);
+        // std::cout << "Time for solving the linear system: " << timer.end_mus_output() << " us" << std::endl;
 
         // Compute KL divergence and check for PD indirectly
-        double KL = KL_Divergence(new_mu, this->_mu, new_precision, this->_precision);
+        // timer.start();
+        double KL = KL_Divergence(this->_mu, this->_precision, this->_covariance, new_mu, new_precision);
+
         // std::cout << "Error of the solver: " << (combined_precision * new_mu - combined_mu).norm() / combined_mu.norm() * 100 << "%" << std::endl;
-        // std::cout << "KL Divergence: " << KL << std::endl << std::endl;
+        // std::cout << "Time for computing KL divergence: " << timer.end_mus_output() << " us" << std::endl << std::endl;
 
         if (std::isnan(KL) || KL >= epsilon) {
             log_upper = log_mid;
@@ -124,7 +139,8 @@ std::tuple<double, VectorXd, SpMat> ProxKLGH<Factor, CudaClass>::bisection_updat
         new_precision = (dprecision / temperature + _precision_prior / temperature + this->_precision / step_size) * step_size / (step_size + 1);
 
         // Compute KL divergence and check for PD indirectly
-        double KL = KL_Divergence(new_mu, this->_mu, new_precision, this->_precision);
+        double KL = KL_Divergence(this->_mu, this->_precision, this->_covariance, new_mu, new_precision);
+
         // std::cout << "KL Divergence: " << KL << std::endl << std::endl;
 
         if (std::isnan(KL) || KL >= epsilon) {
@@ -161,13 +177,14 @@ void ProxKLGH<Factor, CudaClass>::optimize(std::optional<bool> verbose)
     bool is_lowtemp = true;
     bool converged = false;
 
-    Base::cuda_init(Base::_vec_nonlinear_factors.size());
+    Timer timer;
 
-    // _sigma_rows = Base::_vec_nonlinear_factors[0]->_sigma_rows;
-    // _dim_conf = Base::_vec_nonlinear_factors[0]->_dim_conf;
+    timer.start();
+    Base::cuda_init(Base::_vec_nonlinear_factors.size());
+    std::cout << "Time for initializing cuda: " << timer.end_mus_output() << " us" << std::endl;
 
     if (this->_save_data){
-        Base::_res_recorder.init_data();
+        Base::_res_recorder.init_data(Base::_save_covariance);
     }
     
     for (int i_iter = 0; i_iter < Base::_niters; i_iter++)
@@ -186,10 +203,15 @@ void ProxKLGH<Factor, CudaClass>::optimize(std::optional<bool> verbose)
             is_lowtemp = false;
         }
 
-        auto [cost_iter, fact_costs_iter, dmu, dprecision] = factor_cost_vector_cuda(this->_mu, this->_precision);
-
         if (is_verbose){
             std::cout << "========= iteration " << i_iter << " ========= " << std::endl;
+        }
+
+        timer.start();
+        auto [cost_iter, fact_costs_iter, dmu, dprecision] = factor_cost_vector_cuda(this->_mu, this->_precision);
+        std::cout << "Time for computing factor costs: " << timer.end_mus_output() << " us" << std::endl;
+
+        if (is_verbose){
             std::cout << "--- cost_iter ---" << std::endl << cost_iter << std::endl;
             // std::cout << "Factor Costs:" << fact_costs_iter.transpose() << std::endl;
         }
@@ -198,9 +220,12 @@ void ProxKLGH<Factor, CudaClass>::optimize(std::optional<bool> verbose)
             Base::_res_recorder.update_data(this->_mu, this->_covariance, this->_precision, cost_iter, fact_costs_iter);
         }
         
+        timer.start();
         int cnt = 0;
         double step_size = bisection_stepsize(dmu, dprecision);
+        std::cout << "Time for bisection step size: " << timer.end_mus_output() << " us" << std::endl;
 
+        timer.start();
         // backtracking
         while (true)
         {
@@ -238,6 +263,7 @@ void ProxKLGH<Factor, CudaClass>::optimize(std::optional<bool> verbose)
             // new step size
             step_size = step_size * 0.75;
         }
+        std::cout << "Time for backtracking: " << timer.end_mus_output() << " us" << std::endl;
     }
 
     Base::cuda_free();
@@ -384,28 +410,14 @@ std::tuple<double, VectorXd, VectorXd, SpMat>ProxKLGH<Factor, CudaClass>::factor
 
     nonlinear_fac_cost = nonlinear_fac_cost / this ->_temperature;
 
-    int cnt = 0;
-
-    // Use a private counter for each thread to avoid race conditions
-    int thread_cnt = 0;
-
-    // #pragma omp for
-    for (int i = 0; i < Base::_vec_factors.size(); ++i)
+    #pragma omp parallel for
+    for (int i = 0; i < Base::_vec_factors.size(); i++)
     {
         auto &opt_k = Base::_vec_factors[i];
-        if (opt_k->linear_factor())
-        {
-            double cost_value = opt_k->fact_cost_value(this->_mu, this->_covariance);
-            fac_costs(thread_cnt) = cost_value;
-        }
+        if (opt_k->linear_factor()) // matrix multiplication between dim_state x dim_state and dim_state * dim_state
+            fac_costs(i) = opt_k->fact_cost_value(this->_mu, this->_covariance);
         else
-            fac_costs(thread_cnt) = nonlinear_fac_cost(opt_k->_start_index - 1);
-        thread_cnt += 1;
-    }
-
-    #pragma omp critical
-    {
-        cnt += thread_cnt; // Safely update the global counter
+            fac_costs(i) = nonlinear_fac_cost(opt_k->_start_index - 1);
     }
 
     double value = fac_costs.sum();
@@ -421,18 +433,6 @@ std::tuple<double, VectorXd, VectorXd, SpMat>ProxKLGH<Factor, CudaClass>::factor
     std::cout << "Prior Cost: " << prior_cost << std::endl;
     std::cout << "Collision Cost: " << collision_cost << std::endl;
     std::cout << "Entropy: " << entropy << std::endl;
-
-    // SparseLDLT ldlt_prior(_precision_prior);
-
-    // SpMat precision_prior_times_Cov = _precision_prior * this->_covariance;
-    // double trace_term = precision_prior_times_Cov.diagonal().sum();
-    // double quadratic_term = (fill_joint_mean - _mu_prior).transpose() * _precision_prior * (fill_joint_mean - _mu_prior);
-
-    // std::cout << "Joint linear cost: " << (trace_term + quadratic_term) / (2 * this->_temperature) << std::endl;
-    // std::cout << "Error of the joint linear cost: " << (trace_term + quadratic_term) / (2 * this->_temperature) - prior_cost << std::endl;
-
-    // double cost_joint = nonlinear_fac_cost.sum() + (trace_term + quadratic_term) / (2 * this->_temperature) + vec_D.array().log().sum() / 2;
-
 
     _Vdmu.setZero();
     _Vddmu.setZero();
@@ -636,20 +636,56 @@ double ProxKLGH<Factor, CudaClass>::cost_value_no_entropy()
     return value; // / _temperature;
 }
 
+template <typename Factor, typename CudaClass>
+double ProxKLGH<Factor, CudaClass>::KL_Divergence(const VectorXd& mean_current, const SpMat& precision_current, const SpMat& covariance_current, const VectorXd& mean_new, const SpMat& precision_new)
+{
+    SparseLDLT ldlt_current(precision_current);
+    SparseLDLT ldlt_new(precision_new);
+
+    VectorXd vec_D_current = ldlt_current.vectorD();
+    VectorXd vec_D_new = ldlt_new.vectorD();
+
+    double trace_term = 0;
+    for (int k = 0; k < precision_new.outerSize(); ++k) {
+        for (typename SpMat::InnerIterator it(precision_new, k); it; ++it) {
+            int i = it.row();
+            int j = it.col();
+            trace_term += it.value() * covariance_current.coeff(i, j);
+        }
+    }
+
+    VectorXd diff = mean_new - mean_current;
+    double quadratic_term = diff.transpose() * precision_new * diff;
+
+    double log_term = vec_D_current.array().log().sum() - vec_D_new.array().log().sum();
+
+    double KL = (trace_term + quadratic_term + log_term - mean_current.size()) / 2.0;
+
+    return KL;
+}
+
 // There might be some problem in the KL divergence calculation
 template <typename Factor, typename CudaClass>
-double ProxKLGH<Factor, CudaClass>::KL_Divergence(const VectorXd& mean_former, const VectorXd& mean_latter, const SpMat& precision_former, const SpMat& precision_latter)
+double ProxKLGH<Factor, CudaClass>::KL_Divergence_general(const VectorXd& mean_former, const VectorXd& mean_latter, const SpMat& precision_former, const SpMat& precision_latter)
 {
+    Timer timer;
+
     // Compute the KL divergence
     int dim_state = 6;
+    timer.start();
     SparseLDLT ldlt_former(precision_former);
     SparseLDLT ldlt_latter(precision_latter);
 
     VectorXd vec_D_former = ldlt_former.vectorD();
     VectorXd vec_D_latter = ldlt_latter.vectorD();
+    std::cout << "Time for computing LDLT: " << timer.end_mus_output() << " us" << std::endl;
 
     // There's some problem with GBP inverse here, find another method that works fast and accurately
-    SpMat covariance_former = this->inverse(precision_former);
+    timer.start();
+    SpMat covariance_former = this->inverse_GBP(precision_former);
+    std::cout << "Time for computing GBP inverse: " << timer.end_mus_output() << " us" << std::endl;
+
+    timer.start();
     double trace_term = 0;
     for (int k = 0; k < precision_latter.outerSize(); ++k) {
         for (typename SpMat::InnerIterator it(precision_latter, k); it; ++it) {
@@ -658,19 +694,22 @@ double ProxKLGH<Factor, CudaClass>::KL_Divergence(const VectorXd& mean_former, c
             trace_term += it.value() * covariance_former.coeff(i, j);
         }
     }
+    std::cout << "Time for computing trace term: " << timer.end_mus_output() << " us" << std::endl;
 
     // SpMat covariance = this -> inverse(precision_former);
-    
 
     // // These two methods are equivalent, but now the result is different
     // SpMat covariance = this -> inverse(precision_former);
     // SpMat precision_prior_times_Cov = precision_latter * covariance;
     // double trace_term_inverse = precision_prior_times_Cov.diagonal().sum();
 
-
+    timer.start();
     double quadratic_term = (mean_latter - mean_former).transpose() * precision_latter * (mean_latter - mean_former);
+    std::cout << "Time for computing quadratic term: " << timer.end_mus_output() << " us" << std::endl;
 
+    timer.start();
     double log_term = vec_D_former.array().log().sum() - vec_D_latter.array().log().sum();
+    std::cout << "Time for computing log term: " << timer.end_mus_output() << " us" << std::endl;
 
     // std::cout << "vec_D_former min: " << vec_D_former.minCoeff() << std::endl;
     // std::cout << "vec_D_former max: " << vec_D_former.maxCoeff() << std::endl;

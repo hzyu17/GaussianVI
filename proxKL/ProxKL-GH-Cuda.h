@@ -47,7 +47,7 @@ public:
             _Vdmu(VectorXd::Zero(Base::_dim)),
             _Vddmu(SpMat(Base::_dim, Base::_dim))
         {
-            Base::construct_sparse_precision();
+            // Base::construct_sparse_precision();
             _Vdmu.setZero();
             _Vddmu.setZero();
         }
@@ -109,7 +109,9 @@ public:
 
     void optimize_linear(std::optional<bool> verbose=std::nullopt);
 
-    double KL_Divergence(const VectorXd& mean_former, const VectorXd& mean_latter, const SpMat& precision_former, const SpMat& precision_latter);
+    double KL_Divergence_general(const VectorXd& mean_former, const VectorXd& mean_latter, const SpMat& precision_former, const SpMat& precision_latter);
+
+    double KL_Divergence(const VectorXd& mean_current, const SpMat& precision_current, const SpMat& covariance_current, const VectorXd& mean_new, const SpMat& precision_new);
 
     /**
      * @brief Compute the total cost function value given a state, using current values.
