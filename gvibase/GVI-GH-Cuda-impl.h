@@ -1036,6 +1036,7 @@ SpMat GVIGH<Factor, CudaClass>::chain_splash_GBP(const SpMat &Precision)
 template <typename Factor, typename CudaClass>
 SpMat GVIGH<Factor, CudaClass>::inverse_GBP(const SpMat &Precision)
 {
+    Timer timer;
     std::vector<Message> factors(2*_num_states-1);
     std::vector<Message> joint_factors(_num_states-1);
     Message variable_message;
@@ -1044,6 +1045,8 @@ SpMat GVIGH<Factor, CudaClass>::inverse_GBP(const SpMat &Precision)
 
     // Extract the factors from the precision matrix
     // The variable in factors are 0, {0,1}, 1, {1,2}, 2, ..., {_num_states-1,_num_states}, _num_states
+    timer.start();
+    # pragma omp parallel for
     for (int i = 0; i < 2*_num_states-1; i++) {
         int var = i / 2;
         if (i % 2 == 0) {
@@ -1062,8 +1065,10 @@ SpMat GVIGH<Factor, CudaClass>::inverse_GBP(const SpMat &Precision)
             joint_factors[var] = {variable, Precision.block(_dim_state * var, _dim_state * var, 2 * _dim_state, 2 * _dim_state)};
         }
     }
+    std::cout << "Factor construction: " << timer.end_mus_output() << " us" << std::endl;
     
     // Initialize message
+    timer.start();
     std::vector<Message> forward_messages(_num_states);
     std::vector<Message> backward_messages(_num_states);
     for (int i = 0; i < _num_states; i++) {
@@ -1072,7 +1077,9 @@ SpMat GVIGH<Factor, CudaClass>::inverse_GBP(const SpMat &Precision)
     }
     forward_messages[0] = {VectorXd::Zero(1), MatrixXd::Zero(_dim_state, _dim_state)};
     backward_messages.back() = {VectorXd::Constant(1, _num_states-1), MatrixXd::Zero(_dim_state, _dim_state)};
+    std::cout << "Message initialization: " << timer.end_mus_output() << " us" << std::endl;
 
+    timer.start();
     // Calculate messages between factors and variables
     for (int i = 0; i < _num_states - 1; i++) {
         variable_message = calculate_variable_message(forward_messages[i], factors[2 * i]);
@@ -1081,6 +1088,7 @@ SpMat GVIGH<Factor, CudaClass>::inverse_GBP(const SpMat &Precision)
         variable_message = calculate_variable_message(backward_messages[index], factors[2 * index]);
         backward_messages[index - 1] = calculate_factor_message(variable_message, index - 1, factors[2 * index - 1]);
     }
+    std::cout << "Message Passing: " << timer.end_mus_output() << " us" << std::endl;
 
     if (_num_states == 1){
         MatrixXd lambda = forward_messages[0].second + backward_messages[0].second + factors[0].second;
@@ -1088,15 +1096,72 @@ SpMat GVIGH<Factor, CudaClass>::inverse_GBP(const SpMat &Precision)
         covariance.block(0, 0, _dim_state, _dim_state) = variance;
     }
 
+    timer.start();
+    #pragma omp parallel for
     for (int i = 0; i < _num_states - 1; ++i) {
         MatrixXd lambda_joint = joint_factors[i].second;
         lambda_joint.block(0, 0, _dim_state, _dim_state) += forward_messages[i].second;
         lambda_joint.block(_dim_state, _dim_state, _dim_state, _dim_state) += backward_messages[i + 1].second;
         MatrixXd variance_joint = lambda_joint.inverse();
-        covariance.block(i*_dim_state, i*_dim_state, 2*_dim_state, 2*_dim_state) = variance_joint;
+
+        // Update the covariance matrix
+        covariance.block(i * _dim_state, i * _dim_state, _dim_state, _dim_state) = variance_joint.block(0, 0, _dim_state, _dim_state);
+        covariance.block(i * _dim_state, (i + 1) * _dim_state, _dim_state, _dim_state) = variance_joint.block(0, _dim_state, _dim_state, _dim_state);
+        covariance.block((i + 1) * _dim_state, i * _dim_state, _dim_state, _dim_state) = variance_joint.block(_dim_state, 0, _dim_state, _dim_state);
+
+        // For the last block, update the bottom-right sub-block
+        if (i == _num_states - 2) {
+            covariance.block((i + 1) * _dim_state, (i + 1) * _dim_state, _dim_state, _dim_state) = variance_joint.block(_dim_state, _dim_state, _dim_state, _dim_state);
+        }
+    }
+    std::cout << "Marginal Covariance omp: " << timer.end_mus_output() << " us" << std::endl;
+
+    timer.start();
+    // Construct a sparse matrix using Triplets
+    std::vector<Eigen::Triplet<double>> tripletList;
+    int nonZeroCount = (3 * _num_states - 2) * _dim_state * _dim_state;
+    tripletList.reserve(nonZeroCount);
+
+    for (int i = 0; i < _num_states; ++i) {
+        int row_offset = i * _dim_state;
+        int col_offset = i * _dim_state;
+        MatrixXd diagBlock = covariance.block(row_offset, col_offset, _dim_state, _dim_state);
+        for (int r = 0; r < _dim_state; ++r) {
+            for (int c = 0; c < _dim_state; ++c) {
+                tripletList.emplace_back(row_offset + r, col_offset + c, diagBlock(r, c));
+            }
+        }
     }
 
-    return covariance.sparseView();
+    // Add upper triangular off-diagonal blocks
+    for (int i = 0; i < _num_states - 1; ++i) {
+        int row_offset = i * _dim_state;
+        int col_offset = (i + 1) * _dim_state;
+        MatrixXd upperBlock = covariance.block(row_offset, col_offset, _dim_state, _dim_state);
+        for (int r = 0; r < _dim_state; ++r) {
+            for (int c = 0; c < _dim_state; ++c) {
+                tripletList.emplace_back(row_offset + r, col_offset + c, upperBlock(r, c));
+            }
+        }
+    }
+
+    // Add lower triangular off-diagonal blocks
+    for (int i = 0; i < _num_states - 1; ++i) {
+        int row_offset = (i + 1) * _dim_state;
+        int col_offset = i * _dim_state;
+        MatrixXd lowerBlock = covariance.block(row_offset, col_offset, _dim_state, _dim_state);
+        for (int r = 0; r < _dim_state; ++r) {
+            for (int c = 0; c < _dim_state; ++c) {
+                tripletList.emplace_back(row_offset + r, col_offset + c, lowerBlock(r, c));
+            }
+        }
+    }
+
+    SpMat covariance_sparse(covariance.rows(), covariance.cols());
+    covariance_sparse.setFromTriplets(tripletList.begin(), tripletList.end());
+    std::cout << "Conversion to sparse (Triplets): " << timer.end_mus_output() << " us" << std::endl;
+
+    return covariance_sparse;
 }
 
 /**
@@ -1225,3 +1290,140 @@ VectorXd GVIGH<Factor, CudaClass>::solveWithCuSolverQR(const SpMat& Vddmu, const
 
 
 #endif // GVI_GH_IMPL_H
+
+
+
+
+
+// /**
+//  * @brief Compute the covariances using Gaussian Belief Propagation.
+//  */
+// template <typename Factor, typename CudaClass>
+// SpMat GVIGH<Factor, CudaClass>::inverse_GBP(const SpMat &Precision)
+// {
+//     Timer timer;
+//     std::vector<Message> factors(2*_num_states-1);
+//     std::vector<Message> joint_factors(_num_states-1);
+//     Message variable_message;
+//     MatrixXd covariance(_dim, _dim);
+//     MatrixXd covariance_joint(_dim, _dim);
+//     covariance.setZero();
+//     covariance_joint.setZero();
+
+//     // Extract the factors from the precision matrix
+//     // The variable in factors are 0, {0,1}, 1, {1,2}, 2, ..., {_num_states-1,_num_states}, _num_states
+//     timer.start();
+//     for (int i = 0; i < 2*_num_states-1; i++) {
+//         int var = i / 2;
+//         if (i % 2 == 0) {
+//             VectorXd variable(1);
+//             variable << var;
+//             MatrixXd lambda = Precision.block(_dim_state * var, _dim_state * var, _dim_state, _dim_state);
+//             factors[i] = {variable, lambda};
+//         }
+//         else {
+//             VectorXd variable(2);
+//             variable << var, var + 1;
+//             MatrixXd lambda = MatrixXd::Zero(2 * _dim_state, 2 * _dim_state);
+//             lambda.block(0, _dim_state, _dim_state, _dim_state) = Precision.block(_dim_state * var, _dim_state * (var + 1), _dim_state, _dim_state);
+//             lambda.block(_dim_state, 0, _dim_state, _dim_state) = Precision.block(_dim_state * (var + 1), _dim_state * var, _dim_state, _dim_state);
+//             factors[i] = {variable, lambda};
+//             joint_factors[var] = {variable, Precision.block(_dim_state * var, _dim_state * var, 2 * _dim_state, 2 * _dim_state)};
+//         }
+//     }
+//     std::cout << "Factor construction: " << timer.end_mus_output() << " us" << std::endl;
+    
+//     // Initialize message
+//     std::vector<Message> forward_messages(_num_states);
+//     std::vector<Message> backward_messages(_num_states);
+//     for (int i = 0; i < _num_states; i++) {
+//         forward_messages[i].second.setZero();
+//         backward_messages[i].second.setZero();
+//     }
+//     forward_messages[0] = {VectorXd::Zero(1), MatrixXd::Zero(_dim_state, _dim_state)};
+//     backward_messages.back() = {VectorXd::Constant(1, _num_states-1), MatrixXd::Zero(_dim_state, _dim_state)};
+
+//     timer.start();
+//     // Calculate messages between factors and variables
+//     for (int i = 0; i < _num_states - 1; i++) {
+//         variable_message = calculate_variable_message(forward_messages[i], factors[2 * i]);
+//         forward_messages[i + 1] = calculate_factor_message(variable_message, i + 1, factors[2 * i + 1]);
+//         int index = _num_states - 1 - i;
+//         variable_message = calculate_variable_message(backward_messages[index], factors[2 * index]);
+//         backward_messages[index - 1] = calculate_factor_message(variable_message, index - 1, factors[2 * index - 1]);
+//     }
+//     std::cout << "Message Passing: " << timer.end_mus_output() << " us" << std::endl;
+
+//     if (_num_states == 1){
+//         MatrixXd lambda = forward_messages[0].second + backward_messages[0].second + factors[0].second;
+//         MatrixXd variance = lambda.inverse();
+//         covariance.block(0, 0, _dim_state, _dim_state) = variance;
+//     }
+
+//     timer.start();
+//     #pragma omp parallel for
+//     for (int i = 0; i < _num_states - 1; ++i) {
+//         MatrixXd lambda_joint = joint_factors[i].second;
+//         lambda_joint.block(0, 0, _dim_state, _dim_state) += forward_messages[i].second;
+//         lambda_joint.block(_dim_state, _dim_state, _dim_state, _dim_state) += backward_messages[i + 1].second;
+//         MatrixXd variance_joint = lambda_joint.inverse();
+
+//         // Update the covariance matrix
+//         covariance.block(i * _dim_state, i * _dim_state, _dim_state, _dim_state) = variance_joint.block(0, 0, _dim_state, _dim_state);
+//         covariance.block(i * _dim_state, (i + 1) * _dim_state, _dim_state, _dim_state) = variance_joint.block(0, _dim_state, _dim_state, _dim_state);
+//         covariance.block((i + 1) * _dim_state, i * _dim_state, _dim_state, _dim_state) = variance_joint.block(_dim_state, 0, _dim_state, _dim_state);
+
+//         // For the last block, update the bottom-right sub-block
+//         if (i == _num_states - 2) {
+//             covariance.block((i + 1) * _dim_state, (i + 1) * _dim_state, _dim_state, _dim_state) = variance_joint.block(_dim_state, _dim_state, _dim_state, _dim_state);
+//         }
+//     }
+//     std::cout << "Marginal Covariance omp: " << timer.end_mus_output() << " us" << std::endl;
+
+//     timer.start();
+//     // Construct a sparse matrix using Triplets
+//     std::vector<Eigen::Triplet<double>> tripletList;
+//     int nonZeroCount = (3 * _num_states - 2) * _dim_state * _dim_state;
+//     tripletList.reserve(nonZeroCount);
+
+//     for (int i = 0; i < _num_states; ++i) {
+//         int row_offset = i * _dim_state;
+//         int col_offset = i * _dim_state;
+//         MatrixXd diagBlock = covariance.block(row_offset, col_offset, _dim_state, _dim_state);
+//         for (int r = 0; r < _dim_state; ++r) {
+//             for (int c = 0; c < _dim_state; ++c) {
+//                 tripletList.emplace_back(row_offset + r, col_offset + c, diagBlock(r, c));
+//             }
+//         }
+//     }
+
+//     // Add upper triangular off-diagonal blocks
+//     for (int i = 0; i < _num_states - 1; ++i) {
+//         int row_offset = i * _dim_state;
+//         int col_offset = (i + 1) * _dim_state;
+//         MatrixXd upperBlock = covariance.block(row_offset, col_offset, _dim_state, _dim_state);
+//         for (int r = 0; r < _dim_state; ++r) {
+//             for (int c = 0; c < _dim_state; ++c) {
+//                 tripletList.emplace_back(row_offset + r, col_offset + c, upperBlock(r, c));
+//             }
+//         }
+//     }
+
+//     // Add lower triangular off-diagonal blocks
+//     for (int i = 0; i < _num_states - 1; ++i) {
+//         int row_offset = (i + 1) * _dim_state;
+//         int col_offset = i * _dim_state;
+//         MatrixXd lowerBlock = covariance.block(row_offset, col_offset, _dim_state, _dim_state);
+//         for (int r = 0; r < _dim_state; ++r) {
+//             for (int c = 0; c < _dim_state; ++c) {
+//                 tripletList.emplace_back(row_offset + r, col_offset + c, lowerBlock(r, c));
+//             }
+//         }
+//     }
+
+//     SpMat covariance_sparse(covariance.rows(), covariance.cols());
+//     covariance_sparse.setFromTriplets(tripletList.begin(), tripletList.end());
+//     std::cout << "Conversion to sparse (Triplets): " << timer.end_mus_output() << " us" << std::endl;
+
+//     return covariance_sparse;
+// }
