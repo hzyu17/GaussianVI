@@ -58,6 +58,9 @@ protected:
     VectorXd _mu_prior;
     SpMat _precision_prior;
 
+    double _step_size_last = 0.0;
+    bool _temp_switch = true;
+
 public:
 /// ************************* Override functions for Prox-GVI algorithm *************************************
     bool isSymmetric(const Eigen::MatrixXd& matrix, double precision = 1e-10) {

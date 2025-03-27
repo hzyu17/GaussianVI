@@ -64,8 +64,15 @@ double ProxKLGH<Factor, CudaClass>::bisection_stepsize(const VectorXd& dmu, cons
 
     double log_lower = -2;
     double log_upper = 2;
-    double log_threshold = 0.01;
+    double log_threshold = 0.02;
     double epsilon = this->_alpha;
+
+    if (!_temp_switch) {
+        std::cout << "Narrower range" << std::endl;
+        log_lower = max(_step_size_last - 1, -2.0);
+        log_upper = min(_step_size_last + 1, 2.0);
+        log_threshold = 0.075;
+    }
 
     // update mu and precision matrix
     Eigen::BiCGSTAB<SpMat, IncompleteLUT<double>> solver;
@@ -110,6 +117,14 @@ double ProxKLGH<Factor, CudaClass>::bisection_stepsize(const VectorXd& dmu, cons
             log_lower = log_mid;
         }
     }
+
+    double final_step_size = (log_lower + log_upper) / 2;
+    std::cout << "Finial Step Size: " << final_step_size << std::endl;
+    double diff_step = final_step_size - _step_size_last;
+    if (abs(diff_step) > 0.75)
+        std::cout << "Step size difference: " << diff_step << std::endl;
+    
+    _step_size_last = final_step_size;
 
     return std::exp((log_lower + log_upper) / 2);
 }
@@ -204,6 +219,7 @@ void ProxKLGH<Factor, CudaClass>::optimize(std::optional<bool> verbose)
             }
             this->switch_to_high_temperature();
             is_lowtemp = false;
+            _temp_switch = true;
         }
 
         if (is_verbose){
@@ -226,6 +242,7 @@ void ProxKLGH<Factor, CudaClass>::optimize(std::optional<bool> verbose)
         timer.start();
         int cnt = 0;
         double step_size = bisection_stepsize(dmu, dprecision);
+        _temp_switch = false;
         std::cout << "Time for bisection step size: " << timer.end_mus_output() << " us" << std::endl;
 
         timer.start();
@@ -256,6 +273,7 @@ void ProxKLGH<Factor, CudaClass>::optimize(std::optional<bool> verbose)
                 if (is_lowtemp){
                     this->switch_to_high_temperature();
                     is_lowtemp = false;
+                    _temp_switch = true;
                 }else{
                     converged = true;
                 }
@@ -663,7 +681,7 @@ double ProxKLGH<Factor, CudaClass>::KL_Divergence(const VectorXd& mean_current, 
     double log_term = vec_D_current.array().log().sum() - vec_D_new.array().log().sum();
 
     double KL = (trace_term + quadratic_term + log_term - mean_current.size()) / 2.0;
-    std::cout << "KL Divergence: " << KL << std::endl;
+    // std::cout << "KL Divergence: " << KL << std::endl;
 
     return KL;
 }
