@@ -79,6 +79,8 @@ double ProxKLGH<Factor, CudaClass>::bisection_stepsize(const VectorXd& dmu, cons
     SpMat dprecision_term = dprecision / temperature;
     // std::cout << "Time for preparing the terms: " << timer.end_mus_output() << " us" << std::endl;
 
+    VectorXd warm_start_guess = VectorXd::Zero(_mu_prior.size());
+
     while (log_upper - log_lower > log_threshold)
     {
         double log_mid = (log_lower + log_upper) / 2;
@@ -90,9 +92,10 @@ double ProxKLGH<Factor, CudaClass>::bisection_stepsize(const VectorXd& dmu, cons
         // std::cout << "Time for preparing the combined terms: " << timer.end_mus_output() << " us" << std::endl;
 
         // timer.start();
-        new_mu = solver.compute(combined_precision).solve(combined_mu);
+        new_mu = solver.compute(combined_precision).solveWithGuess(combined_mu, warm_start_guess);
         new_precision = (dprecision_term + precision_term + this->_precision / step_size) * step_size / (step_size + 1);
-        // std::cout << "Time for solving the linear system: " << timer.end_mus_output() << " us" << std::endl;
+        warm_start_guess = new_mu;
+        // std::cout << "Time for solving the linear system with warm start: " << timer.end_mus_output() << " us" << std::endl;
 
         // Compute KL divergence and check for PD indirectly
         // timer.start();
@@ -135,7 +138,7 @@ std::tuple<double, VectorXd, SpMat> ProxKLGH<Factor, CudaClass>::bisection_updat
 
         solver.compute(_precision_prior / temperature + this->_precision / step_size);
         new_mu = solver.solve(-dmu / temperature + _precision_prior * _mu_prior / temperature + this->_precision * this->_mu / step_size);
-        
+
         new_precision = (dprecision / temperature + _precision_prior / temperature + this->_precision / step_size) * step_size / (step_size + 1);
 
         // Compute KL divergence and check for PD indirectly
@@ -151,7 +154,7 @@ std::tuple<double, VectorXd, SpMat> ProxKLGH<Factor, CudaClass>::bisection_updat
     }
 
     double final_step_size = std::exp((log_lower + log_upper) / 2);
-    
+
     new_mu = solver.compute(_precision_prior / temperature + this->_precision / final_step_size).solve(-dmu / temperature + _precision_prior * _mu_prior / temperature + this->_precision * this->_mu / final_step_size);
     new_precision = (dprecision / temperature + _precision_prior / temperature + this->_precision / final_step_size) * final_step_size / (final_step_size + 1);
 
@@ -186,7 +189,7 @@ void ProxKLGH<Factor, CudaClass>::optimize(std::optional<bool> verbose)
     if (this->_save_data){
         Base::_res_recorder.init_data(Base::_save_covariance);
     }
-    
+
     for (int i_iter = 0; i_iter < Base::_niters; i_iter++)
     {
 
@@ -219,7 +222,7 @@ void ProxKLGH<Factor, CudaClass>::optimize(std::optional<bool> verbose)
         if (this->_save_data){
             Base::_res_recorder.update_data(this->_mu, this->_covariance, this->_precision, cost_iter, fact_costs_iter);
         }
-        
+
         timer.start();
         int cnt = 0;
         double step_size = bisection_stepsize(dmu, dprecision);
@@ -272,7 +275,7 @@ void ProxKLGH<Factor, CudaClass>::optimize(std::optional<bool> verbose)
         std::cout << "=========== Saving Data ===========" << std::endl;
         Base::save_data(is_verbose);
     }
-    
+
     std::cout << "Optimization Finished" << std::endl;
 }
 
@@ -284,7 +287,7 @@ void ProxKLGH<Factor, CudaClass>::optimize_linear(std::optional<bool> verbose)
     bool is_verbose = verbose.value_or(true);
     bool is_lowtemp = true;
     bool converged = false;
-    
+
     for (int i_iter = 0; i_iter < Base::_niters; i_iter++)
     {
 
@@ -311,7 +314,7 @@ void ProxKLGH<Factor, CudaClass>::optimize_linear(std::optional<bool> verbose)
             std::cout << "--- cost_iter ---" << std::endl << cost_iter << std::endl << std::endl;
             // std::cout << "Factor Costs:" << fact_costs_iter.transpose() << std::endl;
         }
-        
+
         int cnt = 0;
         int B = 1;
         double step_size = Base::_step_size_base;
@@ -522,7 +525,7 @@ double ProxKLGH<Factor, CudaClass>::cost_value_cuda(const VectorXd& fill_joint_m
 
     // std::cout << "Prior Cost: " << value << std::endl;
     // std::cout << "Collision Cost: " << nonlinear_fac_cost.sum() << std::endl;
-    
+
     value += nonlinear_fac_cost.sum();
 
     SparseLDLT ldlt(joint_precision);
@@ -660,6 +663,7 @@ double ProxKLGH<Factor, CudaClass>::KL_Divergence(const VectorXd& mean_current, 
     double log_term = vec_D_current.array().log().sum() - vec_D_new.array().log().sum();
 
     double KL = (trace_term + quadratic_term + log_term - mean_current.size()) / 2.0;
+    std::cout << "KL Divergence: " << KL << std::endl;
 
     return KL;
 }
