@@ -59,7 +59,7 @@ protected:
     SpMat _precision_prior;
 
     double _step_size_last = 0.0;
-    bool _temp_switch = true;
+    bool _temp_switch = true, _narrow_range = true;
 
 public:
 /// ************************* Override functions for Prox-GVI algorithm *************************************
@@ -93,6 +93,10 @@ public:
         _precision_prior = precision_prior;
     }
 
+    inline void set_narrow_range(bool narrow_range){
+        _narrow_range = narrow_range;
+    }
+
 /// Optimizations related
 
     /**
@@ -110,7 +114,9 @@ public:
 
     void optimize(std::optional<bool> verbose=std::nullopt) override;
 
-    void optimize_linear(std::optional<bool> verbose=std::nullopt);
+    void optimize_time_test();
+
+    void time_test();
 
     double KL_Divergence_general(const VectorXd& mean_former, const VectorXd& mean_latter, const SpMat& precision_former, const SpMat& precision_latter);
 

@@ -39,11 +39,13 @@ std::tuple<double, VectorXd, SpMat> ProxKLGH<Factor, CudaClass>::onestep_linesea
     // std::cout << "K-inv norm: " << _precision_prior.norm() << std::endl;
     // std::cout << "precision norm: " << this->_precision.norm() << std::endl;
     // std::cout << "dprecision norm: " << dprecision.norm() << std::endl;
+    VectorXd combined_mu = -dmu / temperature + _precision_prior * _mu_prior / temperature + this->_precision * this->_mu / step_size;
 
     new_mu = solver.compute(_precision_prior / temperature + this->_precision / step_size).solve(-dmu / temperature + _precision_prior * _mu_prior / temperature + this->_precision * this->_mu / step_size);
     new_precision = (dprecision / temperature + _precision_prior / temperature + this->_precision / step_size) * step_size / (step_size + 1);
 
-    // new cost
+    // std::cout << "Error of the solver: " << ((_precision_prior / temperature + this->_precision / step_size) * new_mu - combined_mu).norm() / combined_mu.norm() * 100 << "%" << std::endl;
+
     double new_cost;
     if (this->isPositiveDefinite(new_precision))
         new_cost = Base::cost_value_cuda(new_mu, new_precision);
@@ -67,8 +69,8 @@ double ProxKLGH<Factor, CudaClass>::bisection_stepsize(const VectorXd& dmu, cons
     double log_threshold = 0.02;
     double epsilon = this->_alpha;
 
-    if (!_temp_switch) {
-        std::cout << "Narrower range" << std::endl;
+    if (!_temp_switch && _narrow_range) {
+        // std::cout << "Narrower range" << std::endl;
         log_lower = max(_step_size_last - 1, -2.0);
         log_upper = min(_step_size_last + 1, 2.0);
         log_threshold = 0.075;
@@ -119,10 +121,10 @@ double ProxKLGH<Factor, CudaClass>::bisection_stepsize(const VectorXd& dmu, cons
     }
 
     double final_step_size = (log_lower + log_upper) / 2;
-    std::cout << "Finial Step Size: " << final_step_size << std::endl;
-    double diff_step = final_step_size - _step_size_last;
-    if (abs(diff_step) > 0.75)
-        std::cout << "Step size difference: " << diff_step << std::endl;
+    // std::cout << "Finial Step Size: " << final_step_size << std::endl;
+    // double diff_step = final_step_size - _step_size_last;
+    // if (abs(diff_step) > 0.75)
+    //     std::cout << "Step size difference: " << diff_step << std::endl;
     
     _step_size_last = final_step_size;
 
@@ -299,12 +301,12 @@ void ProxKLGH<Factor, CudaClass>::optimize(std::optional<bool> verbose)
 
 
 template <typename Factor, typename CudaClass>
-void ProxKLGH<Factor, CudaClass>::optimize_linear(std::optional<bool> verbose)
+void ProxKLGH<Factor, CudaClass>::optimize_time_test()
 {
-    // default verbose
-    bool is_verbose = verbose.value_or(true);
     bool is_lowtemp = true;
     bool converged = false;
+    _narrow_range = true;
+    _temp_switch = false;
 
     for (int i_iter = 0; i_iter < Base::_niters; i_iter++)
     {
@@ -315,81 +317,79 @@ void ProxKLGH<Factor, CudaClass>::optimize_linear(std::optional<bool> verbose)
 
         // ============= High temperature phase =============
         if (i_iter == Base::_niters_lowtemp && is_lowtemp){
-            if (is_verbose){
-                std::cout << "Switching to high temperature.." << std::endl;
-            }
             this->switch_to_high_temperature();
             is_lowtemp = false;
         }
 
-        if (is_verbose){
-            std::cout << "========= iteration " << i_iter << " ========= " << std::endl;
-        }
-
-        double cost_iter = cost_value_linear(this->_mu, this->_precision);
-
-        if (is_verbose){
-            std::cout << "--- cost_iter ---" << std::endl << cost_iter << std::endl << std::endl;
-            // std::cout << "Factor Costs:" << fact_costs_iter.transpose() << std::endl;
-        }
+        auto [cost_iter, fact_costs_iter, dmu, dprecision] = factor_cost_vector_cuda(this->_mu, this->_precision);
 
         int cnt = 0;
-        int B = 1;
-        double step_size = Base::_step_size_base;
+        double step_size = bisection_stepsize(dmu, dprecision);
 
         // backtracking
         while (true)
         {
-            // new step size
-            step_size = step_size * 0.75;
-
-            SpMat new_precision;
-            VectorXd new_mu;
-            new_mu.setZero(); new_precision.setZero();
-
-            Eigen::ConjugateGradient<SpMat> solver;
-
-            new_mu = solver.compute(_precision_prior + this->_precision / step_size).solve(_precision_prior * _mu_prior + this->_precision * this->_mu / step_size);
-            new_precision = step_size / (step_size + 1) * (_precision_prior + this->_precision / step_size);
-
-            double new_cost = cost_value_linear(new_mu, new_precision);
-            std::cout << "New cost = " << new_cost << std::endl << std::endl;
+            auto onestep_res = onestep_linesearch(step_size, dmu, dprecision);
+            double new_cost = std::get<0>(onestep_res);
+            VectorXd new_mu = std::get<1>(onestep_res);
+            SpMat new_precision = std::get<2>(onestep_res);
 
             // accept new cost and update mu and precision matrix
             if (new_cost < cost_iter){
                 // update mean and covariance
-                this->update_proposal(new_mu, new_precision);
                 break;
             }else{
                 // shrinking the step size
-                B += 1;
                 cnt += 1;
             }
 
             if (cnt > Base::_niters_backtrack)
             {
-                if (is_verbose){
-                    std::cout << "Reached the maximum backtracking steps." << std::endl;
-                }
-
                 if (is_lowtemp){
                     this->switch_to_high_temperature();
                     is_lowtemp = false;
                 }else{
                     converged = true;
                 }
-
-                // update_proposal(new_mu, new_precision);
                 break;
             }
         }
     }
+}
 
-    std::cout << "=========== Saving Data ===========" << std::endl;
-    Base::save_data(is_verbose);
 
-    std::cout << "Optimization Finished" << std::endl;
+template <typename Factor, typename CudaClass>
+void ProxKLGH<Factor, CudaClass>::time_test()
+{
+    Base::cuda_init(Base::_vec_nonlinear_factors.size());
 
+    Timer timer;
+    int n_repeat = 10;
+
+    std::vector<double> times_optimization;
+    times_optimization.reserve(n_repeat);
+
+    for (int i=0; i < n_repeat+1; i++){
+        std::cout << "i = " << i << std::endl;
+        timer.start();
+        optimize_time_test();
+        double time = timer.end_mis();
+        if (i != 0)
+        times_optimization.push_back(time);  // The first time need to initialize
+    }
+
+    double average_time = std::accumulate(times_optimization.begin(), times_optimization.end(), 0.0) / n_repeat;
+
+    std::cout << "% " << Base::_vec_nonlinear_factors.size() + 2 << std::endl;
+    std::cout << "% GPU Optimize average: " << average_time << " ms" << std::endl;
+
+    std::cout << "% [ " << times_optimization[0];
+    for (int i = 1; i < times_optimization.size(); ++i) {
+        std::cout << ", " << times_optimization[i];
+    }
+    std::cout << " ]" << std::endl;
+
+    Base::cuda_free();
 }
 
 

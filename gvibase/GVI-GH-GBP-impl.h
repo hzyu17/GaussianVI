@@ -244,6 +244,7 @@ void GVIGH<Factor>::time_test()
 
 
     // std::vector<double> times_optimization;
+    // n_repeat = 5;
     // times_optimization.reserve(n_repeat);
 
     // for (int i=0; i < n_repeat+1; i++){
@@ -351,8 +352,6 @@ SpMat GVIGH<Factor>::inverse_GBP(const SpMat &Precision)
     std::vector<Message> factors(2*_num_states-1);
     std::vector<Message> joint_factors(_num_states-1);
     Message variable_message;
-    MatrixXd covariance(_dim, _dim);
-    covariance.setZero();
 
     // Extract the factors from the precision matrix
     // The variable in factors are 0, {0,1}, 1, {1,2}, 2, ..., {_num_states-1,_num_states}, _num_states
@@ -378,6 +377,10 @@ SpMat GVIGH<Factor>::inverse_GBP(const SpMat &Precision)
     // Initialize message
     std::vector<Message> forward_messages(_num_states);
     std::vector<Message> backward_messages(_num_states);
+    for (int i = 0; i < _num_states; i++) {
+        forward_messages[i].second.setZero();
+        backward_messages[i].second.setZero();
+    }
     forward_messages[0] = {VectorXd::Zero(1), MatrixXd::Zero(_dim_state, _dim_state)};
     backward_messages.back() = {VectorXd::Constant(1, _num_states-1), MatrixXd::Zero(_dim_state, _dim_state)};
 
@@ -390,21 +393,71 @@ SpMat GVIGH<Factor>::inverse_GBP(const SpMat &Precision)
         backward_messages[index - 1] = calculate_factor_message(variable_message, index - 1, factors[2 * index - 1]);
     }
 
-    if (_num_states == 1){
+    std::vector<Eigen::Triplet<double>> tripletList;
+    if (_num_states == 1) {
         MatrixXd lambda = forward_messages[0].second + backward_messages[0].second + factors[0].second;
         MatrixXd variance = lambda.inverse();
-        covariance.block(0, 0, _dim_state, _dim_state) = variance;
+        tripletList.reserve(_dim_state * _dim_state);
+        for (int r = 0; r < _dim_state; ++r) {
+            for (int c = 0; c < _dim_state; ++c) {
+                tripletList.emplace_back(r, c, variance(r, c));
+            }
+        }
     }
-
-    for (int i = 0; i < _num_states - 1; ++i) {
-        MatrixXd lambda_joint = joint_factors[i].second;
-        lambda_joint.block(0, 0, _dim_state, _dim_state) += forward_messages[i].second;
-        lambda_joint.block(_dim_state, _dim_state, _dim_state, _dim_state) += backward_messages[i + 1].second;
-        MatrixXd variance_joint = lambda_joint.inverse();
-        covariance.block(i*_dim_state, i*_dim_state, 2*_dim_state, 2*_dim_state) = variance_joint;
+    else {
+        // Create a local container, where each iteration corresponds to a joint covariance block
+        int nBlocks = _num_states - 1; // The number of iterations matches the number of joint_factors
+        std::vector<std::vector<Eigen::Triplet<double>>> localTripletVectors(nBlocks);
+    
+        #pragma omp parallel for
+        for (int i = 0; i < nBlocks; ++i) {
+            std::vector<Eigen::Triplet<double>> localTriplets;
+            // Each joint block contributes 3 _dim_state×_dim_state sub-blocks.
+            // If it is the last iteration (i == _num_states - 2), an additional sub-block is added.
+            localTriplets.reserve(3 * _dim_state * _dim_state + ((i == nBlocks - 1) ? _dim_state * _dim_state : 0));
+    
+            // Copy joint_factor and add messages
+            MatrixXd lambda_joint = joint_factors[i].second;
+            lambda_joint.block(0, 0, _dim_state, _dim_state) += forward_messages[i].second;
+            lambda_joint.block(_dim_state, _dim_state, _dim_state, _dim_state) += backward_messages[i + 1].second;
+            MatrixXd variance_joint = lambda_joint.inverse();
+    
+            // Base row and column indices
+            int base_row = i * _dim_state;
+            int base_col = i * _dim_state;
+            int next_base = base_row + _dim_state; // Corresponds to i+1
+    
+            // Fill in the diagonal, upper triangular, and lower triangular blocks
+            for (int r = 0; r < _dim_state; ++r) {
+                for (int c = 0; c < _dim_state; ++c) {
+                    localTriplets.emplace_back(base_row + r, base_col + c, variance_joint(r, c));
+                    localTriplets.emplace_back(base_row + r, next_base + c, variance_joint(r, _dim_state + c));
+                    localTriplets.emplace_back(next_base + r, base_col + c, variance_joint(_dim_state + r, c));
+                }
+            }
+    
+            // 4. In the last iteration (i == _num_states - 2), add an additional diagonal block for variable (i+1):
+            if (i == nBlocks - 1) {
+                for (int r = 0; r < _dim_state; ++r) {
+                    for (int c = 0; c < _dim_state; ++c) {
+                        localTriplets.emplace_back(next_base + r, next_base + c, variance_joint(_dim_state + r, _dim_state + c));
+                    }
+                }
+            }
+            localTripletVectors[i] = std::move(localTriplets);
+        }
+    
+        // Merge the local Triplet vectors from all threads
+        int totalTriplets = (3 * _num_states - 2) * _dim_state * _dim_state;
+        tripletList.reserve(totalTriplets);
+        for (const auto &vec : localTripletVectors)
+            tripletList.insert(tripletList.end(), vec.begin(), vec.end());
     }
-
-    return covariance.sparseView();
+    
+    SpMat covariance_sparse(_dim, _dim);
+    covariance_sparse.setFromTriplets(tripletList.begin(), tripletList.end());
+    
+    return covariance_sparse;
 }
 
 /**

@@ -533,9 +533,9 @@ void GVIGH<Factor, CudaClass>::time_test()
     cuda_init(_vec_nonlinear_factors.size());
 
     Timer timer;
-    int n_repeat = 50;
+    int n_repeat = 20;
 
-    // Time Test for Nonlinear Cost Evaluation
+    // // Time Test for Nonlinear Cost Evaluation
     // std::vector<double> times_evaluation;
     // times_evaluation.reserve(n_repeat);
 
@@ -562,6 +562,7 @@ void GVIGH<Factor, CudaClass>::time_test()
     // }
     // std::cout << " ]" << std::endl;
 
+    // n_repeat = 5;
     // std::vector<double> times_optimization;
     // times_optimization.reserve(n_repeat);
 
@@ -602,13 +603,13 @@ void GVIGH<Factor, CudaClass>::time_test()
     //     times_GBP.push_back(time);  // The first time need to initialize
     // }
 
-    // for (int i=0; i < n_repeat+1; i++){
-    //     timer.start();
-    //     _covariance = inverse(_precision);
-    //     double time = timer.end_mis();
-    //     if (i != 0)
-    //     times_inverse.push_back(time);  // The first time need to initialize
-    // }
+    // // for (int i=0; i < n_repeat+1; i++){
+    // //     timer.start();
+    // //     _covariance = inverse(_precision);
+    // //     double time = timer.end_mis();
+    // //     if (i != 0)
+    // //     times_inverse.push_back(time);  // The first time need to initialize
+    // // }
 
     // double average_time = std::accumulate(times_GBP.begin(), times_GBP.end(), 0.0) / n_repeat;
 
@@ -621,13 +622,13 @@ void GVIGH<Factor, CudaClass>::time_test()
     // }
     // std::cout << "]" << std::endl;
 
-    // average_time = std::accumulate(times_inverse.begin(), times_inverse.end(), 0.0) / n_repeat;
-    // std::cout << "% Inverse average: " << average_time << " ms" << std::endl;
-    // std::cout << "% [" << times_inverse[0];
-    // for (int i = 1; i < times_inverse.size(); ++i) {
-    //     std::cout << ", " << times_inverse[i];
-    // }
-    // std::cout << "]" << std::endl;
+    // // average_time = std::accumulate(times_inverse.begin(), times_inverse.end(), 0.0) / n_repeat;
+    // // std::cout << "% Inverse average: " << average_time << " ms" << std::endl;
+    // // std::cout << "% [" << times_inverse[0];
+    // // for (int i = 1; i < times_inverse.size(); ++i) {
+    // //     std::cout << ", " << times_inverse[i];
+    // // }
+    // // std::cout << "]" << std::endl;
 
     cuda_free();
 
