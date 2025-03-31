@@ -86,6 +86,9 @@ double ProxKLGH<Factor, CudaClass>::bisection_stepsize(const VectorXd& dmu, cons
     SpMat precision_term = _precision_prior / temperature;
     VectorXd dmu_term = -dmu / temperature;
     SpMat dprecision_term = dprecision / temperature;
+
+    std::cout << "dmu: " << dmu_term.norm() << std::endl;
+    std::cout << "dprecision: " << dprecision_term.norm() << std::endl;
     // std::cout << "Time for preparing the terms: " << timer.end_mus_output() << " us" << std::endl;
 
     VectorXd warm_start_guess = VectorXd::Zero(_mu_prior.size());
@@ -294,6 +297,11 @@ void ProxKLGH<Factor, CudaClass>::optimize(std::optional<bool> verbose)
     if (this->_save_data){
         std::cout << "=========== Saving Data ===========" << std::endl;
         Base::save_data(is_verbose);
+    }
+
+    if (this->_dim_state == 6){
+        std::cout << "Quadrotor" << std::endl;
+        Base::inverse_inplace();
     }
 
     std::cout << "Optimization Finished" << std::endl;
@@ -681,7 +689,7 @@ double ProxKLGH<Factor, CudaClass>::KL_Divergence(const VectorXd& mean_current, 
     double log_term = vec_D_current.array().log().sum() - vec_D_new.array().log().sum();
 
     double KL = (trace_term + quadratic_term + log_term - mean_current.size()) / 2.0;
-    // std::cout << "KL Divergence: " << KL << std::endl;
+    std::cout << "KL Divergence: " << KL << std::endl;
 
     return KL;
 }
