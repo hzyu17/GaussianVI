@@ -20,16 +20,16 @@
 
 namespace gvi{
 
-// using namespace boost::numeric::odeint;  
+// using namespace boost::numeric::odeint;
 
 int gramian_ode_gsl_helper(double t, const double Q_vec[], double dQ_dt[], void *params);
 int system_ode_gsl_helper(double t, const double Phi_vec[], double dPhi_dt[], void *params);
 
 class LTV_GP : public LinearFactor{
-    public: 
+    public:
         LTV_GP(){};
         /**
-         * @brief the state is [x; v] where the dimension of x is _dim. 
+         * @brief the state is [x; v] where the dimension of x is _dim.
          * The returned mean is the concatenation of the two consecutive [\mu_i, \mu_{i+1}].
          * The constant velocity linear factor has closed-forms in transition matrix \Phi,
          * the matrices in computing the quadratic costs, (\Lambda, \Psi).
@@ -45,14 +45,14 @@ class LTV_GP : public LinearFactor{
         _dim_state{2*_dim},
         _start_index{start_index},
         _target_mu{VectorXd::Zero(2*_dim_state)},
-        _delta_t{delta_t}, 
-        _Qc{Qc}, 
-        _invQc{Qc.inverse()}, 
+        _delta_t{delta_t},
+        _Qc{Qc},
+        _invQc{Qc.inverse()},
         _invQ{MatrixXd::Zero(_dim_state, _dim_state)},
         _Phi{MatrixXd::Zero(_dim_state, _dim_state)}{
 
-            _A_vec.resize(5); 
-            _B_vec.resize(5); 
+            _A_vec.resize(5);
+            _B_vec.resize(5);
             for (int i = 0; i < 5; i++) {
                 _A_vec[i] = hA[4 * start_index + i];
                 _B_vec[i] = hB[4 * start_index + i];
@@ -72,12 +72,12 @@ class LTV_GP : public LinearFactor{
 
             _target_mu.segment(0, _dim_state) = mi;
             _target_mu.segment(_dim_state, _dim_state) = mi_next;
-            
+
             // _Q = compute_Q();
             _Q = compute_Q_gsl();
 
             // MatrixXd Q_gsl = compute_Q_gsl();
-            // std::cout << "Q = " << _Q.norm() << std::endl; 
+            // std::cout << "Q = " << _Q.norm() << std::endl;
             // std::cout << "Q_gsl = " << Q_gsl.norm() << std::endl;
             // std::cout << "Q_gsl Error: " << (_Q - Q_gsl).norm() << std::endl << std::endl;
 
@@ -92,7 +92,7 @@ class LTV_GP : public LinearFactor{
             _Psi = MatrixXd::Zero(_dim_state, 2*_dim_state);
             _Psi.block(0, 0, _dim_state, _dim_state) = -_Phi;
             _Psi.block(0, _dim_state, _dim_state, _dim_state) = MatrixXd::Identity(_dim_state, _dim_state);
-        } 
+        }
 
         // MatrixXd compute_Phi(){
         //     MatrixXd Phi0 = MatrixXd::Identity(_dim_state, _dim_state);
@@ -126,7 +126,7 @@ class LTV_GP : public LinearFactor{
             MatrixXd Phi0 = MatrixXd::Identity(_dim_state, _dim_state);
             std::vector<double> Phi_vec(Phi0.data(), Phi0.data() + _dim_state * _dim_state);
             double t = 0.0;
-            
+
             // Perform integration
             double dt = _delta_t / 20;
             gsl_odeiv2_driver_apply(d, &t, _delta_t, Phi_vec.data());
@@ -141,7 +141,7 @@ class LTV_GP : public LinearFactor{
             gsl_odeiv2_driver *d = gsl_odeiv2_driver_alloc_y_new(&sys, gsl_odeiv2_step_rkf45, 1e-12, 1e-12, 0.0);
             std::vector<double> Q_vec(_dim_state * _dim_state, 0.0);
             double t = 0.0;
-            
+
             // Perform integration
             double dt = _delta_t / 20;
             gsl_odeiv2_driver_apply(d, &t, _delta_t, Q_vec.data());
@@ -177,10 +177,7 @@ class LTV_GP : public LinearFactor{
 
         int gramian_ode_gsl(double t, const double Q_vec[], double dQ_dt[], void *params) {
             LTV_GP* obj = static_cast<LTV_GP*>(params);  // Convert params back to the LTV_GP class
-            MatrixXd gramian = Eigen::Map<const MatrixXd>(Q_vec, obj->_dim_state, obj->_dim_state);
-            // auto matrices = obj->system_param(t);
-            // MatrixXd A = matrices.first;
-            // MatrixXd B = matrices.second;
+            MatrixXd gramian = Eigen::Map<const MatrixXd>(Q_vec, obj->_dim_state, obj->_dim_state);;
             auto [A, B] = obj->system_param(t);
             MatrixXd dQ = A * gramian + gramian * A.transpose() + B * B.transpose();
             Eigen::Map<MatrixXd>(dQ_dt, obj->_dim_state, obj->_dim_state) = dQ;
@@ -210,10 +207,10 @@ class LTV_GP : public LinearFactor{
         VectorXd _m0, _target_mu;
         EigenWrapper _ei;
         // runge_kutta_dopri5<std::vector<double>> _stepper;
-        
+
     public:
         inline MatrixXd Q() const { return _Q; }
-        
+
         inline MatrixXd Qc() const { return _Qc; }
 
         inline MatrixXd Phi() const { return _Phi; }
@@ -246,7 +243,6 @@ class LTV_GP : public LinearFactor{
         inline MatrixXd get_Psi() const{ return _Psi; }
 
         inline double get_Constant() const { return 0.5; }
-        
 };
 
 
@@ -263,7 +259,7 @@ int system_ode_gsl_helper(double t, const double Phi_vec[], double dPhi_dt[], vo
 }
 
 // // Use Boole's Rule to approximate the integration
-// MatrixXd gramian = (7 * _Phi_ode_results[0] * _B_vec[0] * _B_vec[0].transpose() * _Phi_ode_results[0].transpose() 
+// MatrixXd gramian = (7 * _Phi_ode_results[0] * _B_vec[0] * _B_vec[0].transpose() * _Phi_ode_results[0].transpose()
 // + 32 * _Phi_ode_results[1] * _B_vec[1] * _B_vec[1].transpose() * _Phi_ode_results[1].transpose()
 // + 4 * _Phi_ode_results[2] * _B_vec[2] * _B_vec[2].transpose() * _Phi_ode_results[2].transpose()
 // + 32 * _Phi_ode_results[3] * _B_vec[3] * _B_vec[3].transpose() * _Phi_ode_results[3].transpose()
