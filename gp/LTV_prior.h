@@ -33,13 +33,13 @@ class LTV_GP : public LinearFactor{
          * The returned mean is the concatenation of the two consecutive [\mu_i, \mu_{i+1}].
          * The constant velocity linear factor has closed-forms in transition matrix \Phi,
          * the matrices in computing the quadratic costs, (\Lambda, \Psi).
-         * Qc is in shape (_dim, _dim); 
+         * Qc is in shape (_dim, _dim);
          * _Phi and _Q are in shape(2*_dim, 2*_dim)
-         * @param Qc 
-         * @param delta_t 
+         * @param Qc
+         * @param delta_t
          */
 
-        LTV_GP(const MatrixXd& Qc, int start_index, const double& delta_t, const VectorXd& mu_0, int n_states, const std::vector<MatrixXd>& hA, const std::vector<MatrixXd>& hB, const std::vector<VectorXd>& target_mean): 
+        LTV_GP(const MatrixXd& Qc, int start_index, const double& delta_t, const VectorXd& mu_0, int n_states, const std::vector<MatrixXd>& hA, const std::vector<MatrixXd>& hB, const std::vector<VectorXd>& target_mean):
         LinearFactor(),
         _dim{Qc.cols()},
         _dim_state{2*_dim},
@@ -74,7 +74,7 @@ class LTV_GP : public LinearFactor{
             _target_mu.segment(_dim_state, _dim_state) = mi_next;
 
             // _Q = compute_Q();
-            _Q = compute_Q_gsl();
+            _Q = compute_Q_gsl(); // The grammian here is almost PSD, smallest eigenvalue is 4e-10
 
             // MatrixXd Q_gsl = compute_Q_gsl();
             // std::cout << "Q = " << _Q.norm() << std::endl;
@@ -82,6 +82,24 @@ class LTV_GP : public LinearFactor{
             // std::cout << "Q_gsl Error: " << (_Q - Q_gsl).norm() << std::endl << std::endl;
 
             compute_invQ();
+
+            // double tol = 1e-12;
+
+            // // Check if Q is approximately equal to its transpose
+            // if (_invQ.isApprox(_invQ.transpose(), tol)) {
+            //     std::cout << "Matrix Q is symmetric." << std::endl;
+            // } else {
+            //     std::cout << "Matrix Q is not symmetric." << std::endl;
+            // }
+
+            // SelfAdjointEigenSolver<MatrixXd> solver(_invQ);
+            // if (solver.info() != Success) {
+            //     std::cerr << "Eigenvalue computation failed!" << std::endl;
+            // }
+
+            // // Retrieve eigenvalues
+            // VectorXd eigenvalues = solver.eigenvalues();
+            // std::cout << "Eigenvalues are:" << std::endl << eigenvalues.transpose() << std::endl;
 
             // \Lambda = [-\Phi, I]
             _Lambda = MatrixXd::Zero(_dim_state, 2*_dim_state);

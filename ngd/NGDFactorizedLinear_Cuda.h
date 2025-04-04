@@ -131,6 +131,19 @@ public:
         _E_Phi = ((_Lambda.transpose()*_target_precision*_Lambda * Cov_k).trace() + 
                     (_Lambda*mean_k-_Psi*_target_mean).transpose() * _target_precision * (_Lambda*mean_k-_Psi*_target_mean)) * constant();
 
+        // if (_E_Phi < 0){
+        //     std::cout << "Negative cost: " << _E_Phi << std::endl;
+        //     std::cout << "First term: " << (_Lambda.transpose()*_target_precision*_Lambda * Cov_k).trace() << std::endl;
+        //     SelfAdjointEigenSolver<MatrixXd> solver(Cov_k);
+        //     // Retrieve eigenvalues
+        //     VectorXd eigenvalues = solver.eigenvalues();
+        //     for (int i = 0; i < eigenvalues.size(); ++i) {
+        //         if (eigenvalues[i] < 0) {
+        //             std::cout << "Negative eigenvalue: " << eigenvalues[i] << " at index: " << i << std::endl;
+        //         }
+        //     }
+        //     // std::cout << "Second term: " << (_Lambda*mean_k-_Psi*_target_mean).transpose() * _target_precision * (_Lambda*mean_k-_Psi*_target_mean) << std::endl;
+        // }
         return _E_Phi / this->temperature();
     }
 
