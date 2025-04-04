@@ -128,7 +128,7 @@ double ProxKLGH<Factor, CudaClass>::bisection_stepsize(const VectorXd& dmu, cons
     // double diff_step = final_step_size - _step_size_last;
     // if (abs(diff_step) > 0.75)
     //     std::cout << "Step size difference: " << diff_step << std::endl;
-    
+
     _step_size_last = final_step_size;
 
     return std::exp((log_lower + log_upper) / 2);
@@ -164,8 +164,6 @@ std::tuple<double, VectorXd, SpMat> ProxKLGH<Factor, CudaClass>::bisection_updat
         // Compute KL divergence and check for PD indirectly
         double KL = KL_Divergence(this->_mu, this->_precision, this->_covariance, new_mu, new_precision);
 
-        // std::cout << "KL Divergence: " << KL << std::endl << std::endl;
-
         if (std::isnan(KL) || KL >= epsilon) {
             log_upper = log_mid;
         } else {
@@ -179,7 +177,7 @@ std::tuple<double, VectorXd, SpMat> ProxKLGH<Factor, CudaClass>::bisection_updat
     new_precision = (dprecision / temperature + _precision_prior / temperature + this->_precision / final_step_size) * final_step_size / (final_step_size + 1);
 
     // new cost
-    double new_cost = cost_value_cuda(new_mu, new_precision);
+    double new_cost = Base::cost_value_cuda(new_mu, new_precision);
 
     if (std::isnan(new_cost)) {
         std::cerr << "Error: Detected NaN in cost calculation. Exiting program." << std::endl;
@@ -207,6 +205,7 @@ void ProxKLGH<Factor, CudaClass>::optimize(std::optional<bool> verbose)
     std::cout << "Time for initializing cuda: " << timer.end_mus_output() << " us" << std::endl;
 
     if (this->_save_data){
+        // Base::_niters = 1;
         Base::_res_recorder.init_data(Base::_save_covariance);
     }
 
@@ -239,6 +238,12 @@ void ProxKLGH<Factor, CudaClass>::optimize(std::optional<bool> verbose)
             std::cout << "--- cost_iter ---" << std::endl << cost_iter << std::endl;
             // std::cout << "Factor Costs:" << fact_costs_iter.transpose() << std::endl;
         }
+
+        // // Check the shape of the prior
+        // if (this->_save_data){
+        //     SpMat prior_covariance = Base::inverse_GBP(this->_precision_prior);
+        //     Base::_res_recorder.update_data(this->_mu_prior, prior_covariance, this->_precision_prior, cost_iter, fact_costs_iter);
+        // }
 
         if (this->_save_data){
             Base::_res_recorder.update_data(this->_mu, this->_covariance, this->_precision, cost_iter, fact_costs_iter);
@@ -298,12 +303,6 @@ void ProxKLGH<Factor, CudaClass>::optimize(std::optional<bool> verbose)
         std::cout << "=========== Saving Data ===========" << std::endl;
         Base::save_data(is_verbose);
     }
-
-    if (this->_dim_state == 6){
-        std::cout << "Quadrotor" << std::endl;
-        Base::inverse_inplace();
-    }
-
     std::cout << "Optimization Finished" << std::endl;
 }
 
@@ -459,6 +458,15 @@ std::tuple<double, VectorXd, VectorXd, SpMat>ProxKLGH<Factor, CudaClass>::factor
     double collision_cost = nonlinear_fac_cost.sum();
     double prior_cost = fac_costs.sum() - collision_cost;
 
+    // if ((fac_costs.array() < 0).any()) {
+    //     for (int i = 0; i < fac_costs.size(); ++i) {
+    //         if (fac_costs[i] < 0) {
+    //             std::cout << "Negative value at index " << i << ": " << fac_costs[i] << std::endl;
+    //         }
+    //     }
+    //     // std::cout << "fac_costs contains negative values: " << fac_costs.transpose() << std::endl;
+    // }
+
     std::cout << "Prior Cost: " << prior_cost << std::endl;
     std::cout << "Collision Cost: " << collision_cost << std::endl;
     std::cout << "Entropy: " << entropy << std::endl;
@@ -514,149 +522,18 @@ std::tuple<double, VectorXd, VectorXd, SpMat>ProxKLGH<Factor, CudaClass>::factor
 
 
 template <typename Factor, typename CudaClass>
-double ProxKLGH<Factor, CudaClass>::cost_value_cuda(const VectorXd& fill_joint_mean, SpMat& joint_precision)
-{
-    int n_nonlinear = Base::_vec_nonlinear_factors.size();
-    VectorXd nonlinear_fac_cost(n_nonlinear);
-    nonlinear_fac_cost.setZero();
-
-    SpMat joint_cov = Base::inverse_GBP(joint_precision);
-
-    MatrixXd sigmapts_mat(_sigma_rows, n_nonlinear*_dim_conf);
-    MatrixXd mean_mat(_dim_conf, n_nonlinear);
-    MatrixXd covariance_matrix(_dim_conf, n_nonlinear*_dim_conf);
-    MatrixXd sigma(_sigma_rows, _dim_conf);
-
-    #pragma omp parallel for
-    for (int i = 0; i < n_nonlinear; i++)
-    {
-        mean_mat.col(i) = fill_joint_mean.segment((i+1)*this->_dim_state, _dim_conf);
-        covariance_matrix.block(0, i * _dim_conf, _dim_conf, _dim_conf) = joint_cov.block((i+1)*this->_dim_state, (i+1)*this->_dim_state, _dim_conf, _dim_conf);
-    }
-
-    // Compute the cost of the nonlinear factors
-    Base::compute_sigmapts(mean_mat, covariance_matrix, _dim_conf, n_nonlinear, sigma);
-    Base::newCostIntegration(sigmapts_mat, nonlinear_fac_cost, _dim_conf);
-
-    nonlinear_fac_cost = nonlinear_fac_cost / this ->_temperature;
-
-    double value = 0.0;
-
-    #pragma omp parallel for reduction(+:value)
-    for (int i = 0; i < Base::_vec_linear_factors.size(); ++i)
-    {
-        auto &opt_k = Base::_vec_linear_factors[i];
-        value += opt_k->fact_cost_value(fill_joint_mean, joint_cov);
-    }
-
-    // std::cout << "Prior Cost: " << value << std::endl;
-    // std::cout << "Collision Cost: " << nonlinear_fac_cost.sum() << std::endl;
-
-    value += nonlinear_fac_cost.sum();
-
-    SparseLDLT ldlt(joint_precision);
-    VectorXd vec_D = ldlt.vectorD();
-
-    // std::cout << "Entropy: " << vec_D.array().log().sum() / 2 << std::endl;
-    return value + vec_D.array().log().sum() / 2;
-
-
-    // // Compute prior cost in joint level
-    // SparseLDLT ldlt_prior(_precision_prior);
-
-    // SpMat precision_prior_times_Cov = _precision_prior * joint_cov;
-    // double trace_term = precision_prior_times_Cov.diagonal().sum();
-    // double quadratic_term = (fill_joint_mean - _mu_prior).transpose() * _precision_prior * (fill_joint_mean - _mu_prior);
-
-    // VectorXd vec_D_prior = ldlt_prior.vectorD();
-    // VectorXd vec_D_joint = ldlt.vectorD();
-    // double log_term = vec_D_prior.array().log().sum() - vec_D_joint.array().log().sum();
-
-    // // std::cout << "Joint linear cost: " << (trace_term + quadratic_term) / (2 * this->_temperature) << std::endl << std::endl;
-
-    // double cost_joint = (trace_term + quadratic_term) / (2 * this->_temperature);
-    // cost_joint += nonlinear_fac_cost.sum();
-    // return cost_joint + vec_D.array().log().sum() / 2;
-}
-
-template <typename Factor, typename CudaClass>
 inline void ProxKLGH<Factor, CudaClass>::update_proposal(const VectorXd& new_mu, const SpMat& new_precision)
 {
     Base::set_mu(new_mu);
     Base::set_precision(new_precision);
-    // std::cout << "New mu: " << new_mu.transpose() << std::endl;
-    // std::cout << "Updated proposal" << std::endl;
-}
-
-
-template <typename Factor, typename CudaClass>
-double ProxKLGH<Factor, CudaClass>::cost_value_linear(const VectorXd& fill_joint_mean, const SpMat& joint_precision)
-{
-    SpMat joint_cov = Base::inverse_GBP(joint_precision); // The result of matrix multiplication will keeps the same because of the sparse structure.
-
-    // Compute the cost of the linear factors
-    VectorXd fac_costs(Base::_vec_linear_factors.size());
-    fac_costs.setZero();
-
-    for (int i = 0; i < Base::_vec_linear_factors.size(); ++i)
-    {
-        auto &opt_k = Base::_vec_linear_factors[i];
-        double cost_value = opt_k->fact_cost_value(fill_joint_mean, joint_cov);
-        fac_costs(i) = cost_value;
-    }
-
-    double value = fac_costs.sum();
-    SparseLDLT ldlt(joint_precision);
-    VectorXd vec_D = ldlt.vectorD();
-
-    std::cout << "linear cost: " << value << std::endl;
-    std::cout << "entropy: " << vec_D.array().log().sum() / 2 << std::endl;
-
-    double cost = value + vec_D.array().log().sum() / 2;
-
-    //return {cost, fac_costs};
-
-
-
-    // Compute the cost and KL divergence in joint level (The time cost is actually lower than the factorization)
-    SparseLDLT ldlt_prior(_precision_prior);
-
-    SpMat precision_prior_times_Cov = _precision_prior * joint_cov;
-    double trace_term = precision_prior_times_Cov.diagonal().sum();
-    // std::cout << "trace_term: " << trace_term << std::endl;
-
-    double quadratic_term = (fill_joint_mean - _mu_prior).transpose() * _precision_prior * (fill_joint_mean - _mu_prior);
-    // std::cout << "quadratic_term: " << quadratic_term << std::endl;
-
-    double cost_joint_linear = (trace_term + quadratic_term) / (2 * this->_temperature);
-
-    std::cout << "Joint linear cost: " << cost_joint_linear << std::endl;
-    std::cout << "Entropy: " << vec_D.array().log().sum() / 2 << std::endl;
-
-    double cost_joint = cost_joint_linear + vec_D.array().log().sum() / 2;
-
-    // VectorXd vec_D_prior = ldlt_prior.vectorD();
-    // VectorXd vec_D_joint = ldlt.vectorD();
-    // double log_term = vec_D_prior.array().log().sum() - vec_D_joint.array().log().sum();
-
-    // std::cout << "log_term: " << log_term << std::endl;
-    // std::cout << "prior_log_term: " << vec_D_prior.array().log().sum() << std::endl;
-    // std::cout << "joint_log_term: " << vec_D_joint.array().log().sum() << std::endl;
-
-
-    // double cost_joint = (trace_term + quadratic_term + log_term - fill_joint_mean.size()) / 2;
-    // std::cout << "KL Divergence: " << cost_joint << std::endl << std::endl;
-
-    return cost_joint;
 }
 
 
 template <typename Factor, typename CudaClass>
 double ProxKLGH<Factor, CudaClass>::cost_value_no_entropy()
 {
-    
     SpMat Cov = this->inverse(this->_precision);
-    
+
     double value = 0.0;
     for (auto &opt_k : this->_vec_factors)
     {
@@ -664,6 +541,7 @@ double ProxKLGH<Factor, CudaClass>::cost_value_no_entropy()
     }
     return value; // / _temperature;
 }
+
 
 template <typename Factor, typename CudaClass>
 double ProxKLGH<Factor, CudaClass>::KL_Divergence(const VectorXd& mean_current, const SpMat& precision_current, const SpMat& covariance_current, const VectorXd& mean_new, const SpMat& precision_new)
@@ -689,7 +567,14 @@ double ProxKLGH<Factor, CudaClass>::KL_Divergence(const VectorXd& mean_current, 
     double log_term = vec_D_current.array().log().sum() - vec_D_new.array().log().sum();
 
     double KL = (trace_term + quadratic_term + log_term - mean_current.size()) / 2.0;
-    std::cout << "KL Divergence: " << KL << std::endl;
+
+    // if (KL < 0){
+    //     std::cout << "KL Divergence: " << KL << std::endl;
+    //     std::cout << "trace_term: " << trace_term << std::endl;
+    //     std::cout << "quadratic_term: " << quadratic_term << std::endl;
+    //     std::cout << "log_term: " << log_term << std::endl;
+    //     std::cout << "mean_current: " << -mean_current.size() << std::endl << std::endl;
+    // }
 
     return KL;
 }
@@ -747,7 +632,6 @@ double ProxKLGH<Factor, CudaClass>::KL_Divergence_general(const VectorXd& mean_f
     // std::cout << "current entropy: " << vec_D_latter.array().log().sum()/2 << std::endl;
 
     double KL = (trace_term + quadratic_term + log_term - mean_former.size()) / 2;
-    // std::cout << "KL Divergence: " << KL << std::endl << std::endl;
 
     if (KL < 0){
         std::cout << "trace_term: " << trace_term << std::endl;

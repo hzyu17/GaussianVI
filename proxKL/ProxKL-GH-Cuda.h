@@ -47,8 +47,6 @@ public:
             _Vdmu(VectorXd::Zero(Base::_dim)),
             _Vddmu(SpMat(Base::_dim, Base::_dim))
         {
-            if (dim_state == 6)
-                Base::construct_sparse_precision();
             _Vdmu.setZero();
             _Vddmu.setZero();
         }
@@ -126,9 +124,9 @@ public:
     /**
      * @brief Compute the total cost function value given a state, using current values.
      */
-    double cost_value_cuda(const VectorXd& fill_joint_mean, SpMat& joint_precision);
+    // double cost_value_cuda(const VectorXd& fill_joint_mean, SpMat& joint_precision);
 
-    double cost_value_linear(const VectorXd& fill_joint_mean, const SpMat& joint_precision);
+    // double cost_value_linear(const VectorXd& fill_joint_mean, const SpMat& joint_precision);
 
     /**
      * @brief given a state, compute the total cost function value without the entropy term, using current values.
