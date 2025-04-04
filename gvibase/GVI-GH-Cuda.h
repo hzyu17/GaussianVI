@@ -41,13 +41,13 @@ public:
      * @param _vec_fact_optimizers vector of marginal optimizers
      * @param niters number of iterations
      */
-    GVIGH(const std::vector<std::shared_ptr<FactorizedOptimizer>>& vec_fact_optimizers, 
-          int dim_state, 
+    GVIGH(const std::vector<std::shared_ptr<FactorizedOptimizer>>& vec_fact_optimizers,
+          int dim_state,
           int num_states,
           std::shared_ptr<CudaClass> cuda_ptr,
           std::shared_ptr<GH> gh_ptr,
           int niterations=5,
-          double temperature=1.0, 
+          double temperature=1.0,
           double high_temperature=100.0):
             _dim_state{dim_state},
             _num_states{num_states},
@@ -69,7 +69,6 @@ public:
             _cuda{cuda_ptr},
             _gh{gh_ptr}
     {
-        // construct_sparse_precision();
         _Vdmu.setZero();
         _Vddmu.setZero();
     }
@@ -84,7 +83,7 @@ protected:
 
     double _alpha = 1.0;
 
-    bool _save_data = true, _save_covariance = true;
+    bool _save_data = true, _save_covariance = true, _GBP_inverse = true, _precise_inverse = false;
 
     // Put step size decrease rate in config
 
@@ -118,7 +117,7 @@ protected:
     std::string _file_perturbed_cost;
 
     VectorXd _Vdmu;
-    SpMat _Vddmu;  
+    SpMat _Vddmu;
 
 
 public:
@@ -256,8 +255,8 @@ public:
     }
 
     /// update the step sizes
-    inline void set_step_size(double step_size){ 
-        _step_size = step_size; 
+    inline void set_step_size(double step_size){
+        _step_size = step_size;
         for (std::shared_ptr<FactorizedOptimizer> & opt_fact : _vec_factors){
             opt_fact->set_step_size(step_size);
         }
@@ -272,6 +271,17 @@ public:
     inline void set_data_save(bool flag) { _save_data = flag; }
 
     inline void set_save_covariance(bool flag) { _save_covariance = flag; }
+
+    inline void set_GBP_inverse(bool flag) {
+        _GBP_inverse = flag;
+
+        if (!flag){
+            std::cout << "Brute Force Inverse" << std::endl;
+            SpMat precision = _precision;
+            construct_sparse_precision();
+            _precision = precision;
+        }
+    }
 
     /// The base step size in backtracking
     inline void set_step_size_base(double step_size_base){ _step_size_base = step_size_base; }
@@ -300,7 +310,7 @@ public:
 
         MatrixXd init_precision(_dim, _dim);
         init_precision = MatrixXd::Identity(_dim, _dim)*initial_precision_factor;
-        
+
         set_precision(init_precision.sparseView());
     }
 
@@ -324,7 +334,7 @@ public:
                 _ei.block_insert_sparse(_precision, i*_dim_state, i*_dim_state, 2*_dim_state, 2*_dim_state, block);
             }
         }
-        
+
         SpMat lower = _precision.triangularView<Eigen::Lower>();
         _nnz = _ei.find_nnz(lower, _Rows, _Cols, _Vals); // the Rows and Cols table are fixed since the initialization.
     }
@@ -355,7 +365,7 @@ public:
         // _D = ldlt.vectorD().real();
     }
 
-    
+
 /// **************************************************************
 /// Experiment data and result recordings
     /**
@@ -363,18 +373,18 @@ public:
      * @param file_mean filename for the means
      * @param file_cov filename for the covariances
      */
-    inline void update_file_names(const std::string& file_mean, 
+    inline void update_file_names(const std::string& file_mean,
                                   const std::string& file_cov,
                                   const std::string& file_joint_cov,
-                                  const std::string& file_precision, 
-                                  const std::string& file_joint_precision, 
+                                  const std::string& file_precision,
+                                  const std::string& file_joint_precision,
                                   const std::string& file_cost,
                                   const std::string& file_fac_costs,
                                   const std::string& file_perturbed_costs,
                                   const std::string& file_zk_sdf,
                                   const std::string& file_Sk_sdf){
-        _res_recorder.update_file_names(file_mean, file_cov, file_joint_cov, file_precision, 
-                                        file_joint_precision, file_cost, file_fac_costs, 
+        _res_recorder.update_file_names(file_mean, file_cov, file_joint_cov, file_precision,
+                                        file_joint_precision, file_cost, file_fac_costs,
                                         file_zk_sdf, file_Sk_sdf);
         _file_perturbed_cost = file_perturbed_costs;
     }
@@ -411,12 +421,12 @@ public:
                 i_file = i_file + file_type;
         }
 
-        _res_recorder.update_file_names(vec_filenames[0], 
-                                        vec_filenames[1], 
-                                        vec_filenames[2], 
-                                        vec_filenames[3], 
-                                        vec_filenames[4], 
-                                        vec_filenames[5], 
+        _res_recorder.update_file_names(vec_filenames[0],
+                                        vec_filenames[1],
+                                        vec_filenames[2],
+                                        vec_filenames[3],
+                                        vec_filenames[4],
+                                        vec_filenames[5],
                                         vec_filenames[6],
                                         vec_filenames[8],
                                         vec_filenames[9]);
@@ -429,7 +439,7 @@ public:
     inline void save_data(bool verbose=true) { _res_recorder.save_data(verbose);}
 
     /**
-     * @brief save a matrix to a file. 
+     * @brief save a matrix to a file.
      */
     inline void save_matrix(const std::string& filename, const MatrixXd& m) const{
         _matrix_io.saveData<MatrixXd>(filename, m);
@@ -446,7 +456,7 @@ public:
 
     /**
      * @brief calculate and return the E_q{phi(x)} s for each factorized entity.
-     * @return vector<double> 
+     * @return vector<double>
      */
     std::vector<double> E_Phis(){
         std::vector<double> res;
@@ -458,7 +468,7 @@ public:
 
     /**
      * @brief calculate and return the E_q{(x-mu).*phi(x)} s for each factorized entity.
-     * @return vector<double> 
+     * @return vector<double>
      */
     std::vector<MatrixXd> E_xMuPhis(){
         std::vector<MatrixXd> res;
@@ -470,7 +480,7 @@ public:
 
     /**
      * @brief calculate and return the E_q{(x-mu).*phi(x)} s for each factorized entity.
-     * @return vector<double> 
+     * @return vector<double>
      */
     std::vector<MatrixXd> E_xMuxMuTPhis(){
         std::vector<MatrixXd> res;
@@ -485,8 +495,8 @@ public:
      * @brief Draw a heat map for cost function in 1d case
      * @return MatrixXd heatmap of size (nmesh, nmesh)
      */
-    MatrixXd cost_map(const double& x_start, 
-                      const double& x_end, const double& y_start, 
+    MatrixXd cost_map(const double& x_start,
+                      const double& x_end, const double& y_start,
                       const double& y_end, const int& nmesh){
         double res_x = (x_end - x_start) / nmesh;
         double res_y = (y_end - y_start) / nmesh;

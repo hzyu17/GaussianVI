@@ -638,7 +638,10 @@ template <typename Factor, typename CudaClass>
 inline void GVIGH<Factor, CudaClass>::set_precision(const SpMat &new_precision)
 {
     _precision = new_precision;
-    _covariance = inverse_GBP(_precision);
+    if (_GBP_inverse)
+        _covariance = inverse_GBP(_precision);
+    else
+        inverse_inplace();
     // _covariance = chain_splash_GBP(_precision);
 
     #pragma omp parallel for
@@ -664,7 +667,11 @@ double GVIGH<Factor, CudaClass>::cost_value_cuda(const VectorXd& fill_joint_mean
     if (flag % 5 == 0)
         timer.start();
 
-    SpMat joint_cov = inverse_GBP(joint_precision);
+    SpMat joint_cov;
+    if (_GBP_inverse)
+        joint_cov = inverse_GBP(joint_precision);
+    else
+        joint_cov = inverse(joint_precision);
 
     if (flag % 5 == 0)
         std::cout << "GBP Inverse computation time: " << timer.end_mus_output() << " us" << std::endl;
@@ -1101,7 +1108,82 @@ SpMat GVIGH<Factor, CudaClass>::inverse_GBP(const SpMat &Precision)
             }
         }
     }
-    else {
+    else if (_precise_inverse) {
+        std::cout << "Precise Inverse" << std::endl;
+        // Create a local container, where each iteration corresponds to a joint covariance block
+        int nBlocks = 2 * _num_states - 1;
+        std::vector<std::vector<Eigen::Triplet<double>>> localTripletVectors(nBlocks);
+
+        #pragma omp parallel for
+        for (int i = 0; i < nBlocks; ++i) {
+            std::vector<Eigen::Triplet<double>> localTriplets;
+            if (i % 2 == 0) {
+                // Even index: diagonal block, compute the inverse using marginal precision
+                int state = i / 2;
+                localTriplets.reserve(_dim_state * _dim_state);
+
+                MatrixXd lambda_marginal = factors[i].second;
+                lambda_marginal += forward_messages[state].second;
+                lambda_marginal += backward_messages[state].second;
+                MatrixXd variance_marginal = lambda_marginal.inverse(); // Will not likely to introduce negative eigenvalues
+
+                int base = state * _dim_state;
+                for (int r = 0; r < _dim_state; ++r) {
+                    for (int c = 0; c < _dim_state; ++c) {
+                        localTriplets.emplace_back(base + r, base + c, variance_marginal(r, c));
+                    }
+                }
+            } else {
+                // Odd index: off-diagonal block (between adjacent states), computed similarly
+                int state = (i - 1) / 2; // state corresponds to the index in joint_factors
+                localTriplets.reserve(2 * _dim_state * _dim_state);
+
+                MatrixXd lambda_joint = joint_factors[state].second;
+                lambda_joint.block(0, 0, _dim_state, _dim_state) += forward_messages[state].second;
+                lambda_joint.block(_dim_state, _dim_state, _dim_state, _dim_state) += backward_messages[state + 1].second;
+                MatrixXd variance_joint = lambda_joint.inverse();
+
+                // // Now the problem is that the lambda_joint is PD, but the variance_joint has negative eigenvalues
+
+                // SelfAdjointEigenSolver<MatrixXd> solver(variance_joint);
+                // // Retrieve eigenvalues
+                // VectorXd eigenvalues = solver.eigenvalues();
+                // if ((eigenvalues.array() < 0).any()) {
+                //     std::cout << "Warning: Negative eigenvalues detected in joint covariance!" << std::endl;
+                //     // for (int j = 0; j < eigenvalues.size(); ++j) {
+                //     //     if (eigenvalues(j) < 0) {
+                //     //         std::cout << "Eigenvalue " << j << ": " << eigenvalues(j) << std::endl;
+                //     //     }
+                //     // }
+                // }
+
+                // SelfAdjointEigenSolver<MatrixXd> solver_lambda(lambda_joint);
+                // // Retrieve eigenvalues
+                // eigenvalues = solver_lambda.eigenvalues();
+                // if ((eigenvalues.array() < 0).any()) {
+                //     std::cout << "Warning: Negative eigenvalues detected in joint lambda!" << std::endl;
+                // }
+
+                int base_row = state * _dim_state;
+                int base_col = (state + 1) * _dim_state;
+                for (int r = 0; r < _dim_state; ++r) {
+                    for (int c = 0; c < _dim_state; ++c) {
+                        // Fill the upper triangular block and the lower triangular block
+                        localTriplets.emplace_back(base_row + r, base_col + c, variance_joint(r, _dim_state + c));
+                        localTriplets.emplace_back(base_col + r, base_row + c, variance_joint(_dim_state + r, c));
+                    }
+                }
+            }
+            localTripletVectors[i] = std::move(localTriplets);
+        }
+
+        // Merge the local Triplet vectors from all threads
+        int totalTriplets = (3 * _num_states - 2) * _dim_state * _dim_state;
+        tripletList.reserve(totalTriplets);
+        for (const auto &vec : localTripletVectors)
+            tripletList.insert(tripletList.end(), vec.begin(), vec.end());
+    }
+    else{
         // Create a local container, where each iteration corresponds to a joint covariance block
         int nBlocks = _num_states - 1; // The number of iterations matches the number of joint_factors
         std::vector<std::vector<Eigen::Triplet<double>>> localTripletVectors(nBlocks);
@@ -1130,13 +1212,7 @@ SpMat GVIGH<Factor, CudaClass>::inverse_GBP(const SpMat &Precision)
                     localTriplets.emplace_back(base_row + r, base_col + c, variance_joint(r, c));
                     localTriplets.emplace_back(base_row + r, next_base + c, variance_joint(r, _dim_state + c));
                     localTriplets.emplace_back(next_base + r, base_col + c, variance_joint(_dim_state + r, c));
-                }
-            }
-    
-            // 4. In the last iteration (i == _num_states - 2), add an additional diagonal block for variable (i+1):
-            if (i == nBlocks - 1) {
-                for (int r = 0; r < _dim_state; ++r) {
-                    for (int c = 0; c < _dim_state; ++c) {
+                    if (i == nBlocks - 1) {
                         localTriplets.emplace_back(next_base + r, next_base + c, variance_joint(_dim_state + r, _dim_state + c));
                     }
                 }
