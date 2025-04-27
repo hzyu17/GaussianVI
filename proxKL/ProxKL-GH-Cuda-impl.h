@@ -87,8 +87,8 @@ double ProxKLGH<Factor, CudaClass>::bisection_stepsize(const VectorXd& dmu, cons
     VectorXd dmu_term = -dmu / temperature;
     SpMat dprecision_term = dprecision / temperature;
 
-    std::cout << "dmu: " << dmu_term.norm() << std::endl;
-    std::cout << "dprecision: " << dprecision_term.norm() << std::endl;
+    // std::cout << "dmu: " << dmu_term.norm() << std::endl;
+    // std::cout << "dprecision: " << dprecision_term.norm() << std::endl;
     // std::cout << "Time for preparing the terms: " << timer.end_mus_output() << " us" << std::endl;
 
     VectorXd warm_start_guess = VectorXd::Zero(_mu_prior.size());
@@ -198,9 +198,10 @@ void ProxKLGH<Factor, CudaClass>::optimize(std::optional<bool> verbose)
     bool is_lowtemp = true;
     bool converged = false;
 
-    Timer timer;
+    Timer timer, timer_total;
 
     timer.start();
+    timer_total.start();
     Base::cuda_init(Base::_vec_nonlinear_factors.size());
     std::cout << "Time for initializing cuda: " << timer.end_mus_output() << " us" << std::endl;
 
@@ -298,6 +299,7 @@ void ProxKLGH<Factor, CudaClass>::optimize(std::optional<bool> verbose)
     }
 
     Base::cuda_free();
+    std::cout << "Time for optimization: " << timer_total.end_mus_output() << " us" << std::endl;
 
     if (this->_save_data){
         std::cout << "=========== Saving Data ===========" << std::endl;
@@ -371,13 +373,12 @@ void ProxKLGH<Factor, CudaClass>::time_test()
     Base::cuda_init(Base::_vec_nonlinear_factors.size());
 
     Timer timer;
-    int n_repeat = 10;
+    int n_repeat = 5;
 
     std::vector<double> times_optimization;
     times_optimization.reserve(n_repeat);
 
     for (int i=0; i < n_repeat+1; i++){
-        std::cout << "i = " << i << std::endl;
         timer.start();
         optimize_time_test();
         double time = timer.end_mis();
