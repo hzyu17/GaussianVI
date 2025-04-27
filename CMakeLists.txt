@@ -1,5 +1,5 @@
 # ----------------------- duplicated contents from the higher level CMakeLists ------------------------
-cmake_minimum_required(VERSION 3.0)
+cmake_minimum_required(VERSION 3.5)
 enable_testing()
 project(GaussianVI CXX C CUDA)
 set(CMAKE_CXX_STANDARD 17)
@@ -46,12 +46,6 @@ set(CMAKE_CUDA_STANDARD 14)
 find_package(Eigen3 3.4.0 REQUIRED)
 add_definitions(-DEIGEN_DONT_VECTORIZE)
 
-# # Boost
-# find_package(Boost 1.70 REQUIRED)
-# find_package(Boost COMPONENTS serialization REQUIRED)
-# include_directories(${Boost_INCLUDE_DIR})
-# link_directories(${Boost_LIBRARY_DIRS})
-
 # OpenMP
 find_package(OpenMP)
 
@@ -81,20 +75,21 @@ endif()
 include_directories(${EIGEN3_INCLUDE_DIRS})
 include_directories("${CMAKE_CURRENT_BINARY_DIR}/quadrature/libSpGH/for_testing")
 
-# # Add all the source files in src/gvi as a separate executable
-# file(GLOB_RECURSE gvi_SOURCES src/*.cpp)
-# foreach(gvi_source ${gvi_SOURCES})
-#     get_filename_component(gvi_name ${gvi_source} NAME_WE)
-#     add_executable(${gvi_name} ${gvi_source})
-#     set_target_properties(${gvi_name} PROPERTIES LINKER_LANGUAGE CXX)
-#     set_target_properties(${gvi_name} PROPERTIES
-#                             RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/src"
-#                             )   
-#     target_link_libraries(${gvi_name} ${EIGEN3_LIBRARIES} ${Matlab_MEX_LIBRARY} ${CUDA_LIBRARIES} OpenMP::OpenMP_CXX 
-#                         #   ${Matlab_MX_LIBRARY} 
-#                           ${libSpGH_LIBRARY} ${MCR_LIBRARY_PATH}/libmwmclmcrrt.so.9.9)
-#     target_include_directories(${gvi_name} PRIVATE ${Matlab_INCLUDE_DIRS})
-# endforeach()
+if(CMAKE_SOURCE_DIR STREQUAL PROJECT_SOURCE_DIR)
+    # Add all the source files in src/gvi as a separate executable
+    file(GLOB_RECURSE gvi_SOURCES src/*.cpp)
+    foreach(gvi_source ${gvi_SOURCES})
+        get_filename_component(gvi_name ${gvi_source} NAME_WE)
+        add_executable(${gvi_name} ${gvi_source})
+        set_target_properties(${gvi_name} PROPERTIES LINKER_LANGUAGE CXX)
+        set_target_properties(${gvi_name} PROPERTIES
+                                RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/src"
+                                )   
+        target_link_libraries(${gvi_name} ${EIGEN3_LIBRARIES} ${Matlab_MEX_LIBRARY} ${CUDA_LIBRARIES} OpenMP::OpenMP_CXX 
+                            ${libSpGH_LIBRARY} ${MCR_LIBRARY_PATH}/libmwmclmcrrt.so.9.9)
+        target_include_directories(${gvi_name} PRIVATE ${Matlab_INCLUDE_DIRS})
+    endforeach()
+endif()
 
 # include(FetchContent)
 # FetchContent_Declare(
