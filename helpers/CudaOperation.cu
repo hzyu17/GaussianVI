@@ -29,7 +29,7 @@ __global__ void collision_cost(double* d_sigmapts, double* d_pts, int sigmapts_r
 
     if (row < sigmapts_rows && col < n_states){
         constexpr int MAX_SIGMAPTS_COLS = 15; // Maximum number of columns in sigmapts
-        double pose[MAX_SIGMAPTS_COLS];
+        double pose[MAX_SIGMAPTS_COLS] = {0}; // Initialize all elements to zero
         for(int i = 0; i < sigmapts_cols; i++){
             pose[i] = d_sigmapts[col*sigmapts_rows*sigmapts_cols + i*sigmapts_rows + row];
         }
@@ -351,6 +351,28 @@ void CudaOperation_Base<Derived>::ddmuIntegration(MatrixXd& results){
     cudaFree(vec_gpu);
     cudaFree(result_gpu);
     cudaFree(_mu_gpu);
+}
+
+void CudaOperation_3dArm::trajectoryCost(const VectorXd& traj_pts, VectorXd& results){
+    double *d_traj_pts, *d_results;
+    cudaMalloc(&d_traj_pts, traj_pts.size() * sizeof(double));
+    cudaMalloc(&d_results, results.size() * sizeof(double));
+    cudaMemcpy(d_traj_pts, traj_pts.data(), traj_pts.size() * sizeof(double), cudaMemcpyHostToDevice);
+
+    // Kernel 1: Obtain the result of function
+    dim3 threadperblock1(16, 16);
+    dim3 blockSize1((_n_states + threadperblock1.x - 1) / threadperblock1.x, (_sigmapts_rows + threadperblock1.y - 1) / threadperblock1.y);
+
+    collision_cost<CudaOperation_3dArm><<<blockSize1, threadperblock1>>>(d_traj_pts, d_results, _sigmapts_rows, _dim_conf, _n_states, d_cost);
+    cudaDeviceSynchronize();
+
+    cudaMemcpy(results.data(), d_results, _n_states * sizeof(double), cudaMemcpyDeviceToHost);
+    cudaError_t err = cudaGetLastError();
+    if (err != cudaSuccess) {
+        printf("trajectoryCost kernel error: %s\n", cudaGetErrorString(err));
+    }
+    cudaFree(d_traj_pts);
+    cudaFree(d_results);
 }
 
 // set m, l, J as input

@@ -27,6 +27,12 @@ typedef Eigen::Triplet<double> Trip;
 typedef Eigen::SimplicialLDLT<SpMat, Eigen::Lower, Eigen::NaturalOrdering<int>> SparseLDLT;
 typedef std::pair <Eigen::VectorXd, Eigen::MatrixXd> Message;
 
+struct Point2       { double x, y; };
+struct FloatIndex   { double row, col; };
+struct Point3       { double x, y, z; };
+struct FloatIndex3  { double row, col, z; };
+
+enum DHType { Classical=0, Modified=1 };
 
 //https://eigen.tuxfamily.org/dox/structEigen_1_1IOFormat.html
 static Eigen::IOFormat CSVFormat(Eigen::FullPrecision, Eigen::DontAlignCols, ", ", "\n");

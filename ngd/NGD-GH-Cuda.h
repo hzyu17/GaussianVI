@@ -31,6 +31,11 @@ public:
      */
     NGDGH(){}
 
+    NGDGH(int dim_conf, int num_states, std::shared_ptr<CudaClass> cuda_ptr):
+        GVIGH<FactorizedOptimizer, CudaClass>(dim_conf, num_states, cuda_ptr)
+    {}
+
+
     /**
      * @brief Construct a new VIMPOptimizerGH object
      * 

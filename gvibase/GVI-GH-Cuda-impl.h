@@ -526,6 +526,28 @@ std::tuple<double, VectorXd, VectorXd, SpMat> GVIGH<Factor, CudaClass>::factor_c
     return std::make_tuple(cost, fac_costs, dmu, dprecision);
 }
 
+template <typename Factor, typename CudaClass>
+VectorXd GVIGH<Factor, CudaClass>::collision_checking_and_resampling(const VectorXd& fill_joint_mean, const SpMat& joint_covariance)
+{
+    cuda_init_collision(_dim_conf, _num_states);
+    std::cout << "CUDA initialized for collision checking." << std::endl;
+
+    VectorXd collision_cost(_num_states);
+    VectorXd mean_vec(_dim_conf * _num_states);
+    
+    collision_cost.setZero();
+    mean_vec.setZero();
+
+    omp_set_num_threads(20);
+
+    #pragma omp parallel for
+    for (int i = 0; i < _num_states; i++)
+        mean_vec.segment(i*_dim_conf, _dim_conf) = fill_joint_mean.segment(2*i*_dim_conf, _dim_conf);
+
+    trajectoryCost(mean_vec, collision_cost);
+    std::cout << "Collision cost: " << collision_cost.transpose() << std::endl;
+}
+
 
 template <typename Factor, typename CudaClass>
 void GVIGH<Factor, CudaClass>::time_test()

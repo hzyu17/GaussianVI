@@ -23,17 +23,6 @@ using namespace Eigen;
 
 namespace gvi{
 
-struct Point2 {
-  double x;
-  double y;
-};
-
-struct FloatIndex {
-  double row;
-  double col;
-};
-
-
 class PlanarSDF {
 public:
   // FloatIndex is <row, col>
@@ -134,18 +123,6 @@ public:
 
 };
 
-
-struct Point3 {
-  double x;
-  double y;
-  double z;
-};
-
-struct FloatIndex3 {
-  double row;
-  double col;
-  double z;
-};
 
 /////    Check Serilization in the maps/3dpR     /////
 class SignedDistanceField {
@@ -333,6 +310,7 @@ public:
 
   int* _frames_data;
   double* _centers_data;
+  DHType _dh_type;
 
 private:
 
@@ -342,9 +320,9 @@ public:
 
     ForwardKinematics(const Eigen::VectorXd& a, const Eigen::VectorXd& alpha,
                       const Eigen::VectorXd& d, const Eigen::VectorXd& theta_bias,
-                      const Eigen::VectorXi& frames, const Eigen::MatrixXd& centers) :
+                      const Eigen::VectorXi& frames, const Eigen::MatrixXd& centers, DHType dh_type) :
       _a(a), _alpha(alpha), _d(d), _theta_bias(theta_bias), _frames(frames), _centers(centers), 
-      _num_joints(a.size()), _num_spheres(frames.size())
+      _num_joints(a.size()), _num_spheres(frames.size()), _dh_type(dh_type)
       {
           _a_data = _a.data();
           _alpha_data = _alpha.data();
@@ -374,24 +352,6 @@ public:
         }
     }
 
-    __device__ inline void precompute_dh_matrices(const double* theta, double* dh_mats, int n) const {
-        constexpr int matrix_element = 16;
-        double T[matrix_element];
-        double mul_result[matrix_element];
-        identity(T); // Set T to the identity matrix in column-major order
-        
-        for (int i = 0; i < n; i++) {
-          double th = theta[i] + theta_bias(i);
-          double dh_mat[matrix_element];
-          dh_matrix(i, th, dh_mat);
-          mat_mul(T, dh_mat, mul_result, 4);
-          for (int j = 0; j < matrix_element; j++) {
-            T[j] = mul_result[j];
-            dh_mats[i*matrix_element + j] = mul_result[j];
-          }
-        }
-    }
-
     __device__ inline void forward_kinematics(const double* dh_mats, int frame, const double* center, double* pos) const {
         constexpr int matrix_element = 16;
         // Retrieve the cumulative transformation matrix for the given frame (column-major order)
@@ -407,6 +367,27 @@ public:
         pos[0] = base_pos[0] + rotated[0];
         pos[1] = base_pos[1] + rotated[1];
         pos[2] = base_pos[2] + rotated[2];
+    }
+
+    __device__ inline void precompute_dh_matrices(const double* theta, double* dh_mats, int n) const {
+        constexpr int matrix_element = 16;
+        double T[matrix_element];
+        double mul_result[matrix_element];
+        identity(T); // Set T to the identity matrix in column-major order
+        
+        for (int i = 0; i < n; i++) {
+          double th = theta[i] + theta_bias(i);
+          double dh_mat[matrix_element];
+          if (_dh_type == Classical)
+            dh_matrix(i, th, dh_mat);
+          else
+            dh_matrix_modified(i, th, dh_mat);
+          mat_mul(T, dh_mat, mul_result, 4);
+          for (int j = 0; j < matrix_element; j++) {
+            T[j] = mul_result[j];
+            dh_mats[i*matrix_element + j] = mul_result[j];
+          }
+        }
     }
 
     __device__ inline void identity(double* M) const {
@@ -440,6 +421,18 @@ public:
         mat[3] = 0;  mat[7] = 0;        mat[11] = 0;        mat[15] = 1;
     }
 
+    __device__ inline void dh_matrix_modified(int i, double theta, double* mat) const {
+        double ct = cos(theta), st = sin(theta);
+        double ca = cos(alpha(i)), sa = sin(alpha(i));
+        double ai = a(i), di = d(i);
+    
+        // Fill in column-major order:
+        mat[0]  = ct;       mat[4]  = -st;      mat[8]  = 0;      mat[12] = ai;
+        mat[1]  = st*ca;    mat[5]  = ct*ca;    mat[9]  = -sa;    mat[13] = -sa*di;
+        mat[2]  = st*sa;    mat[6]  = ct*sa;    mat[10] = ca;     mat[14] = ca*di;
+        mat[3]  = 0;        mat[7]  = 0;        mat[11] = 0;      mat[15] = 1;
+    }
+
     // access functions
     __device__ inline double a(int i) const { return _a_data[i]; }
     __device__ inline double alpha(int i) const { return _alpha_data[i]; }
@@ -451,10 +444,8 @@ public:
 
 template <typename Derived>
 class CudaOperation_Base{
-
 public:
-    CudaOperation_Base(double cost_sigma, double epsilon, double radius = 1):
-    _sigma(cost_sigma), _epsilon(epsilon), _radius(radius){}
+    CudaOperation_Base() {}
 
     virtual void Cuda_init(const MatrixXd& weights, const MatrixXd& zeromean, const int n_states) = 0;
 
@@ -517,7 +508,6 @@ public:
       cusolverDnDestroy(_cusolverH);
       // cublasDestroy(_cublasH);
     }
-    
 
     void copy_sigma(const MatrixXd& sigmapts){
       cudaMemcpy(_sigmapts_gpu, sigmapts.data(), sigmapts.size() * sizeof(double), cudaMemcpyHostToDevice);
@@ -533,7 +523,7 @@ public:
 
     void ddmuIntegration(MatrixXd& results);
 
-  double _epsilon, _radius, _sigma;
+    virtual void trajectoryCost(const VectorXd& traj_pts, VectorXd& results){}
 
   MatrixXd _data_matrix;
 
@@ -561,8 +551,8 @@ public:
 
 class CudaOperation_PlanarPR : public CudaOperation_Base<CudaOperation_PlanarPR>{
 public:
-    CudaOperation_PlanarPR(double cost_sigma = 15.5, double epsilon = 0.5, double radius = 1):
-    CudaOperation_Base(cost_sigma, epsilon, radius)
+    CudaOperation_PlanarPR(double cost_sigma, double epsilon, double radius):
+    CudaOperation_Base()
     {
         MatrixIO _m_io;
         std::string field_file = source_root + "/maps/2dpR/map2/field_multiobs_map2.csv";
@@ -574,9 +564,9 @@ public:
 
         double cell_size = 0.1;
 
-        hostCost._epsilon = _epsilon;
-        hostCost._radius = _radius;
-        hostCost._sigma = _sigma;
+        hostCost._epsilon = epsilon;
+        hostCost._radius = radius;
+        hostCost._sigma = cost_sigma;
         hostCost._sdf = PlanarSDF{origin, cell_size, field};
 
         _data_matrix = field;
@@ -630,8 +620,8 @@ public:
 
 class CudaOperation_Quad : public CudaOperation_Base<CudaOperation_Quad>{
 public:
-    CudaOperation_Quad(double cost_sigma = 15.5, double epsilon = 0.5, double radius = 1, const std::string& map_name = ""):
-    CudaOperation_Base(cost_sigma, epsilon, radius)
+    CudaOperation_Quad(double cost_sigma, double epsilon, double radius, const std::string& map_name = ""):
+    CudaOperation_Base()
     {
         MatrixIO _m_io;
         std::string field_file = source_root + "/python/sdf_robot/map/planar/" + map_name + "_field.csv";
@@ -648,9 +638,9 @@ public:
 
         double cell_size = 0.1;
 
-        hostCost._epsilon = _epsilon;
-        hostCost._radius = _radius;
-        hostCost._sigma = _sigma;
+        hostCost._epsilon = epsilon;
+        hostCost._radius = radius;
+        hostCost._sigma = cost_sigma;
         hostCost._sdf = PlanarSDF{origin, cell_size, field};
 
         _data_matrix = field;
@@ -726,14 +716,14 @@ public:
 
 class CudaOperation_3dpR : public CudaOperation_Base<CudaOperation_3dpR>{
 public:
-    CudaOperation_3dpR(double cost_sigma = 15.5, double epsilon = 0.5, double radius = 1):
-    CudaOperation_Base(cost_sigma, epsilon, radius)
+    CudaOperation_3dpR(double cost_sigma, double epsilon, double radius):
+    CudaOperation_Base()
     {
         std::string sdf_file = source_root + "/maps/3dpR/pRSDF3D_cereal.bin";
 
-        hostCost._epsilon = _epsilon;
-        hostCost._radius = _radius;
-        hostCost._sigma = _sigma;
+        hostCost._epsilon = epsilon;
+        hostCost._radius = radius;
+        hostCost._sigma = cost_sigma;
         hostCost._sdf.loadSDF(sdf_file);
 
         _data_matrix = hostCost._sdf.data_matrix_;
@@ -789,15 +779,15 @@ class CudaOperation_3dArm : public CudaOperation_Base<CudaOperation_3dArm>{
 public:
     CudaOperation_3dArm(const Eigen::VectorXd& a, const Eigen::VectorXd& alpha, const Eigen::VectorXd& d, const Eigen::VectorXd& theta_bias,
                         const Eigen::VectorXd& radii, const Eigen::VectorXi& frames, const Eigen::MatrixXd& centers, const std::string& sdf_name,
-                        double cost_sigma = 15.5, double epsilon = 0.5):
-    _radii(radii), CudaOperation_Base(cost_sigma, epsilon)
+                        double cost_sigma, double epsilon, DHType dh_type = Classical):
+    _radii(radii), CudaOperation_Base()
     {
         std::string sdf_file = source_root + sdf_name + "_cereal.bin";
         
-        hostCost._epsilon = _epsilon;
-        hostCost._sigma = _sigma;
+        hostCost._epsilon = epsilon;
+        hostCost._sigma = cost_sigma;
         hostCost._sdf.loadSDF(sdf_file);
-        hostCost._fk = ForwardKinematics(a, alpha, d, theta_bias, frames, centers);
+        hostCost._fk = ForwardKinematics(a, alpha, d, theta_bias, frames, centers, dh_type);
 
         _data_matrix = hostCost._sdf.data_matrix_;
     }
@@ -805,6 +795,7 @@ public:
     void Cuda_init(const MatrixXd& weights, const MatrixXd& zeromean, const int n_states) override{
       GH_parameters_init(weights, zeromean, n_states);
 
+      // Copy the Parameters of arm to GPU
       cudaMalloc(&_a_gpu, hostCost._fk._a.size() * sizeof(double));
       cudaMalloc(&_alpha_gpu, hostCost._fk._alpha.size() * sizeof(double));
       cudaMalloc(&_d_gpu, hostCost._fk._d.size() * sizeof(double));
@@ -847,6 +838,57 @@ public:
       cudaFree(_centers_gpu);
       GH_parameters_free();
     }
+
+    void Cuda_init_collision(const int dim_conf, const int num_states){
+      _sigmapts_rows = 1;
+      _dim_conf = dim_conf;
+      _n_states = num_states;
+      
+      cudaMalloc(&_a_gpu, hostCost._fk._a.size() * sizeof(double));
+      cudaMalloc(&_alpha_gpu, hostCost._fk._alpha.size() * sizeof(double));
+      cudaMalloc(&_d_gpu, hostCost._fk._d.size() * sizeof(double));
+      cudaMalloc(&_theta_gpu, hostCost._fk._theta_bias.size() * sizeof(double));
+      cudaMalloc(&_rad_gpu, _radii.size() * sizeof(double));
+      cudaMalloc(&_frames_gpu, hostCost._fk._frames.size() * sizeof(int));
+      cudaMalloc(&_centers_gpu, hostCost._fk._centers.size() * sizeof(double));
+      cudaMalloc(&_data_gpu, _data_matrix.size() * sizeof(double));
+
+      cudaMemcpy(_a_gpu, hostCost._fk._a.data(), hostCost._fk._a.size() * sizeof(double), cudaMemcpyHostToDevice);
+      cudaMemcpy(_alpha_gpu, hostCost._fk._alpha.data(), hostCost._fk._alpha.size() * sizeof(double), cudaMemcpyHostToDevice);
+      cudaMemcpy(_d_gpu, hostCost._fk._d.data(), hostCost._fk._d.size() * sizeof(double), cudaMemcpyHostToDevice);
+      cudaMemcpy(_theta_gpu, hostCost._fk._theta_bias.data(), hostCost._fk._theta_bias.size() * sizeof(double), cudaMemcpyHostToDevice);
+      cudaMemcpy(_rad_gpu, _radii.data(), _radii.size() * sizeof(double), cudaMemcpyHostToDevice);
+      cudaMemcpy(_frames_gpu, hostCost._fk._frames.data(), hostCost._fk._frames.size() * sizeof(int), cudaMemcpyHostToDevice);
+      cudaMemcpy(_centers_gpu, hostCost._fk._centers.data(), hostCost._fk._centers.size() * sizeof(double), cudaMemcpyHostToDevice);
+      cudaMemcpy(_data_gpu, _data_matrix.data(), _data_matrix.size() * sizeof(double), cudaMemcpyHostToDevice);
+
+      hostCost._sdf.data_array_ = _data_gpu;
+
+      hostCost._fk._a_data = _a_gpu;
+      hostCost._fk._alpha_data = _alpha_gpu;
+      hostCost._fk._d_data = _d_gpu;
+      hostCost._fk._theta_bias_data = _theta_gpu;
+      hostCost._fk._frames_data = _frames_gpu;
+      hostCost._fk._centers_data = _centers_gpu;
+
+      hostCost._radii_data = _rad_gpu;
+      cudaMalloc(&d_cost, sizeof(ObstacleCost));
+      cudaMemcpy(d_cost, &hostCost, sizeof(ObstacleCost), cudaMemcpyHostToDevice);
+    }
+
+    void Cuda_free_collision(){
+      cudaFree(d_cost);
+      cudaFree(_a_gpu);
+      cudaFree(_alpha_gpu);
+      cudaFree(_d_gpu);
+      cudaFree(_theta_gpu);
+      cudaFree(_rad_gpu);
+      cudaFree(_frames_gpu);
+      cudaFree(_centers_gpu);
+      cudaFree(_data_gpu);
+    }
+
+    void trajectoryCost(const VectorXd& traj_pts, VectorXd& results) override;
 
     struct ObstacleCost {
       double _epsilon;

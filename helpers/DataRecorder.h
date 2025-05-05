@@ -56,6 +56,12 @@ private:
         MatrixIO _m_io;
 
 public:
+
+    /**
+     * @brief Default constructor
+     */
+    VIMPResults(){}
+
     /**
      * @brief Constructor
      *

@@ -35,6 +35,19 @@ public:
      */
     GVIGH(){}
 
+    GVIGH(int dim_conf, int num_states, std::shared_ptr<CudaClass> cuda_ptr):
+        _dim_conf{dim_conf},
+        _dim_state{2*dim_conf},
+        _num_states{num_states},
+        // _dim{dim_state*num_states},
+        // _dim{dim_state},
+        // _mu{VectorXd::Zero(_dim)},
+        // _precision{SpMat(_dim, _dim)},
+        // _covariance{SpMat(_dim, _dim)},
+        // _res_recorder{},
+        _cuda{cuda_ptr}
+    {} 
+
     /**
      * @brief Construct a new VIMPOptimizerGH object
      * 
@@ -146,6 +159,8 @@ public:
 
     std::tuple<double, VectorXd, VectorXd, SpMat> factor_cost_vector_cuda_time(const VectorXd& fill_joint_mean, SpMat& joint_precision);
 
+    VectorXd collision_checking_and_resampling(const VectorXd& fill_joint_mean, const SpMat& joint_covariance);
+
     std::tuple<double, VectorXd, VectorXd, SpMat> factor_cost_vector_cuda() { return factor_cost_vector_cuda(_mu, _precision); }
 
     std::tuple<double, VectorXd, VectorXd, SpMat> factor_cost_vector_cuda_time() { return factor_cost_vector_cuda_time(_mu, _precision); }
@@ -230,6 +245,14 @@ public:
         _cuda -> Cuda_free();
     }
 
+    inline void cuda_init_collision(const int dim_conf, const int num_states){
+        _cuda -> Cuda_init_collision(dim_conf, num_states);
+    }
+
+    inline void cuda_free_collision(){
+        _cuda -> Cuda_free_collision();
+    }
+
     inline void compute_sigmapts(const MatrixXd& mean, const MatrixXd& covariance, int dim_conf, int num_states, MatrixXd& sigmapts){
         _cuda->update_sigmapts(covariance, mean, dim_conf, num_states, sigmapts);
     }
@@ -246,6 +269,10 @@ public:
 
     inline void newCostIntegration(const MatrixXd& sigmapts, VectorXd& results, const int sigmapts_cols){
         _cuda -> costIntegration(sigmapts, results, sigmapts_cols);
+    }
+
+    inline void trajectoryCost(const VectorXd& traj_pts, VectorXd& results){
+        _cuda -> trajectoryCost(traj_pts, results);
     }
 
     inline bool isPositiveDefinite(const SpMat& precision){
