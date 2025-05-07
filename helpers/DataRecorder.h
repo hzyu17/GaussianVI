@@ -120,15 +120,15 @@ public:
             _ei.compress3d(new_mean, _res_mean, _cur_iter);
             _ei.compress3d(new_factor_costs, _res_factor_costs, _cur_iter);
             _res_costs(_cur_iter) = new_cost;
+            Matrix3D marginal_cov(_dim_state, _dim_state, _nstates);
+            Matrix3D marginal_precision(_dim_state, _dim_state, _nstates);
+            _ei.compress3d(marginal_cov, _res_covariances, _cur_iter);
+            _ei.compress3d(marginal_precision, _res_precisions, _cur_iter);
 
             if(_record_covariance){
-                Matrix3D marginal_cov(_dim_state, _dim_state, _nstates);
                 marginal_cov = joint2marginals(new_joint_cov);
-                Matrix3D marginal_precision(_dim_state, _dim_state, _nstates);
                 marginal_precision = joint2marginals(new_joint_precision);
 
-                _ei.compress3d(marginal_cov, _res_covariances, _cur_iter);
-                _ei.compress3d(marginal_precision, _res_precisions, _cur_iter);
                 _ei.compress3d(new_joint_precision, _res_joint_precisions, _cur_iter);
                 _ei.compress3d(new_joint_cov, _res_joint_covariances, _cur_iter);
             }
@@ -220,6 +220,13 @@ public:
 
         _m_io.saveData(_file_zk_sdf, zk_sdf, verbose);
 
+        // Last iteration covariances
+        MatrixXd Sk_sdf(_dim_state*_dim_state, _nstates);
+        Sk_sdf.setZero();
+        _ei.decomp3d(_res_covariances, Sk_sdf, _dim_state*_dim_state, _nstates, _niters-1);
+
+        _m_io.saveData(_file_Sk_sdf, Sk_sdf, verbose);
+
         if (_record_covariance){
             /// save covariances
             _m_io.saveData(_file_cov, _res_covariances, verbose);
@@ -232,13 +239,6 @@ public:
 
             /// save precisions
             _m_io.saveData(_file_joint_precision, _res_joint_precisions, verbose);
-
-            // Last iteration covariances
-            MatrixXd Sk_sdf(_dim_state*_dim_state, _nstates);
-            Sk_sdf.setZero();
-            _ei.decomp3d(_res_covariances, Sk_sdf, _dim_state*_dim_state, _nstates, _niters-1);
-
-            _m_io.saveData(_file_Sk_sdf, Sk_sdf, verbose);
         }
 
         if (verbose){
