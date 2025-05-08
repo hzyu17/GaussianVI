@@ -87,6 +87,8 @@ void GVIGH<Factor, CudaClass>::optimize(std::optional<bool> verbose)
 
         // 135 ms when n_states = 500
         auto [cost_iter, fact_costs_iter, dmu, dprecision] = factor_cost_vector_cuda();
+        SpMat dprecision_transpose = dprecision.transpose();
+        dprecision = (dprecision + dprecision_transpose) / 2;
 
         if (is_verbose){
             std::cout << "--- cost_iter ---" << std::endl << cost_iter << std::endl;
@@ -117,6 +119,8 @@ void GVIGH<Factor, CudaClass>::optimize(std::optional<bool> verbose)
             double new_cost = std::get<0>(onestep_res);
             VectorXd new_mu = std::get<1>(onestep_res);
             auto new_precision = std::get<2>(onestep_res);
+            // SpMat new_precision_transpose = new_precision.transpose();
+            // new_precision = (new_precision + new_precision_transpose) / 2;
 
             // accept new cost and update mu and precision matrix
             if (new_cost < cost_iter){
@@ -1210,7 +1214,7 @@ SpMat GVIGH<Factor, CudaClass>::inverse_GBP(const SpMat &Precision)
         int nBlocks = _num_states - 1; // The number of iterations matches the number of joint_factors
         std::vector<std::vector<Eigen::Triplet<double>>> localTripletVectors(nBlocks);
     
-        #pragma omp parallel for
+        // #pragma omp parallel for
         for (int i = 0; i < nBlocks; ++i) {
             std::vector<Eigen::Triplet<double>> localTriplets;
             // Each joint block contributes 3 _dim_state×_dim_state sub-blocks.
@@ -1222,6 +1226,9 @@ SpMat GVIGH<Factor, CudaClass>::inverse_GBP(const SpMat &Precision)
             lambda_joint.block(0, 0, _dim_state, _dim_state) += forward_messages[i].second;
             lambda_joint.block(_dim_state, _dim_state, _dim_state, _dim_state) += backward_messages[i + 1].second;
             MatrixXd variance_joint = lambda_joint.inverse();
+            if (!variance_joint.isApprox(variance_joint.transpose())) {
+                variance_joint = 0.5 * (variance_joint + variance_joint.transpose());
+            }
     
             // Base row and column indices
             int base_row = i * _dim_state;

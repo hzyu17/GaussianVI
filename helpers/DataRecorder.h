@@ -212,6 +212,12 @@ public:
         /// save factored osts
         _m_io.saveData(_file_factor_costs, _res_factor_costs, verbose);
 
+        /// save covariances
+        _m_io.saveData(_file_cov, _res_covariances, verbose);
+
+        /// save precisions
+        _m_io.saveData(_file_precision, _res_precisions, verbose);
+
         /// save last iteration results
         // Last iteration means
         MatrixXd zk_sdf(_dim_state, _nstates);
@@ -228,12 +234,6 @@ public:
         _m_io.saveData(_file_Sk_sdf, Sk_sdf, verbose);
 
         if (_record_covariance){
-            /// save covariances
-            _m_io.saveData(_file_cov, _res_covariances, verbose);
-
-            /// save precisions
-            _m_io.saveData(_file_precision, _res_precisions, verbose);
-
             /// save covariances
             _m_io.saveData(_file_joint_cov, _res_joint_covariances, verbose);
 
