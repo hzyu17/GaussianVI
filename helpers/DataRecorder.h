@@ -35,6 +35,7 @@ private:
         Matrix3D _res_precisions, _res_joint_precisions;
         // last iteration results
         Matrix3D _zk_sdf, _Sk_sdf;
+        MatrixXd _last_joint_covariance;
 
         // costs
         VectorXd _res_costs;
@@ -81,7 +82,8 @@ public:
         _res_covariances(dim_state*dim_state, nstates, niters),
         _res_precisions(dim_state*dim_state, nstates, niters),
         _res_costs(niters),
-        _res_factor_costs(n_factors, 1, niters)
+        _res_factor_costs(n_factors, 1, niters),
+        _last_joint_covariance(dim_state*nstates, dim_state*nstates)
         {
             // // All the time is used in setting zero
             // _res_mean.setZero();
@@ -98,11 +100,12 @@ public:
         _res_mean.setZero();
         _res_costs.setZero();
         _res_factor_costs.setZero();
+        _res_covariances.setZero();
+        _res_precisions.setZero();
+        _res_joint_covariances.setZero();
         if (record_covariance){
             _res_joint_covariances.setZero();
             _res_joint_precisions.setZero();
-            _res_covariances.setZero();
-            _res_precisions.setZero();
         }
     }
 
@@ -120,15 +123,17 @@ public:
             _ei.compress3d(new_mean, _res_mean, _cur_iter);
             _ei.compress3d(new_factor_costs, _res_factor_costs, _cur_iter);
             _res_costs(_cur_iter) = new_cost;
+            
             Matrix3D marginal_cov(_dim_state, _dim_state, _nstates);
             Matrix3D marginal_precision(_dim_state, _dim_state, _nstates);
+            marginal_cov = joint2marginals(new_joint_cov);
+            marginal_precision = joint2marginals(new_joint_precision);
             _ei.compress3d(marginal_cov, _res_covariances, _cur_iter);
             _ei.compress3d(marginal_precision, _res_precisions, _cur_iter);
 
-            if(_record_covariance){
-                marginal_cov = joint2marginals(new_joint_cov);
-                marginal_precision = joint2marginals(new_joint_precision);
+            _last_joint_covariance = new_joint_cov;
 
+            if(_record_covariance){
                 _ei.compress3d(new_joint_precision, _res_joint_precisions, _cur_iter);
                 _ei.compress3d(new_joint_cov, _res_joint_covariances, _cur_iter);
             }
@@ -232,6 +237,8 @@ public:
         _ei.decomp3d(_res_covariances, Sk_sdf, _dim_state*_dim_state, _nstates, _niters-1);
 
         _m_io.saveData(_file_Sk_sdf, Sk_sdf, verbose);
+
+        _m_io.saveData(_file_joint_cov, _last_joint_covariance, verbose);   
 
         if (_record_covariance){
             /// save covariances
