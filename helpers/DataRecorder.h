@@ -35,7 +35,7 @@ private:
         Matrix3D _res_precisions, _res_joint_precisions;
         // last iteration results
         Matrix3D _zk_sdf, _Sk_sdf;
-        MatrixXd _last_joint_covariance;
+        MatrixXd _last_joint_covariance, _last_joint_precision;
 
         // costs
         VectorXd _res_costs;
@@ -83,7 +83,8 @@ public:
         _res_precisions(dim_state*dim_state, nstates, niters),
         _res_costs(niters),
         _res_factor_costs(n_factors, 1, niters),
-        _last_joint_covariance(dim_state*nstates, dim_state*nstates)
+        _last_joint_covariance(dim_state*nstates, dim_state*nstates),
+        _last_joint_precision(dim_state*nstates, dim_state*nstates)
         {
             // // All the time is used in setting zero
             // _res_mean.setZero();
@@ -132,6 +133,7 @@ public:
             _ei.compress3d(marginal_precision, _res_precisions, _cur_iter);
 
             _last_joint_covariance = new_joint_cov;
+            _last_joint_precision = new_joint_precision;
 
             if(_record_covariance){
                 _ei.compress3d(new_joint_precision, _res_joint_precisions, _cur_iter);
@@ -239,6 +241,8 @@ public:
         _m_io.saveData(_file_Sk_sdf, Sk_sdf, verbose);
 
         _m_io.saveData(_file_joint_cov, _last_joint_covariance, verbose);   
+
+        _m_io.saveData(_file_joint_precision, _last_joint_precision, verbose);
 
         if (_record_covariance){
             /// save covariances
